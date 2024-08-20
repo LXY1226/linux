@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * soc-core.c  --  ALSA SoC Audio Layer
  *
@@ -43,8 +46,11 @@
 #include <sound/soc-topology.h>
 #include <sound/initval.h>
 
+#if defined(MY_ABC_HERE)
+#else /* MY_ABC_HERE */
 #define CREATE_TRACE_POINTS
 #include <trace/events/asoc.h>
+#endif /* MY_ABC_HERE */
 
 #define NAME_SIZE	32
 
@@ -3693,8 +3699,6 @@ static void __exit snd_soc_exit(void)
 	snd_soc_util_exit();
 	snd_soc_debugfs_exit();
 
-#ifdef CONFIG_DEBUG_FS
-#endif
 	platform_driver_unregister(&soc_driver);
 }
 module_exit(snd_soc_exit);

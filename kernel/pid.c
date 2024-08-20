@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Generic pidhash and scalable, time-bounded PID allocator
  *
@@ -210,6 +213,9 @@ static int alloc_pidmap(struct pid_namespace *pid_ns)
 		}
 		pid = mk_pid(pid_ns, map, offset);
 	}
+#ifdef MY_ABC_HERE
+	pr_err_ratelimited("run out of pids, pid_max = %d", pid_max);
+#endif /* MY_ABC_HERE */
 	return -EAGAIN;
 }
 

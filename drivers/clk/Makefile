@@ -59,7 +59,11 @@ obj-$(CONFIG_ARCH_MEDIATEK)		+= mediatek/
 ifeq ($(CONFIG_COMMON_CLK), y)
 obj-$(CONFIG_ARCH_MMP)			+= mmp/
 endif
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_16_12), y)
+obj-y					+= mvebu/
+else
 obj-$(CONFIG_PLAT_ORION)		+= mvebu/
+endif
 obj-$(CONFIG_ARCH_MESON)		+= meson/
 obj-$(CONFIG_ARCH_MXS)			+= mxs/
 obj-$(CONFIG_ARCH_LPC18XX)		+= nxp/
@@ -83,4 +87,8 @@ obj-$(CONFIG_X86)			+= x86/
 endif
 obj-$(CONFIG_ARCH_ZX)			+= zte/
 obj-$(CONFIG_ARCH_ZYNQ)			+= zynq/
+obj-$(CONFIG_COMMON_CLK_RTK)		+= realtek/
 obj-$(CONFIG_H8300)		+= h8300/
+ifeq ($(CONFIG_SYNO_LSP_RTD1619), y)
+obj-$(CONFIG_COMMON_CLK_REALTEK)	+= realtek/
+endif # CONFIG_SYNO_LSP_RTD1619

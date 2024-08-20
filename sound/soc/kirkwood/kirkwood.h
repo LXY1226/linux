@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * kirkwood.h
  *
@@ -133,6 +136,10 @@
 
 struct kirkwood_dma_data {
 	void __iomem *io;
+#if defined(MY_ABC_HERE)
+	void __iomem *pll_config;
+	void __iomem *soc_control;
+#endif /* MY_ABC_HERE */
 	struct clk *clk;
 	struct clk *extclk;
 	uint32_t ctl_play;

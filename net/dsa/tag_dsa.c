@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * net/dsa/tag_dsa.c - (Non-ethertype) DSA tagging
  * Copyright (c) 2008-2009 Marvell Semiconductor
@@ -107,11 +110,25 @@ static int dsa_rcv(struct sk_buff *skb, struct net_device *dev,
 	 * Check that the source device exists and that the source
 	 * port is a registered DSA port.
 	 */
+#if defined(MY_ABC_HERE)
+	if (source_device >= DSA_MAX_SWITCHES)
+		goto out_drop;
+#else /* MY_ABC_HERE */
 	if (source_device >= dst->pd->nr_chips)
 		goto out_drop;
+#endif /* MY_ABC_HERE */
+
 	ds = dst->ds[source_device];
+#if defined(MY_ABC_HERE)
+	if (!ds)
+		goto out_drop;
+
+	if (source_port >= DSA_MAX_PORTS || !ds->ports[source_port].netdev)
+		goto out_drop;
+#else /* MY_ABC_HERE */
 	if (source_port >= DSA_MAX_PORTS || ds->ports[source_port] == NULL)
 		goto out_drop;
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Convert the DSA header to an 802.1q header if the 'tagged'
@@ -159,7 +176,11 @@ static int dsa_rcv(struct sk_buff *skb, struct net_device *dev,
 			2 * ETH_ALEN);
 	}
 
+#if defined(MY_ABC_HERE)
+	skb->dev = ds->ports[source_port].netdev;
+#else /* MY_ABC_HERE */
 	skb->dev = ds->ports[source_port];
+#endif /* MY_ABC_HERE */
 	skb_push(skb, ETH_HLEN);
 	skb->pkt_type = PACKET_HOST;
 	skb->protocol = eth_type_trans(skb, skb->dev);

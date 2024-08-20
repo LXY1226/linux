@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   fs/cifs/sess.c
  *
@@ -84,8 +87,13 @@ unicode_oslm_strings(char **pbcc_area, const struct nls_table *nls_cp)
 	int bytes_ret = 0;
 
 	/* Copy OS version */
+#ifdef MY_ABC_HERE
+	bytes_ret = cifs_strtoUTF16((__le16 *)bcc_ptr, "Synology Linux version ", 32,
+				  nls_cp);
+#else
 	bytes_ret = cifs_strtoUTF16((__le16 *)bcc_ptr, "Linux version ", 32,
 				    nls_cp);
+#endif /* MY_ABC_HERE */
 	bcc_ptr += 2 * bytes_ret;
 	bytes_ret = cifs_strtoUTF16((__le16 *) bcc_ptr, init_utsname()->release,
 				    32, nls_cp);
@@ -182,8 +190,13 @@ static void ascii_ssetup_strings(char **pbcc_area, struct cifs_ses *ses,
 
 	/* BB check for overflow here */
 
+#ifdef MY_ABC_HERE
+	strcpy(bcc_ptr, "Synology Linux version ");
+	bcc_ptr += strlen("Synology Linux version ");
+#else
 	strcpy(bcc_ptr, "Linux version ");
 	bcc_ptr += strlen("Linux version ");
+#endif /* MY_ABC_HERE */
 	strcpy(bcc_ptr, init_utsname()->release);
 	bcc_ptr += strlen(init_utsname()->release) + 1;
 
@@ -542,8 +555,13 @@ select_sectype(struct TCP_Server_Info *server, enum securityEnum requested)
 		case LANMAN:
 			return requested;
 		case Unspecified:
+#if defined(MY_ABC_HERE) && !defined(CONFIG_CIFS_WEAK_PW_HASH)
+			// CID 148534: Logically dead code.
+			// if !CONFIG_CIFS_WEAK_PW_HASH then CIFSSEC_MAY_LANMAN == 0;
+#else
 			if (global_secflags & CIFSSEC_MAY_LANMAN)
 				return LANMAN;
+#endif
 			/* Fallthrough */
 		default:
 			return Unspecified;

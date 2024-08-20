@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/namespace.c
  *
@@ -24,9 +27,34 @@
 #include <linux/magic.h>
 #include <linux/bootmem.h>
 #include <linux/task_work.h>
+#ifdef MY_ABC_HERE
+#include <linux/string.h>
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+extern bool ramdisk_check_failed;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+#include <linux/synolib.h>
+#endif /* MY_DEF_HERE */
 #include "pnode.h"
 #include "internal.h"
 
+#ifdef MY_DEF_HERE
+extern int gSynoHasDynModule;
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_ABC_HERE
+extern void ext4_fill_mount_path(struct super_block *sb, const char *szPath);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+int (*funcSYNOSendErrorFsBtrfsEvent)(const u8*) = NULL;
+void (*btrfs_fill_mount_path)(struct super_block *, const char *) = NULL;
+int (*funcSYNOMetaCorruptedEvent)(const u8*, u64 start) = NULL;
+EXPORT_SYMBOL(funcSYNOSendErrorFsBtrfsEvent);
+EXPORT_SYMBOL(btrfs_fill_mount_path);
+EXPORT_SYMBOL(funcSYNOMetaCorruptedEvent);
+#endif /* MY_DEF_HERE */
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
 
@@ -65,7 +93,22 @@ static int mnt_group_start = 1;
 static struct hlist_head *mount_hashtable __read_mostly;
 static struct hlist_head *mountpoint_hashtable __read_mostly;
 static struct kmem_cache *mnt_cache __read_mostly;
+#ifdef MY_ABC_HERE
+/*
+ * <DSM> #89004
+ * Since we'll access mount list under namespace(mnt_list),
+ * we need this read semaphore to against list modification.
+ */
+DECLARE_RWSEM(namespace_sem);
+
+/*
+ * <DSM> #102174
+ * Avoid SYNONotify deadlock when read /proc/mounts and mount.
+ */
+static DEFINE_MUTEX(namespace_mutex);
+#else
 static DECLARE_RWSEM(namespace_sem);
+#endif /* MY_ABC_HERE */
 
 /* /sys/fs */
 struct kobject *fs_kobj;
@@ -467,6 +510,9 @@ void __mnt_drop_write(struct vfsmount *mnt)
 	mnt_dec_writers(real_mount(mnt));
 	preempt_enable();
 }
+#ifdef CONFIG_AUFS_FHSM
+EXPORT_SYMBOL_GPL(__mnt_drop_write);
+#endif /* CONFIG_AUFS_FHSM */
 
 /**
  * mnt_drop_write - give up write access to a mount
@@ -1286,6 +1332,9 @@ static void *m_start(struct seq_file *m, loff_t *pos)
 {
 	struct proc_mounts *p = m->private;
 
+#ifdef MY_ABC_HERE
+	mutex_lock(&namespace_mutex);
+#endif /* MY_ABC_HERE */
 	down_read(&namespace_sem);
 	if (p->cached_event == p->ns->event) {
 		void *v = p->cached_mount;
@@ -1315,6 +1364,9 @@ static void *m_next(struct seq_file *m, void *v, loff_t *pos)
 static void m_stop(struct seq_file *m, void *v)
 {
 	up_read(&namespace_sem);
+#ifdef MY_ABC_HERE
+	mutex_unlock(&namespace_mutex);
+#endif /* MY_ABC_HERE */
 }
 
 static int m_show(struct seq_file *m, void *v)
@@ -1400,6 +1452,9 @@ static void namespace_unlock(void)
 	hlist_move_list(&unmounted, &head);
 
 	up_write(&namespace_sem);
+#ifdef MY_ABC_HERE
+	mutex_unlock(&namespace_mutex);
+#endif /* MY_ABC_HERE */
 
 	if (likely(hlist_empty(&head)))
 		return;
@@ -1411,6 +1466,9 @@ static void namespace_unlock(void)
 
 static inline void namespace_lock(void)
 {
+#ifdef MY_ABC_HERE
+	mutex_lock(&namespace_mutex);
+#endif /* MY_ABC_HERE */
 	down_write(&namespace_sem);
 }
 
@@ -1514,6 +1572,11 @@ static int do_umount(struct mount *mnt, int flags)
 {
 	struct super_block *sb = mnt->mnt.mnt_sb;
 	int retval;
+#ifdef MY_ABC_HERE
+	char *file_name_buf = NULL;
+	char *mnt_point_buf = NULL;
+	char *mnt_point_name = NULL;
+#endif /* MY_ABC_HERE */
 
 	retval = security_sb_umount(&mnt->mnt, flags);
 	if (retval)
@@ -1582,6 +1645,12 @@ static int do_umount(struct mount *mnt, int flags)
 		return retval;
 	}
 
+#ifdef MY_ABC_HERE
+	/* malloc before getting the spinlock */
+	file_name_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+	mnt_point_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+#endif /* MY_ABC_HERE */
+
 	namespace_lock();
 	lock_mount_hash();
 
@@ -1604,9 +1673,29 @@ static int do_umount(struct mount *mnt, int flags)
 			retval = 0;
 		}
 	}
+#ifdef MY_ABC_HERE
+	if (-EBUSY == retval && file_name_buf && mnt_point_buf) {
+		mnt_point_name = dentry_path_raw(mnt->mnt_mountpoint, mnt_point_buf, PATH_MAX - 1);
+		if (!IS_ERR(mnt_point_name)) {
+			fs_show_opened_file(mnt, mnt_point_name, file_name_buf, PATH_MAX);
+		}
+	}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+	if (NULL != strstr(sb->s_id, "synoboot"))
+		printk(KERN_NOTICE"%s unmounted, process=%s\n", sb->s_id, current->comm);
+#endif /* MY_DEF_HERE */
+
 out:
 	unlock_mount_hash();
 	namespace_unlock();
+
+#ifdef MY_ABC_HERE
+	kfree(file_name_buf);
+	kfree(mnt_point_buf);
+#endif /* MY_ABC_HERE */
+
 	return retval;
 }
 
@@ -1896,6 +1985,9 @@ int iterate_mounts(int (*f)(struct vfsmount *, void *), void *arg,
 	}
 	return 0;
 }
+#ifdef CONFIG_AUFS_FHSM
+EXPORT_SYMBOL_GPL(iterate_mounts);
+#endif /* CONFIG_AUFS_FHSM */
 
 static void cleanup_group_ids(struct mount *mnt, struct mount *end)
 {
@@ -2094,9 +2186,9 @@ static struct mountpoint *lock_mount(struct path *path)
 	struct vfsmount *mnt;
 	struct dentry *dentry = path->dentry;
 retry:
-	mutex_lock(&dentry->d_inode->i_mutex);
+	inode_lock(dentry->d_inode);
 	if (unlikely(cant_mount(dentry))) {
-		mutex_unlock(&dentry->d_inode->i_mutex);
+		inode_unlock(dentry->d_inode);
 		return ERR_PTR(-ENOENT);
 	}
 	namespace_lock();
@@ -2105,13 +2197,13 @@ retry:
 		struct mountpoint *mp = get_mountpoint(dentry);
 		if (IS_ERR(mp)) {
 			namespace_unlock();
-			mutex_unlock(&dentry->d_inode->i_mutex);
+			inode_unlock(dentry->d_inode);
 			return mp;
 		}
 		return mp;
 	}
 	namespace_unlock();
-	mutex_unlock(&path->dentry->d_inode->i_mutex);
+	inode_unlock(path->dentry->d_inode);
 	path_put(path);
 	path->mnt = mnt;
 	dentry = path->dentry = dget(mnt->mnt_root);
@@ -2127,7 +2219,7 @@ static void unlock_mount(struct mountpoint *where)
 	read_sequnlock_excl(&mount_lock);
 
 	namespace_unlock();
-	mutex_unlock(&dentry->d_inode->i_mutex);
+	inode_unlock(dentry->d_inode);
 }
 
 static int graft_tree(struct mount *mnt, struct mount *p, struct mountpoint *mp)
@@ -2277,6 +2369,71 @@ static int change_mount_flags(struct vfsmount *mnt, int ms_flags)
 	return error;
 }
 
+#ifdef MY_ABC_HERE
+struct syno_mnt_options {
+	long relatime_period;
+};
+
+static void option_erase(char *str) {
+	char *next = strchr(str, ',');
+
+	if (next) {
+		next++;
+		while (*next) {
+			*str = *next;
+			str++;
+			next++;
+		}
+	}
+	while (*str) {
+		*str = '\0';
+		str++;
+	}
+}
+
+enum {
+	Opt_relatime_period,
+	Opt_err,
+};
+
+static struct option_table {
+	int token;
+	const char *name;
+	const char *pattern;
+} tokens[] = {
+	{Opt_relatime_period, "relatime_period", "relatime_period=%ld"},
+	{Opt_err, NULL, NULL},
+};
+
+/*
+ * This function is used to parse VFS layer options. These options should be removed
+ * from data since the underlying file systems cannot recognize them and may cause error.
+ */
+static int syno_parse_options(struct syno_mnt_options *options, char *data) {
+	struct option_table *p;
+	char *str;
+
+	if (!data)
+		return 0;
+
+	for (p = tokens; p->token != Opt_err; p++) {
+		while (NULL != (str = strstr(data, p->name))) {
+			switch (p->token) {
+				case Opt_relatime_period:
+					if (1 != sscanf(str, p->pattern, &(options->relatime_period))
+						|| options->relatime_period <= 0 || options->relatime_period > 365*10)
+						return -EINVAL;
+					break;
+				default:
+					break;
+			}
+			option_erase(str);
+		}
+	}
+	return 0;
+}
+#endif /* MY_ABC_HERE */
+
 /*
  * change filesystem flags. dir should be a physical root of filesystem.
  * If you've mounted a non-root directory somewhere and want to do remount
@@ -2288,12 +2445,22 @@ static int do_remount(struct path *path, int flags, int mnt_flags,
 	int err;
 	struct super_block *sb = path->mnt->mnt_sb;
 	struct mount *mnt = real_mount(path->mnt);
+#ifdef MY_ABC_HERE
+	struct syno_mnt_options options;
+#endif /* MY_ABC_HERE */
 
 	if (!check_mnt(mnt))
 		return -EINVAL;
 
 	if (path->dentry != path->mnt->mnt_root)
 		return -EINVAL;
+
+#ifdef MY_ABC_HERE
+	memset(&options, 0, sizeof(struct syno_mnt_options));
+	err = syno_parse_options(&options, data);
+	if (err)
+		return -EINVAL;
+#endif /* MY_ABC_HERE */
 
 	/* Don't allow changing of locked mnt flags.
 	 *
@@ -2346,6 +2513,10 @@ static int do_remount(struct path *path, int flags, int mnt_flags,
 		touch_mnt_namespace(mnt->mnt_ns);
 		unlock_mount_hash();
 	}
+#ifdef MY_ABC_HERE
+	if (options.relatime_period > 0)
+		sb->relatime_period = options.relatime_period;
+#endif /* MY_ABC_HERE */
 	up_write(&sb->s_umount);
 	return err;
 }
@@ -2510,6 +2681,9 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 	struct user_namespace *user_ns = current->nsproxy->mnt_ns->user_ns;
 	struct vfsmount *mnt;
 	int err;
+#ifdef MY_ABC_HERE
+	struct syno_mnt_options options;
+#endif /* MY_ABC_HERE */
 
 	if (!fstype)
 		return -EINVAL;
@@ -2538,6 +2712,13 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 		}
 	}
 
+#ifdef MY_ABC_HERE
+	memset(&options, 0, sizeof(struct syno_mnt_options));
+	err = syno_parse_options(&options, data);
+	if (err)
+		return -EINVAL;
+#endif /* MY_ABC_HERE */
+
 	mnt = vfs_kern_mount(type, flags, name, data);
 	if (!IS_ERR(mnt) && (type->fs_flags & FS_HAS_SUBTYPE) &&
 	    !mnt->mnt_sb->s_subtype)
@@ -2548,6 +2729,29 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 		return PTR_ERR(mnt);
 
 	err = do_add_mount(real_mount(mnt), path, mnt_flags);
+#ifdef MY_ABC_HERE
+	if (!err && !strcmp(fstype, "ext4")) {
+		char buf[SYNO_MOUNT_PATH_LEN] = {'\0'};
+		ext4_fill_mount_path(mnt->mnt_sb, d_path(path, buf, sizeof(buf)));
+	}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+	if (!strcmp(fstype, "btrfs")) {
+		char buf[SYNO_MOUNT_PATH_LEN] = {'\0'};
+		if (NULL == btrfs_fill_mount_path) {
+			printk(KERN_WARNING "%s: function \"btrfs_fill_mount_path\" is not ready \n", __func__);
+		} else {
+			btrfs_fill_mount_path(mnt->mnt_sb, d_path(path, buf, sizeof(buf)));
+		}
+	}
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_ABC_HERE
+	if (options.relatime_period > 0)
+		mnt->mnt_sb->relatime_period = options.relatime_period;
+#endif /* MY_ABC_HERE */
+
 	if (err)
 		mntput(mnt);
 	return err;
@@ -2792,6 +2996,18 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	int retval = 0;
 	int mnt_flags = 0;
 
+#ifdef MY_DEF_HERE
+	extern int gSynoInstallFlag;
+	if ( 0 == gSynoInstallFlag &&
+#ifdef MY_DEF_HERE
+			gSynoHasDynModule &&
+#endif /* MY_DEF_HERE */
+			NULL != dev_name &&
+			strstr(dev_name, CONFIG_SYNO_USB_FLASH_DEVICE_PATH)) {
+		return -EINVAL;
+	}
+#endif /*MY_DEF_HERE*/
+
 	/* Discard magic */
 	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
 		flags &= ~MS_MGC_MSK;
@@ -2847,15 +3063,32 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (flags & MS_REMOUNT)
 		retval = do_remount(&path, flags & ~MS_REMOUNT, mnt_flags,
 				    data_page);
+#ifdef MY_DEF_HERE
+	else if ((flags & MS_BIND) && ramdisk_check_failed)
+		retval = -EPERM;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	else if ((flags & MS_BIND) && kexec_test_flags)
+		retval = -EPERM;
+#endif /* MY_DEF_HERE */
 	else if (flags & MS_BIND)
 		retval = do_loopback(&path, dev_name, flags & MS_REC);
 	else if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE))
 		retval = do_change_type(&path, flags);
+#ifdef MY_DEF_HERE
+	else if ((flags & MS_MOVE) && ramdisk_check_failed)
+		retval = -EPERM;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	else if ((flags & MS_MOVE) && kexec_test_flags)
+		retval = -EPERM;
+#endif /* MY_DEF_HERE */
 	else if (flags & MS_MOVE)
 		retval = do_move_mount(&path, dev_name);
 	else
 		retval = do_new_mount(&path, type_page, flags, mnt_flags,
 				      dev_name, data_page);
+
 dput_out:
 	path_put(&path);
 	return retval;

@@ -29,3 +29,9 @@ obj-$(CONFIG_CRYPTO_DEV_QAT) += qat/
 obj-$(CONFIG_CRYPTO_DEV_QCE) += qce/
 obj-$(CONFIG_CRYPTO_DEV_VMX) += vmx/
 obj-$(CONFIG_CRYPTO_DEV_SUN4I_SS) += sunxi-ss/
+ifeq ($(CONFIG_SYNO_LSP_RTD129X),y)
+obj-$(CONFIG_CRYPTO_DEV_RTK_MCP) += realtek/
+endif # CONFIG_SYNO_LSP_RTD129X
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_17_04_02), y)
+obj-$(CONFIG_CRYPTO_DEV_SAFEXCEL) += inside-secure/
+endif # CONFIG_SYNO_LSP_ARMADA_17_04_02

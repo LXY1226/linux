@@ -67,6 +67,13 @@ config SPI_ATH79
 	  This enables support for the SPI controller present on the
 	  Atheros AR71XX/AR724X/AR913X SoCs.
 
+config SPI_ARMADA_3700
+	tristate "Marvell Armada 3700 SPI Controller"
+	depends on (ARCH_MVEBU && OF) || COMPILE_TEST
+	help
+	  This enables support for the SPI controller present on the
+	  Marvell Armada 3700 SoCs.
+
 config SPI_ATMEL
 	tristate "Atmel SPI Controller"
 	depends on HAS_DMA
@@ -196,6 +203,17 @@ config SPI_DAVINCI
 	select SPI_BITBANG
 	help
 	  SPI master controller for DaVinci/DA8x/OMAP-L/AM1x SPI modules.
+
+if SYNO_LSP_RTD1619
+config SPI_RTD139x
+	tristate "SPI driver for DW SPI core on RTK RTD139x or RTD16xx platform"
+	select SPI_DESIGNWARE
+	depends on ARCH_RTD139x || ARCH_RTD16xx
+	default n
+	help
+	  Driver for the SPI controller core from DesignWare on
+	  Realtek RTD139x or RTD16xx platform.
+endif # SYNO_LSP_RTD1619
 
 config SPI_DLN2
        tristate "Diolan DLN-2 USB SPI adapter"
@@ -392,7 +410,7 @@ config SPI_OMAP_100K
 
 config SPI_ORION
 	tristate "Orion SPI master"
-	depends on PLAT_ORION || COMPILE_TEST
+	depends on PLAT_ORION || (ARCH_MVEBU && SYNO_LSP_ARMADA_16_12) || COMPILE_TEST
 	help
 	  This enables using the SPI master controller on the Orion chips.
 

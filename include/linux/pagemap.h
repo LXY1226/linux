@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_PAGEMAP_H
 #define _LINUX_PAGEMAP_H
 
@@ -329,6 +332,28 @@ static inline struct page *find_or_create_page(struct address_space *mapping,
 					gfp_mask);
 }
 
+#ifdef MY_ABC_HERE
+static inline bool task_skip_memcg_account(struct task_struct *p)
+{
+	return p->memcg_skip_account;
+}
+
+static inline struct page *find_or_create_page_no_memcg(struct address_space *mapping,
+					pgoff_t offset, gfp_t gfp_mask)
+{
+	struct page *page;
+
+	current->memcg_skip_account++;
+	page = pagecache_get_page(mapping, offset,
+					FGP_LOCK|FGP_ACCESSED|FGP_CREAT,
+					gfp_mask);
+	current->memcg_skip_account--;
+
+	return page;
+}
+#endif
+
+
 /**
  * grab_cache_page_nowait - returns locked page at given index in given cache
  * @mapping: target address_space
@@ -541,65 +566,9 @@ void page_endio(struct page *page, int rw, int err);
 extern void add_page_wait_queue(struct page *page, wait_queue_t *waiter);
 
 /*
- * Fault a userspace page into pagetables.  Return non-zero on a fault.
- *
- * This assumes that two userspace pages are always sufficient.  That's
- * not true if PAGE_CACHE_SIZE > PAGE_SIZE.
+ * Fault everything in given userspace address range in.
  */
 static inline int fault_in_pages_writeable(char __user *uaddr, int size)
-{
-	int ret;
-
-	if (unlikely(size == 0))
-		return 0;
-
-	/*
-	 * Writing zeroes into userspace here is OK, because we know that if
-	 * the zero gets there, we'll be overwriting it.
-	 */
-	ret = __put_user(0, uaddr);
-	if (ret == 0) {
-		char __user *end = uaddr + size - 1;
-
-		/*
-		 * If the page was already mapped, this will get a cache miss
-		 * for sure, so try to avoid doing it.
-		 */
-		if (((unsigned long)uaddr & PAGE_MASK) !=
-				((unsigned long)end & PAGE_MASK))
-			ret = __put_user(0, end);
-	}
-	return ret;
-}
-
-static inline int fault_in_pages_readable(const char __user *uaddr, int size)
-{
-	volatile char c;
-	int ret;
-
-	if (unlikely(size == 0))
-		return 0;
-
-	ret = __get_user(c, uaddr);
-	if (ret == 0) {
-		const char __user *end = uaddr + size - 1;
-
-		if (((unsigned long)uaddr & PAGE_MASK) !=
-				((unsigned long)end & PAGE_MASK)) {
-			ret = __get_user(c, end);
-			(void)c;
-		}
-	}
-	return ret;
-}
-
-/*
- * Multipage variants of the above prefault helpers, useful if more than
- * PAGE_SIZE of data needs to be prefaulted. These are separate from the above
- * functions (which only handle up to PAGE_SIZE) to avoid clobbering the
- * filemap.c hotpaths.
- */
-static inline int fault_in_multipages_writeable(char __user *uaddr, int size)
 {
 	char __user *end = uaddr + size - 1;
 
@@ -626,8 +595,7 @@ static inline int fault_in_multipages_writeable(char __user *uaddr, int size)
 	return 0;
 }
 
-static inline int fault_in_multipages_readable(const char __user *uaddr,
-					       int size)
+static inline int fault_in_pages_readable(const char __user *uaddr, int size)
 {
 	volatile char c;
 	const char __user *end = uaddr + size - 1;

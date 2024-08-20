@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * xhci-plat.c - xHCI host controller driver platform Bus Glue.
  *
@@ -21,9 +24,18 @@
 #include <linux/usb/xhci_pdriver.h>
 #include <linux/acpi.h>
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+#include <linux/suspend.h>
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 #include "xhci.h"
 #include "xhci-mvebu.h"
 #include "xhci-rcar.h"
+#if defined(MY_ABC_HERE)
+#include <linux/usb/otg.h>
+#endif /* MY_ABC_HERE */
 
 static struct hc_driver __read_mostly xhci_plat_hc_driver;
 
@@ -44,6 +56,11 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 	 * dev struct in order to setup MSI
 	 */
 	xhci->quirks |= XHCI_PLAT;
+#if defined(MY_ABC_HERE)
+
+	if (of_property_read_bool(dev->of_node, "needs-reset-on-resume"))
+		xhci->quirks |= XHCI_RESET_ON_RESUME;
+#endif /* MY_ABC_HERE */
 }
 
 /* called during probe() after chip reset completes */
@@ -73,8 +90,51 @@ static int xhci_plat_start(struct usb_hcd *hcd)
 	return xhci_run(hcd);
 }
 
+#if defined(MY_ABC_HERE)
+/*
+ * this routine finds phy with its name, init/power-on it, then
+ * hook it to hcd->phy. Normally, it could be done within routine
+ * usb_add_hcd_with_phy_name, but for the case of OTG, usb_add_hcd
+ * will be invoked in otg driver, which has no idea about the phy
+ * name. so before register hcd to otg driver, hcd->phy has to be
+ * configured.
+ */
+int xhci_phy_init(struct usb_hcd *hcd, const char *phy_name)
+{
+	struct phy *phy = NULL;
+	int ret = 0;
+
+	phy = phy_get(hcd->self.controller, phy_name);
+
+	if (IS_ERR(phy)) {
+		ret = PTR_ERR(phy);
+	} else {
+		ret = phy_init(phy);
+		if (ret) {
+			phy_put(phy);
+			return ret;
+		}
+		ret = phy_power_on(phy);
+		if (ret) {
+			phy_exit(phy);
+			phy_put(phy);
+			return ret;
+		}
+		hcd->phy = phy;
+	}
+
+	return ret;
+}
+
+#endif /* MY_ABC_HERE */
 static int xhci_plat_probe(struct platform_device *pdev)
 {
+#if defined (MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+#else /* MY_ABC_HERE */
+	u32 vbus_gpio_pin = 0;
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 	struct device_node	*node = pdev->dev.of_node;
 	struct usb_xhci_pdata	*pdata = dev_get_platdata(&pdev->dev);
 	const struct hc_driver	*driver;
@@ -174,9 +234,162 @@ static int xhci_plat_probe(struct platform_device *pdev)
 			goto put_usb3_hcd;
 	}
 
+#if defined (MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+	hcd->power_control_support = 1;
+	dev_info(&pdev->dev, "power control %s\n", hcd->power_control_support ?
+			"enabled" : "disabled");
+#else /* MY_ABC_HERE */
+	if (node) {
+		if (of_property_read_bool(node, "power-control-capable")) {
+			hcd->power_control_support = 1;
+		} else {
+			hcd->power_control_support = 0;
+		}
+		if (of_property_read_bool(node, "vbus-gpio")) {
+			of_property_read_u32(node, "vbus-gpio", &vbus_gpio_pin);
+			/* hcd->vbus_gpio_pin' is an integer, but vbus_gpio_pin is
+			 * an unsigned integer. It should be safe because it's enough
+			 * for gpio number.
+			 */
+			hcd->vbus_gpio_pin = vbus_gpio_pin;
+		} else {
+			hcd->vbus_gpio_pin = -1;
+			dev_warn(&pdev->dev, "failed to get Vbus gpio\n");
+		}
+	}
+	dev_info(&pdev->dev, "USB2 Vbus gpio %d\n", hcd->vbus_gpio_pin);
+	dev_info(&pdev->dev, "power control %s\n", hcd->power_control_support ?
+			"enabled" : "disabled");
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_ABC_HERE)
+	if (of_device_is_compatible(pdev->dev.of_node,
+#if defined(MY_ABC_HERE)
+				    "marvell,armada-3700-xhci")) {
+#else /* MY_ABC_HERE */
+				    "marvell,armada-3700-xhci-otg")) {
+#endif /* MY_ABC_HERE */
+		/* If Armada3700 needs to enable OTG support, register XHCI
+		 * driver to OTG PHY, and wait for it to call usb_add_hcd
+		 * at the right time (start working in USB Host mode).
+		 */
+
+		if (hcd->usb_phy == NULL) {
+			dev_err(&pdev->dev, "unable to find OTG PHY\n");
+			goto disable_usb_phy;
+		}
+
+		hcd->irq = irq;
+
+#if defined(MY_ABC_HERE)
+		/*
+		 * init/power-on the phy, then hook it to hcd->phy.
+		 * Normally, in non-otg mode, this is done by routine usb_add_hcd_with_phy_name,
+		 * but in the case of otg, usb_add_hcd has to be invoked in otg driver,
+		 * which has no idea about the phy name. So before register hcd to otg
+		 * driver, hcd->phy has to be configured, then when otg driver calls
+		 * usb_add_hcd, phy has already been setup correctly.
+		 */
+		if (of_property_read_bool(pdev->dev.of_node, "separated-phys-for-usb2-usb3")) {
+			if (xhci_phy_init(hcd, "usb2")) {
+				dev_err(&pdev->dev, "unable to init and power on USB2 PHY\n");
+				goto disable_usb_phy;
+			}
+			if (xhci_phy_init(xhci->shared_hcd, "usb3")) {
+				dev_err(&pdev->dev, "unable to init and power on USB3 PHY\n");
+				goto disable_usb_phy;
+			}
+		}
+
+#endif /* MY_ABC_HERE */
+		ret = otg_set_host(hcd->usb_phy->otg, &hcd->self);
+		if (ret) {
+			dev_err(&pdev->dev, "unable to register with OTG PHY\n");
+			goto disable_usb_phy;
+		}
+	} else {
+#if defined(MY_ABC_HERE)
+		/*
+		 * When "separated-phys-for-usb2-usb3" is set, it indicates that usb3 host controller
+		 * uses a dedicated utmi phy for USB 2 and another phy for USB 3, for example,
+		 * armada 3700 usb3 host controller uses a dedicated utmi phy for USB 2 and a
+		 * common phy for USB 3;
+		 * usb hcd should be added with phy name as below:
+		 *        - main hcd is added with "usb2"
+		 *        - shared hcd is added with "usb3"
+		 * When "separated-phys-for-usb2-usb3" is not set, USB 2 and USB 3 shares a same phy,
+		 * main hcd and shared hcd are both added with the default phy name of "usb"
+		 */
+		if (of_property_read_bool(pdev->dev.of_node, "separated-phys-for-usb2-usb3")) {
+			ret = usb_add_hcd_with_phy_name(hcd, irq, IRQF_SHARED, "usb2");
+			if (ret)
+				goto disable_usb_phy;
+
+			ret = usb_add_hcd_with_phy_name(xhci->shared_hcd, irq, IRQF_SHARED, "usb3");
+			if (ret)
+				goto dealloc_usb2_hcd;
+		} else {
+			ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
+			if (ret)
+				goto disable_usb_phy;
+
+			ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
+			if (ret)
+				goto dealloc_usb2_hcd;
+		}
+#else /* MY_ABC_HERE */
+		ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
+		if (ret)
+			goto disable_usb_phy;
+#endif /* MY_ABC_HERE */
+
+#if defined (MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+		xhci->shared_hcd->power_control_support = hcd->power_control_support;
+		dev_info(&pdev->dev, "power control %s\n", hcd->power_control_support ?
+				"enabled" : "disabled");
+#else /* MY_ABC_HERE */
+		xhci->shared_hcd->vbus_gpio_pin = hcd->vbus_gpio_pin;
+		xhci->shared_hcd->power_control_support = hcd->power_control_support;
+		dev_info(&pdev->dev, "USB3 Vbus gpio %d\n",
+				xhci->shared_hcd->vbus_gpio_pin);
+		dev_info(&pdev->dev, "power control %s\n", hcd->power_control_support ?
+				"enabled" : "disabled");
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+
+		if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
+			xhci->shared_hcd->can_do_streams = 1;
+
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
+		ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
+		if (ret)
+			goto dealloc_usb2_hcd;
+#endif /* MY_ABC_HERE */
+	}
+#else /* MY_ABC_HERE */
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto disable_usb_phy;
+
+#if defined (MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+	xhci->shared_hcd->power_control_support = hcd->power_control_support;
+	dev_info(&pdev->dev, "power control %s\n", hcd->power_control_support ?
+			"enabled" : "disabled");
+#else /* MY_ABC_HERE */
+	xhci->shared_hcd->vbus_gpio_pin = hcd->vbus_gpio_pin;
+	xhci->shared_hcd->power_control_support = hcd->power_control_support;
+	dev_info(&pdev->dev, "USB3 Vbus gpio %d\n",
+			xhci->shared_hcd->vbus_gpio_pin);
+	dev_info(&pdev->dev, "power control %s\n", hcd->power_control_support ?
+			"enabled" : "disabled");
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 
 	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
 		xhci->shared_hcd->can_do_streams = 1;
@@ -184,9 +397,9 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto dealloc_usb2_hcd;
+#endif /* MY_ABC_HERE */
 
 	return 0;
-
 
 dealloc_usb2_hcd:
 	usb_remove_hcd(hcd);
@@ -215,10 +428,31 @@ static int xhci_plat_remove(struct platform_device *dev)
 
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 
+#if defined(MY_ABC_HERE)
+	if (of_device_is_compatible(dev->dev.of_node,
+#if defined(MY_ABC_HERE)
+				    "marvell,armada-3700-xhci")) {
+#else /* MY_ABC_HERE */
+				    "marvell,armada-3700-xhci-otg")) {
+#endif /* MY_ABC_HERE */
+		otg_set_host(hcd->usb_phy->otg, NULL);
+	} else {
+		usb_remove_hcd(xhci->shared_hcd);
+		usb_phy_shutdown(hcd->usb_phy);
+#if defined(MY_ABC_HERE)
+		usb_put_phy(hcd->usb_phy);
+		hcd->usb_phy = NULL;
+#endif /* MY_ABC_HERE */
+
+		usb_remove_hcd(hcd);
+	}
+#else /* MY_ABC_HERE */
 	usb_remove_hcd(xhci->shared_hcd);
 	usb_phy_shutdown(hcd->usb_phy);
 
 	usb_remove_hcd(hcd);
+#endif /* MY_ABC_HERE */
+
 	usb_put_hcd(xhci->shared_hcd);
 
 	if (!IS_ERR(clk))
@@ -228,12 +462,45 @@ static int xhci_plat_remove(struct platform_device *dev)
 	return 0;
 }
 
+#if defined(MY_ABC_HERE)
+void xhci_plat_shutdown(struct platform_device *dev)
+{
+	xhci_plat_remove(dev);
+}
+#endif /* MY_ABC_HERE */
+
 #ifdef CONFIG_PM_SLEEP
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+/* [DEV_FIX]implement New USB reset mechanism with CRT reset to workaround any HW or IP issues
+ * commit 319ff9f5c298b94517a10d4ced59812b54994347
+ */
+static int xhci_plat_suspend(struct device *dev);
+int RTK_xhci_plat_suspend(struct device *dev) {
+	return xhci_plat_suspend(dev);
+}
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 static int xhci_plat_suspend(struct device *dev)
 {
 	struct usb_hcd	*hcd = dev_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
+#if defined(MY_ABC_HERE)
+	int ret;
+#endif /* MY_ABC_HERE */
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	if (RTK_PM_STATE == PM_SUSPEND_STANDBY) {
+		dev_info(dev, "[USB] %s Idle mode\n", __func__);
+		return 0;
+	 } else
+		xhci_info(xhci, "[USB] %s Suspend mode --> xhci_suspend (do_wakeup=%s)",
+			__func__, device_may_wakeup(dev)? "true":"false");
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	/*
 	 * xhci_suspend() needs `do_wakeup` to know whether host is allowed
 	 * to do wakeup during suspend. Since xhci_plat_suspend is currently
@@ -242,14 +509,103 @@ static int xhci_plat_suspend(struct device *dev)
 	 * reconsider this when xhci_plat_suspend enlarges its scope, e.g.,
 	 * also applies to runtime suspend.
 	 */
+#if defined(MY_ABC_HERE)
+	ret = xhci_suspend(xhci, device_may_wakeup(dev));
+	if (ret) {
+		dev_err(dev, "unable to suspend xhci\n");
+		return ret;
+	}
+
+	/*
+	* xhci's main hcd is for USB2 while its shared hcd is for USB3;
+	* If phys are separated for USB2 and USB3, then main hcd's phy
+	* represents the dedicated USB2 phy while shared hcd's phy
+	* represents the USB3 phy which is a different phy than main hcd, we
+	* must power off both phys; otherwise the two hcds shares a same
+	* phy which is for both USB2 and USB3, we only need to power off
+	* the phy once.
+	* Here hcd is the main hcd.
+	*/
+	phy_power_off(hcd->phy);
+	phy_exit(hcd->phy);
+
+	if (of_property_read_bool(dev->of_node, "separated-phys-for-usb2-usb3")) {
+		phy_power_off(xhci->shared_hcd->phy);
+		phy_exit(xhci->shared_hcd->phy);
+	}
+
+	return 0;
+#else /* MY_ABC_HERE */
 	return xhci_suspend(xhci, device_may_wakeup(dev));
+#endif /* MY_ABC_HERE */
 }
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+/* [DEV_FIX]implement New USB reset mechanism with CRT reset to workaround any HW or IP issues
+ * commit 319ff9f5c298b94517a10d4ced59812b54994347
+ */
+static int xhci_plat_resume(struct device *dev);
+int RTK_xhci_plat_resume(struct device *dev)
+{
+	return xhci_plat_resume(dev);
+}
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 static int xhci_plat_resume(struct device *dev)
 {
 	struct usb_hcd	*hcd = dev_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
+#if defined(MY_ABC_HERE)
+	int ret;
 
+	/*
+	* xhci's main hcd is for USB2 while its shared hcd is for USB3;
+	* If phys are separated for USB2 and USB3, then main hcd's phy
+	* represents the dedicated USB2 phy while shared hcd's phy
+	* represents the USB3 phy which is a different phy than main hcd, we
+	* must init and power on both phys; otherwise the two hcds shares
+	* a same phy which is for both USB2 and USB3, we only need to init
+	* and power on the phy once.
+	* Here hcd is the main hcd.
+	*/
+	ret = phy_init(hcd->phy);
+	if (ret)
+		return ret;
+
+	ret = phy_power_on(hcd->phy);
+	if (ret) {
+		phy_exit(hcd->phy);
+		return ret;
+	}
+
+	if (of_property_read_bool(dev->of_node, "separated-phys-for-usb2-usb3")) {
+		ret = phy_init(xhci->shared_hcd->phy);
+		if (ret)
+			return ret;
+
+		ret = phy_power_on(xhci->shared_hcd->phy);
+		if (ret) {
+			phy_exit(xhci->shared_hcd->phy);
+			/* roll back main hcd's phy */
+			phy_power_off(hcd->phy);
+			phy_exit(hcd->phy);
+			return ret;
+		}
+	}
+#endif /* MY_ABC_HERE */
+
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	if (RTK_PM_STATE == PM_SUSPEND_STANDBY) {
+		dev_info(dev, "[USB] %s Idle mode\n", __func__);
+		return 0;
+	} else
+		dev_info(dev,  "[USB] %s Suspend mode --> xhci_resume\n", __func__);
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	return xhci_resume(xhci, 0);
 }
 
@@ -269,6 +625,13 @@ static const struct of_device_id usb_xhci_of_match[] = {
 	{ .compatible = "marvell,armada-380-xhci"},
 	{ .compatible = "renesas,xhci-r8a7790"},
 	{ .compatible = "renesas,xhci-r8a7791"},
+#if defined(MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+	{ .compatible = "marvell,armada-3700-xhci"},
+#else /* MY_ABC_HERE */
+	{ .compatible = "marvell,armada-3700-xhci-otg"},
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 	{ },
 };
 MODULE_DEVICE_TABLE(of, usb_xhci_of_match);
@@ -282,9 +645,15 @@ static const struct acpi_device_id usb_xhci_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, usb_xhci_acpi_match);
 
 static struct platform_driver usb_xhci_driver = {
+#if defined(MY_ABC_HERE)
+	.probe		= xhci_plat_probe,
+	.remove		= xhci_plat_remove,
+	.shutdown	= xhci_plat_shutdown,
+#else /* MY_ABC_HERE */
 	.probe	= xhci_plat_probe,
 	.remove	= xhci_plat_remove,
 	.shutdown = usb_hcd_platform_shutdown,
+#endif /* MY_ABC_HERE */
 	.driver	= {
 		.name = "xhci-hcd",
 		.pm = DEV_PM_OPS,

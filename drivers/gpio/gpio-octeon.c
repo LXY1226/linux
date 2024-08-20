@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -108,7 +111,11 @@ static int octeon_gpio_probe(struct platform_device *pdev)
 
 	pdev->dev.platform_data = chip;
 	chip->label = "octeon-gpio";
+#if defined(MY_ABC_HERE)
+	chip->parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	chip->dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	chip->owner = THIS_MODULE;
 	chip->base = 0;
 	chip->can_sleep = false;

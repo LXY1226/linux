@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/usb/driver.c - most of the driver model stuff for usb
  *
@@ -31,6 +34,32 @@
 
 #include "usb.h"
 
+#ifdef MY_ABC_HERE
+#include <linux/synobios.h>
+
+extern int (*funcSYNOGetHwCapability)(CAPABILITY *);
+extern int blIsCardReader(struct usb_device *usbdev);
+
+static unsigned char has_cardreader(void)
+{
+	CAPABILITY Capability;
+	unsigned char ret = 0;
+
+	Capability.id = CAPABILITY_CARDREADER;
+	Capability.support = 0;
+
+	if (funcSYNOGetHwCapability) {
+		if (funcSYNOGetHwCapability(&Capability)){
+			goto END;
+		}
+	}
+
+	ret = Capability.support;
+END:
+	return ret;
+}
+
+#endif /* MY_ABC_HERE */
 
 /*
  * Adds a new dynamic USBdevice ID to this driver,
@@ -264,6 +293,20 @@ static int usb_probe_device(struct device *dev)
 	return error;
 }
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+int RTK_usb_probe_device(struct device *dev)
+{
+	int ret = 0;
+	ret = usb_probe_device(dev);
+	return ret;
+}
+#if defined(MY_DEF_HERE)
+EXPORT_SYMBOL(RTK_usb_probe_device);
+#endif /* MY_DEF_HERE */
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 /* called from driver core with dev locked */
 static int usb_unbind_device(struct device *dev)
 {
@@ -275,6 +318,37 @@ static int usb_unbind_device(struct device *dev)
 		usb_autosuspend_device(udev);
 	return 0;
 }
+
+#ifdef MY_ABC_HERE
+/* called from driver core with dev locked */
+static void syno_usb_shutdown_device(struct device *dev)
+{
+	struct usb_device *udev = to_usb_device(dev);
+	int retval = 0;
+
+	if (!udev->parent || 0 < udev->maxchild)
+		return;
+
+	retval = usb_unbind_device(dev);
+	if (retval) {
+		dev_warn(dev, "Fail to unbind device driver, ret %d\n", retval);
+	}
+}
+#endif /* MY_ABC_HERE */
+
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+int RTK_usb_unbind_device(struct device *dev)
+{
+	int ret = 0;
+	ret = usb_unbind_device(dev);
+	return ret;
+}
+#if defined(MY_DEF_HERE)
+EXPORT_SYMBOL(RTK_usb_unbind_device);
+#endif /* MY_DEF_HERE */
+#endif /* CONFIG_USB_PATCH_ON_RTK */
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 /* called from driver core with dev locked */
 static int usb_probe_interface(struct device *dev)
@@ -792,8 +866,37 @@ EXPORT_SYMBOL_GPL(usb_match_id);
 
 static int usb_device_match(struct device *dev, struct device_driver *drv)
 {
+#ifdef MY_ABC_HERE
+	extern void (*funcSYNOUsbProhibitEvent)(void);
+	extern int gSynoForbidUsb;
+	u16 vendor_id = 0, product_id = 0;
+	struct usb_device *udev;
+	static unsigned long last_jiffies = INITIAL_JIFFIES;
+#endif /* MY_ABC_HERE */
+
 	/* devices and interfaces are handled separately */
 	if (is_usb_device(dev)) {
+
+#ifdef MY_ABC_HERE
+		if (gSynoForbidUsb) {
+			udev = to_usb_device(dev);
+			vendor_id = le16_to_cpu(udev->descriptor.idVendor);
+			product_id = le16_to_cpu(udev->descriptor.idProduct);
+			if (udev->parent && USB_CLASS_HUB != udev->descriptor.bDeviceClass && !IS_SYNO_FLASH(vendor_id, product_id)) {
+				dev_err(&udev->dev, "USB device idVendor=%04x idProduct=%04x manufacturer=%s product=%s is prohibited!\n",
+						vendor_id, product_id, udev->manufacturer, udev->product);
+				if (time_after(jiffies, last_jiffies + msecs_to_jiffies(3000))) {
+					if (NULL == funcSYNOUsbProhibitEvent) {
+						dev_err(&udev->dev, "%s: Can't reference to function 'funcSYNOUsbProhibitEvent'\n",__func__);
+					} else {
+						funcSYNOUsbProhibitEvent();
+					}
+					last_jiffies = jiffies;
+				}
+				return 0;
+			}
+		}
+#endif /* MY_ABC_HERE */
 
 		/* interface drivers never match devices */
 		if (!is_usb_device_driver(drv))
@@ -864,6 +967,15 @@ static int usb_uevent(struct device *dev, struct kobj_uevent_env *env)
 			   usb_dev->descriptor.bDeviceProtocol))
 		return -ENOMEM;
 
+#ifdef MY_ABC_HERE
+	if(has_cardreader()) {
+		if (blIsCardReader(usb_dev)) {
+			if (add_uevent_var(env, "CARDREADER=1"))
+				return -ENOMEM;
+		}
+	}
+#endif /* MY_ABC_HERE */
+
 	return 0;
 }
 
@@ -892,6 +1004,9 @@ int usb_register_device_driver(struct usb_device_driver *new_udriver,
 	new_udriver->drvwrap.driver.probe = usb_probe_device;
 	new_udriver->drvwrap.driver.remove = usb_unbind_device;
 	new_udriver->drvwrap.driver.owner = owner;
+#ifdef MY_ABC_HERE
+	new_udriver->drvwrap.driver.shutdown = syno_usb_shutdown_device;
+#endif /* MY_ABC_HERE */
 
 	retval = driver_register(&new_udriver->drvwrap.driver);
 

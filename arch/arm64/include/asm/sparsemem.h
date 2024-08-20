@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2012 ARM Ltd.
  *
@@ -18,7 +21,13 @@
 
 #ifdef CONFIG_SPARSEMEM
 #define MAX_PHYSMEM_BITS	48
+#if defined(MY_ABC_HERE)
+#define SECTION_SIZE_BITS	28
+#elif defined(MY_DEF_HERE)
+#define SECTION_SIZE_BITS	29
+#else /* MY_ABC_HERE / MY_DEF_HERE */
 #define SECTION_SIZE_BITS	30
+#endif /* MY_ABC_HERE / MY_DEF_HERE */
 #endif
 
 #endif

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
@@ -796,7 +799,11 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	chip->base = 0;
 	chip->ngpio = ngpio;
 	chip->label = dev_name(pctrl->dev);
+#if defined(MY_ABC_HERE)
+	chip->parent = pctrl->dev;
+#else /* MY_ABC_HERE */
 	chip->dev = pctrl->dev;
+#endif /* MY_ABC_HERE */
 	chip->owner = THIS_MODULE;
 	chip->of_node = pctrl->dev->of_node;
 

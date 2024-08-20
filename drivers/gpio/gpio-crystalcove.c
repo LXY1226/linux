@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * gpio-crystalcove.c - Intel Crystal Cove GPIO Driver
  *
@@ -341,7 +344,11 @@ static int crystalcove_gpio_probe(struct platform_device *pdev)
 	cg->chip.base = -1;
 	cg->chip.ngpio = CRYSTALCOVE_VGPIO_NUM;
 	cg->chip.can_sleep = true;
+#if defined(MY_ABC_HERE)
+	cg->chip.parent = dev;
+#else /* MY_ABC_HERE */
 	cg->chip.dev = dev;
+#endif /* MY_ABC_HERE */
 	cg->chip.dbg_show = crystalcove_gpio_dbg_show;
 	cg->regmap = pmic->regmap;
 

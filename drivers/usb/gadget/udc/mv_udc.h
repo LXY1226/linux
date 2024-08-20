@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2011 Marvell International Ltd. All rights reserved.
  *
@@ -196,6 +199,10 @@ struct mv_udc {
 	struct mv_req			*status_req;
 	struct usb_ctrlrequest		local_setup_buff;
 
+#if defined(MY_ABC_HERE)
+	struct phy			*utmi_phy;
+
+#endif /* MY_ABC_HERE */
 	unsigned int		resume_state;	/* USB state to resume */
 	unsigned int		usb_state;	/* USB current state */
 	unsigned int		ep0_state;	/* Endpoint zero state */
@@ -214,6 +221,9 @@ struct mv_udc {
 				active:1,
 				stopped:1;      /* stop bit is setted */
 
+#if defined(MY_ABC_HERE)
+	int vbus_pin;
+#endif /* MY_ABC_HERE */
 	struct work_struct	vbus_work;
 	struct workqueue_struct *qwork;
 

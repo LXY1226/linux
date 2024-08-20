@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright(c) 1999 - 2004 Intel Corporation. All rights reserved.
  *
@@ -180,8 +183,13 @@ static void tlb_deinitialize(struct bonding *bond)
 
 static long long compute_gap(struct slave *slave)
 {
+#ifdef MY_ABC_HERE
+	return ((s64) (slave->speed) << 20) - /* Convert to Megabit per sec */
+	       ((s64) (SLAVE_TLB_INFO(slave).load) << 3); /* Bytes to bits */
+#else /* MY_ABC_HERE */
 	return (s64) (slave->speed << 20) - /* Convert to Megabit per sec */
 	       (s64) (SLAVE_TLB_INFO(slave).load << 3); /* Bytes to bits */
+#endif /* MY_ABC_HERE */
 }
 
 static struct slave *tlb_get_least_loaded_slave(struct bonding *bond)
@@ -1467,8 +1475,24 @@ int bond_alb_xmit(struct sk_buff *skb, struct net_device *bond_dev)
 	}
 
 	if (do_tx_balance) {
-		hash_index = _simple_hash(hash_start, hash_size);
-		tx_slave = tlb_choose_channel(bond, hash_index, skb->len);
+		if (bond->params.tlb_dynamic_lb) {
+			hash_index = _simple_hash(hash_start, hash_size);
+			tx_slave = tlb_choose_channel(bond, hash_index, skb->len);
+		} else {
+			/*
+			 * do_tx_balance means we are free to select the tx_slave
+			 * So we do exactly what tlb would do for hash selection
+			 */
+
+			struct bond_up_slave *slaves;
+			unsigned int count;
+
+			slaves = rcu_dereference(bond->slave_arr);
+			count = slaves ? READ_ONCE(slaves->count) : 0;
+			if (likely(count))
+				tx_slave = slaves->arr[bond_xmit_hash(bond, skb) %
+						       count];
+		}
 	}
 
 	return bond_do_alb_xmit(skb, bond, tx_slave);
@@ -1771,3 +1795,109 @@ void bond_alb_clear_vlan(struct bonding *bond, unsigned short vlan_id)
 		rlb_clear_vlan(bond, vlan_id);
 }
 
+#if defined(MY_ABC_HERE)
+void bond_alb_info_show(struct seq_file *seq)
+{
+	struct bonding *bond = seq->private;
+	struct alb_bond_info *bond_info = &(BOND_ALB_INFO(bond));
+	struct rlb_client_info *rclient_info;
+	struct tlb_client_info *tclient_info;
+	struct slave *slave;
+	u32 index;
+	struct list_head *iter;
+	bool rcinfo_visited[RLB_HASH_TABLE_SIZE] = { false };
+
+	seq_puts(seq, "\nALB info\n");
+	seq_puts(seq, "\n Receive Load Balancing table:\n");
+	seq_puts(seq, "  Index Slave    Assigned Client-MAC"
+		      "         Server -> Client\n");
+
+	spin_lock_bh(&bond->mode_lock);
+	index = bond_info->rx_hashtbl_used_head;
+	for (; bond_info->rx_hashtbl && index != RLB_NULL_INDEX;
+		 index = rclient_info->used_next) {
+		if (rcinfo_visited[index]) {
+			break;
+		}
+		rcinfo_visited[index] = true;
+		rclient_info = &(bond_info->rx_hashtbl[index]);
+
+		if (rclient_info) {
+			seq_printf(seq,	"%6u: %-8s %6s   %-17pM  ",
+				   index,
+				   (rclient_info->slave &&
+				   rclient_info->slave->dev &&
+				   rclient_info->slave->dev->name[0] != '\0' ?
+				   rclient_info->slave->dev->name : "(none)"),
+				   (rclient_info->assigned ? "yes" : "no"),
+				   rclient_info->mac_dst);
+
+			/* Implemented as separate outputs to
+			   support IPv6 in the future (if it's supported) */
+			seq_printf(seq,	NIPQUAD_FMT " -> ",
+				   NIPQUAD(rclient_info->ip_src));
+			seq_printf(seq,	NIPQUAD_FMT "\n",
+				   NIPQUAD(rclient_info->ip_dst));
+		}
+	}
+
+	seq_puts(seq, "\n Transmit Load Balancing table:\n");
+#ifdef MY_ABC_HERE
+	seq_printf(seq,	"  Unbalanced load: %llu\n"
+#else /* MY_ABC_HERE */
+	seq_printf(seq,	"  Unbalanced load: %u\n"
+#endif /* MY_ABC_HERE */
+			"  Rebalance interval: %u seconds\n\n",
+			bond_info->unbalanced_load,
+			BOND_TLB_REBALANCE_INTERVAL);
+
+	/* Process each slave */
+	bond_for_each_slave(bond, slave, iter) {
+
+		if (slave) {
+			bool tcinfo_visited[TLB_HASH_TABLE_SIZE] = { false };
+			seq_puts(seq, "  Slave    Used  Speed    Duplex"
+				      "  Current load\n");
+#ifdef MY_ABC_HERE
+			seq_printf(seq, "  %-8s %3s   %-8u %4s      %10llu\n",
+#else /* MY_ABC_HERE */
+			seq_printf(seq, "  %-8s %3s   %-8u %4s      %10u\n",
+#endif /* MY_ABC_HERE */
+				   (slave->dev->name[0] != '\0' ?
+				    slave->dev->name : "none"),
+				   (bond_slave_can_tx(slave) ? "yes" : "no"),
+				   slave->speed,
+				   (slave->duplex ? "full" : "half"),
+				   SLAVE_TLB_INFO(slave).load);
+
+			seq_puts(seq, "           Index    TX Bytes      "
+				      "Load history\n");
+
+			index = SLAVE_TLB_INFO(slave).head;
+			for (; bond_info->tx_hashtbl && index != TLB_NULL_INDEX;
+			     index = tclient_info->next) {
+				if (tcinfo_visited[index]) {
+					break;
+				}
+				tcinfo_visited[index] = true;
+
+				tclient_info = &(bond_info->tx_hashtbl[index]);
+				if (tclient_info)
+					seq_printf(seq,	"            "
+#ifdef MY_ABC_HERE
+						   "%3u:  %10llu"
+						   "        %10llu\n",
+#else /* MY_ABC_HERE */
+						   "%3u:  %10u"
+						   "        %10u\n",
+#endif /* MY_ABC_HERE */
+					   index,
+						   tclient_info->tx_bytes,
+						   tclient_info->load_history);
+			}
+			seq_puts(seq, "\n");
+		}
+	}
+	spin_unlock_bh(&bond->mode_lock);
+}
+#endif /* MY_ABC_HERE */

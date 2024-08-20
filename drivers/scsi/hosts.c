@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  hosts.c Copyright (C) 1992 Drew Eckhardt
  *          Copyright (C) 1993, 1994, 1995 Eric Youngdale
@@ -402,6 +405,18 @@ struct Scsi_Host *scsi_host_alloc(struct scsi_host_template *sht, int privsize)
 
 	shost->host_lock = &shost->default_lock;
 	spin_lock_init(shost->host_lock);
+#ifdef MY_ABC_HERE
+	/*
+	 * This special lock is used to power on eunit in deep sleep state.
+	 * The true lock configuration is setup later in ata eh, so we set 0 to eunit_lock_configured here.
+	 */
+	shost->peunit_poweron_lock = &shost->eunit_poweron_lock;
+	spin_lock_init(shost->peunit_poweron_lock);
+	shost->puiata_eh_flag = &shost->uiata_eh_flag;
+	shost->uiata_eh_flag = 0;
+	shost->eunit_lock_configured = 0;
+	shost->is_eunit_deepsleep = 0;
+#endif /* MY_ABC_HERE */
 	shost->shost_state = SHOST_CREATED;
 	INIT_LIST_HEAD(&shost->__devices);
 	INIT_LIST_HEAD(&shost->__targets);

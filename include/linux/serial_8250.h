@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/include/linux/serial_8250.h
  *
@@ -122,6 +125,9 @@ struct uart_8250_port {
 	/* 8250 specific callbacks */
 	int			(*dl_read)(struct uart_8250_port *);
 	void			(*dl_write)(struct uart_8250_port *, int);
+#ifdef MY_DEF_HERE
+	bool                    blXmitrCheck;
+#endif /* MY_DEF_HERE */
 };
 
 static inline struct uart_8250_port *up_to_u8250p(struct uart_port *up)

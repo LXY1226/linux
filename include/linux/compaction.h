@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_COMPACTION_H
 #define _LINUX_COMPACTION_H
 
@@ -32,6 +35,9 @@ struct alloc_context; /* in mm/internal.h */
 extern int sysctl_compact_memory;
 extern int sysctl_compaction_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *length, loff_t *ppos);
+#ifdef MY_ABC_HERE
+extern void compact_nodes(void);
+#endif /* MY_ABC_HERE */
 extern int sysctl_extfrag_threshold;
 extern int sysctl_extfrag_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *length, loff_t *ppos);

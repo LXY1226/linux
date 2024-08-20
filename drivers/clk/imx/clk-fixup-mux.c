@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2013 Freescale Semiconductor, Inc.
  *
@@ -15,7 +18,11 @@
 #include <linux/slab.h>
 #include "clk.h"
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_mux(_hw) container_of(_hw, struct clk_mux, hw)
+#endif /* MY_ABC_HERE */
 
 /**
  * struct clk_fixup_mux - imx integer fixup multiplexer clock

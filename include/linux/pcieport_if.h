@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * File:	pcieport_if.h
  * Purpose:	PCI Express Port Bus Driver's IF Data Structure
@@ -21,6 +24,12 @@
 #define PCIE_PORT_SERVICE_HP		(1 << PCIE_PORT_SERVICE_HP_SHIFT)
 #define PCIE_PORT_SERVICE_VC_SHIFT	3	/* Virtual Channel */
 #define PCIE_PORT_SERVICE_VC		(1 << PCIE_PORT_SERVICE_VC_SHIFT)
+#define PCIE_PORT_SERVICE_DPC_SHIFT	4	/* Downstream Port Containment */
+#define PCIE_PORT_SERVICE_DPC		(1 << PCIE_PORT_SERVICE_DPC_SHIFT)
+#ifdef MY_DEF_HERE
+#define PCIE_PORT_SERVICE_I2C_SHIFT	5	/* ASM2824 PCIe swtich I2C driver */
+#define PCIE_PORT_SERVICE_I2C		(1 << PCIE_PORT_SERVICE_I2C_SHIFT)
+#endif /* MY_DEF_HERE */
 
 struct pcie_device {
 	int		irq;	    /* Service IRQ/MSI/MSI-X Vector */

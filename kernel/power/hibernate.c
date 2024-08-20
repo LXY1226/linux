@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * kernel/power/hibernate.c - Hibernation (a.k.a suspend-to-disk) support.
  *
@@ -514,6 +517,18 @@ int hibernation_restore(int platform_mode)
 	pm_restore_console();
 	return error;
 }
+
+#ifdef MY_DEF_HERE
+void syno_schedule_power_on_prepare(void)
+{
+	if (!hibernation_ops) {
+		return;
+	}
+
+	hibernation_ops->begin();
+	hibernation_ops->end();
+}
+#endif /* MY_DEF_HERE */
 
 /**
  * hibernation_platform_enter - Power off the system using the platform driver.

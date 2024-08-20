@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* Framework for finding and configuring PHYs.
  * Also contains generic PHY driver
  *
@@ -43,7 +46,11 @@ MODULE_LICENSE("GPL");
 
 void phy_device_free(struct phy_device *phydev)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	put_device(&phydev->mdio.dev);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	put_device(&phydev->dev);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 }
 EXPORT_SYMBOL(phy_device_free);
 
@@ -52,6 +59,10 @@ static void phy_device_release(struct device *dev)
 	kfree(to_phy_device(dev));
 }
 
+#if defined(MY_DEF_HERE)
+static struct phy_driver genphy_driver;
+extern struct phy_driver genphy_10g_driver;
+#else /* MY_DEF_HERE */
 enum genphy_driver {
 	GENPHY_DRV_1G,
 	GENPHY_DRV_10G,
@@ -59,13 +70,15 @@ enum genphy_driver {
 };
 
 static struct phy_driver genphy_driver[GENPHY_DRV_MAX];
+#endif /* MY_DEF_HERE */
 
 static LIST_HEAD(phy_fixup_list);
 static DEFINE_MUTEX(phy_fixup_lock);
 
 /**
  * phy_register_fixup - creates a new phy_fixup and adds it to the list
- * @bus_id: A string which matches phydev->dev.bus_id (or PHY_ANY_ID)
+ * @bus_id (armada37xx 16.12): A string which matches phydev->mdio.dev.bus_id (or PHY_ANY_ID)
+ * @bus_id (others): A string which matches phydev->dev.bus_id (or PHY_ANY_ID)
  * @phy_uid: Used to match against phydev->phy_id (the UID of the PHY)
  *	It can also be PHY_ANY_UID
  * @phy_uid_mask: Applied to phydev->phy_id and fixup->phy_uid before
@@ -114,7 +127,11 @@ EXPORT_SYMBOL(phy_register_fixup_for_id);
  */
 static int phy_needs_fixup(struct phy_device *phydev, struct phy_fixup *fixup)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	if (strcmp(fixup->bus_id, phydev_name(phydev)) != 0)
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	if (strcmp(fixup->bus_id, dev_name(&phydev->dev)) != 0)
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 		if (strcmp(fixup->bus_id, PHY_ANY_ID) != 0)
 			return 0;
 
@@ -148,18 +165,64 @@ static int phy_scan_fixups(struct phy_device *phydev)
 	return 0;
 }
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+static int phy_bus_match(struct device *dev, struct device_driver *drv)
+{
+	struct phy_device *phydev = to_phy_device(dev);
+	struct phy_driver *phydrv = to_phy_driver(drv);
+	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
+	int i;
+
+	if (!(phydrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
+		return 0;
+
+	if (phydrv->match_phy_device)
+		return phydrv->match_phy_device(phydev);
+
+	if (phydev->is_c45) {
+		for (i = 1; i < num_ids; i++) {
+			if (!(phydev->c45_ids.devices_in_package & (1 << i)))
+				continue;
+
+			if ((phydrv->phy_id & phydrv->phy_id_mask) ==
+			    (phydev->c45_ids.device_ids[i] &
+			     phydrv->phy_id_mask))
+				return 1;
+		}
+		return 0;
+	} else {
+		return (phydrv->phy_id & phydrv->phy_id_mask) ==
+			(phydev->phy_id & phydrv->phy_id_mask);
+	}
+}
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
+
 struct phy_device *phy_device_create(struct mii_bus *bus, int addr, int phy_id,
 				     bool is_c45,
 				     struct phy_c45_device_ids *c45_ids)
 {
 	struct phy_device *dev;
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct mdio_device *mdiodev;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	/* We allocate the device, and initialize the default values */
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	mdiodev = &dev->mdio;
+	mdiodev->dev.release = phy_device_release;
+	mdiodev->dev.parent = &bus->dev;
+	mdiodev->dev.bus = &mdio_bus_type;
+	mdiodev->bus = bus;
+	mdiodev->bus_match = phy_bus_match;
+	mdiodev->addr = addr;
+	mdiodev->flags = MDIO_DEVICE_FLAG_PHY;
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	dev->dev.release = phy_device_release;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	dev->speed = SPEED_UNKNOWN;
 	dev->duplex = DUPLEX_UNKNOWN;
@@ -171,15 +234,31 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, int phy_id,
 	dev->autoneg = AUTONEG_ENABLE;
 
 	dev->is_c45 = is_c45;
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+//do nothing
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	dev->addr = addr;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	dev->phy_id = phy_id;
 	if (c45_ids)
 		dev->c45_ids = *c45_ids;
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+//do nothing
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	dev->bus = bus;
 	dev->dev.parent = &bus->dev;
 	dev->dev.bus = &mdio_bus_type;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+	dev->irq = bus->irq[addr];
+#else
 	dev->irq = bus->irq ? bus->irq[addr] : PHY_POLL;
+#endif /* MY_ABC_HERE */
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	dev_set_name(&mdiodev->dev, PHY_ID_FMT, bus->id, addr);
+#else /* MY_ABC_HERE  || MY_DEF_HERE */
 	dev_set_name(&dev->dev, PHY_ID_FMT, bus->id, addr);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	dev->state = PHY_DOWN;
 
@@ -199,7 +278,11 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, int phy_id,
 	 */
 	request_module(MDIO_MODULE_PREFIX MDIO_ID_FMT, MDIO_ID_ARGS(phy_id));
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	device_initialize(&mdiodev->dev);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	device_initialize(&dev->dev);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	return dev;
 }
@@ -381,28 +464,49 @@ int phy_device_register(struct phy_device *phydev)
 {
 	int err;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	err = mdiobus_register_device(&phydev->mdio);
+	if (err)
+		return err;
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	/* Don't register a phy if one is already registered at this address */
 	if (phydev->bus->phy_map[phydev->addr])
 		return -EINVAL;
 	phydev->bus->phy_map[phydev->addr] = phydev;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	/* Run all of the fixups for this PHY */
 	err = phy_scan_fixups(phydev);
 	if (err) {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+		pr_err("PHY %d failed to initialize\n", phydev->mdio.addr);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 		pr_err("PHY %d failed to initialize\n", phydev->addr);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 		goto out;
 	}
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	err = device_add(&phydev->mdio.dev);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	err = device_add(&phydev->dev);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	if (err) {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+		pr_err("PHY %d failed to add\n", phydev->mdio.addr);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 		pr_err("PHY %d failed to add\n", phydev->addr);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 		goto out;
 	}
-
 	return 0;
 
  out:
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	mdiobus_unregister_device(&phydev->mdio);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	phydev->bus->phy_map[phydev->addr] = NULL;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	return err;
 }
 EXPORT_SYMBOL(phy_device_register);
@@ -417,11 +521,16 @@ EXPORT_SYMBOL(phy_device_register);
  */
 void phy_device_remove(struct phy_device *phydev)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	device_del(&phydev->mdio.dev);
+	mdiobus_unregister_device(&phydev->mdio);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct mii_bus *bus = phydev->bus;
 	int addr = phydev->addr;
 
 	device_del(&phydev->dev);
 	bus->phy_map[addr] = NULL;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 }
 EXPORT_SYMBOL(phy_device_remove);
 
@@ -431,11 +540,20 @@ EXPORT_SYMBOL(phy_device_remove);
  */
 struct phy_device *phy_find_first(struct mii_bus *bus)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct phy_device *phydev;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	int addr;
 
 	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+		phydev = mdiobus_get_phy(bus, addr);
+		if (phydev)
+			return phydev;
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 		if (bus->phy_map[addr])
 			return bus->phy_map[addr];
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	}
 	return NULL;
 }
@@ -611,6 +729,35 @@ int phy_init_hw(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(phy_init_hw);
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+void phy_attached_info(struct phy_device *phydev)
+{
+	phy_attached_print(phydev, NULL);
+}
+EXPORT_SYMBOL(phy_attached_info);
+
+#define ATTACHED_FMT "attached PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d)"
+void phy_attached_print(struct phy_device *phydev, const char *fmt, ...)
+{
+	if (!fmt) {
+		dev_info(&phydev->mdio.dev, ATTACHED_FMT "\n",
+			 phydev->drv->name, phydev_name(phydev),
+			 phydev->irq);
+	} else {
+		va_list ap;
+
+		dev_info(&phydev->mdio.dev, ATTACHED_FMT,
+			 phydev->drv->name, phydev_name(phydev),
+			 phydev->irq);
+
+		va_start(ap, fmt);
+		vprintk(fmt, ap);
+		va_end(ap);
+	}
+}
+EXPORT_SYMBOL(phy_attached_print);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
+
 /**
  * phy_attach_direct - attach a network device to a given PHY device pointer
  * @dev: network device to attach
@@ -629,8 +776,13 @@ EXPORT_SYMBOL(phy_init_hw);
 int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 		      u32 flags, phy_interface_t interface)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct mii_bus *bus = phydev->mdio.bus;
+	struct device *d = &phydev->mdio.dev;
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct mii_bus *bus = phydev->bus;
 	struct device *d = &phydev->dev;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	int err;
 
 	if (!try_module_get(bus->owner)) {
@@ -645,9 +797,23 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	 */
 	if (!d->driver) {
 		if (phydev->is_c45)
+#if defined(MY_ABC_HERE)
+			d->driver =
+				&genphy_driver[GENPHY_DRV_10G].mdiodrv.driver;
+#elif defined(MY_DEF_HERE)
+			d->driver = &genphy_10g_driver.mdiodrv.driver;
+#else /* MY_ABC_HERE */
 			d->driver = &genphy_driver[GENPHY_DRV_10G].driver;
+#endif /* MY_ABC_HERE */
 		else
+#if defined(MY_ABC_HERE)
+			d->driver =
+				&genphy_driver[GENPHY_DRV_1G].mdiodrv.driver;
+#elif defined(MY_DEF_HERE)
+			d->driver = &genphy_driver.mdiodrv.driver;
+#else /* MY_ABC_HERE */
 			d->driver = &genphy_driver[GENPHY_DRV_1G].driver;
+#endif /* MY_ABC_HERE */
 
 		err = d->driver->probe(d);
 		if (err >= 0)
@@ -740,7 +906,10 @@ EXPORT_SYMBOL(phy_attach);
 void phy_detach(struct phy_device *phydev)
 {
 	struct mii_bus *bus;
+#if defined(MY_DEF_HERE)
+#else /* MY_DEF_HERE */
 	int i;
+#endif /* MY_DEF_HERE */
 
 	phydev->attached_dev->phydev = NULL;
 	phydev->attached_dev = NULL;
@@ -751,27 +920,49 @@ void phy_detach(struct phy_device *phydev)
 	 * from the generic driver so that there's a chance a
 	 * real driver could be loaded
 	 */
+#if defined(MY_DEF_HERE)
+	if (phydev->mdio.dev.driver == &genphy_10g_driver.mdiodrv.driver ||
+			phydev->mdio.dev.driver == &genphy_driver.mdiodrv.driver)
+		device_release_driver(&phydev->mdio.dev);
+#else /* MY_DEF_HERE */
 	for (i = 0; i < ARRAY_SIZE(genphy_driver); i++) {
+#if defined(MY_ABC_HERE)
+		if (phydev->mdio.dev.driver ==
+		    &genphy_driver[i].mdiodrv.driver) {
+			device_release_driver(&phydev->mdio.dev);
+#else /* MY_ABC_HERE */
 		if (phydev->dev.driver == &genphy_driver[i].driver) {
 			device_release_driver(&phydev->dev);
+#endif /* MY_ABC_HERE */
 			break;
 		}
 	}
+#endif /* MY_DEF_HERE */
 
 	/*
 	 * The phydev might go away on the put_device() below, so avoid
 	 * a use-after-free bug by reading the underlying bus first.
 	 */
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	bus = phydev->mdio.bus;
+
+	put_device(&phydev->mdio.dev);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	bus = phydev->bus;
 
 	put_device(&phydev->dev);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	module_put(bus->owner);
 }
 EXPORT_SYMBOL(phy_detach);
 
 int phy_suspend(struct phy_device *phydev)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct phy_driver *phydrv = to_phy_driver(phydev->mdio.dev.driver);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct phy_driver *phydrv = to_phy_driver(phydev->dev.driver);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	struct ethtool_wolinfo wol = { .cmd = ETHTOOL_GWOL };
 	int ret = 0;
 
@@ -794,7 +985,11 @@ EXPORT_SYMBOL(phy_suspend);
 
 int phy_resume(struct phy_device *phydev)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct phy_driver *phydrv = to_phy_driver(phydev->mdio.dev.driver);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct phy_driver *phydrv = to_phy_driver(phydev->dev.driver);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	int ret = 0;
 
 	if (phydrv->resume)
@@ -986,10 +1181,13 @@ int genphy_aneg_done(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(genphy_aneg_done);
 
+#if defined(MY_DEF_HERE)
+#else /* MY_DEF_HERE */
 static int gen10g_config_aneg(struct phy_device *phydev)
 {
 	return 0;
 }
+#endif /* MY_DEF_HERE */
 
 /**
  * genphy_update_link - update link status in @phydev
@@ -1124,6 +1322,8 @@ int genphy_read_status(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(genphy_read_status);
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 static int gen10g_read_status(struct phy_device *phydev)
 {
 	int devad, reg;
@@ -1150,6 +1350,7 @@ static int gen10g_read_status(struct phy_device *phydev)
 
 	return 0;
 }
+#endif /* #ifdef MY_DEF_HERE */
 
 /**
  * genphy_soft_reset - software reset the PHY via BMCR_RESET bit
@@ -1215,6 +1416,8 @@ int genphy_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+#if defined(MY_DEF_HERE)
+#else /* MY_DEF_HERE */
 static int gen10g_soft_reset(struct phy_device *phydev)
 {
 	/* Do nothing for now */
@@ -1230,6 +1433,7 @@ static int gen10g_config_init(struct phy_device *phydev)
 
 	return 0;
 }
+#endif /* MY_DEF_HERE */
 
 int genphy_suspend(struct phy_device *phydev)
 {
@@ -1246,10 +1450,13 @@ int genphy_suspend(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(genphy_suspend);
 
+#if defined(MY_DEF_HERE)
+#else /* MY_DEF_HERE */
 static int gen10g_suspend(struct phy_device *phydev)
 {
 	return 0;
 }
+#endif /* MY_DEF_HERE */
 
 int genphy_resume(struct phy_device *phydev)
 {
@@ -1266,10 +1473,13 @@ int genphy_resume(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(genphy_resume);
 
+#if defined(MY_DEF_HERE)
+#else /* MY_DEF_HERE */
 static int gen10g_resume(struct phy_device *phydev)
 {
 	return 0;
 }
+#endif /* MY_DEF_HERE */
 
 static int __set_phy_supported(struct phy_device *phydev, u32 max_speed)
 {
@@ -1305,7 +1515,11 @@ EXPORT_SYMBOL(phy_set_max_speed);
 
 static void of_set_phy_supported(struct phy_device *phydev)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct device_node *node = phydev->mdio.dev.of_node;
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct device_node *node = phydev->dev.of_node;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	u32 max_speed;
 
 	if (!IS_ENABLED(CONFIG_OF_MDIO))
@@ -1329,7 +1543,11 @@ static void of_set_phy_supported(struct phy_device *phydev)
 static int phy_probe(struct device *dev)
 {
 	struct phy_device *phydev = to_phy_device(dev);
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct device_driver *drv = phydev->mdio.dev.driver;
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct device_driver *drv = phydev->dev.driver;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	struct phy_driver *phydrv = to_phy_driver(drv);
 	int err = 0;
 
@@ -1383,20 +1601,40 @@ static int phy_remove(struct device *dev)
 	return 0;
 }
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+/**
+ * phy_driver_register - register a phy_driver with the PHY layer
+ * @new_driver: new phy_driver to register
+ * @owner: module owning this PHY
+ */
+int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 /**
  * phy_driver_register - register a phy_driver with the PHY layer
  * @new_driver: new phy_driver to register
  */
 int phy_driver_register(struct phy_driver *new_driver)
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 {
 	int retval;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	new_driver->mdiodrv.flags |= MDIO_DEVICE_IS_PHY;
+	new_driver->mdiodrv.driver.name = new_driver->name;
+	new_driver->mdiodrv.driver.bus = &mdio_bus_type;
+	new_driver->mdiodrv.driver.probe = phy_probe;
+	new_driver->mdiodrv.driver.remove = phy_remove;
+	new_driver->mdiodrv.driver.owner = owner;
+
+	retval = driver_register(&new_driver->mdiodrv.driver);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	new_driver->driver.name = new_driver->name;
 	new_driver->driver.bus = &mdio_bus_type;
 	new_driver->driver.probe = phy_probe;
 	new_driver->driver.remove = phy_remove;
 
 	retval = driver_register(&new_driver->driver);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	if (retval) {
 		pr_err("%s: Error %d in registering driver\n",
 		       new_driver->name, retval);
@@ -1410,12 +1648,21 @@ int phy_driver_register(struct phy_driver *new_driver)
 }
 EXPORT_SYMBOL(phy_driver_register);
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+int phy_drivers_register(struct phy_driver *new_driver, int n,
+			 struct module *owner)
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 int phy_drivers_register(struct phy_driver *new_driver, int n)
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 {
 	int i, ret = 0;
 
 	for (i = 0; i < n; i++) {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+		ret = phy_driver_register(new_driver + i, owner);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 		ret = phy_driver_register(new_driver + i);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 		if (ret) {
 			while (i-- > 0)
 				phy_driver_unregister(new_driver + i);
@@ -1428,7 +1675,11 @@ EXPORT_SYMBOL(phy_drivers_register);
 
 void phy_driver_unregister(struct phy_driver *drv)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	driver_unregister(&drv->mdiodrv.driver);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	driver_unregister(&drv->driver);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 }
 EXPORT_SYMBOL(phy_driver_unregister);
 
@@ -1441,8 +1692,8 @@ void phy_drivers_unregister(struct phy_driver *drv, int n)
 }
 EXPORT_SYMBOL(phy_drivers_unregister);
 
-static struct phy_driver genphy_driver[] = {
-{
+#if defined(MY_DEF_HERE)
+static struct phy_driver genphy_driver = {
 	.phy_id		= 0xffffffff,
 	.phy_id_mask	= 0xffffffff,
 	.name		= "Generic PHY",
@@ -1456,7 +1707,28 @@ static struct phy_driver genphy_driver[] = {
 	.read_status	= genphy_read_status,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+};
+#else /* MY_DEF_HERE */
+static struct phy_driver genphy_driver[] = {
+{
+	.phy_id         = 0xffffffff,
+	.phy_id_mask    = 0xffffffff,
+	.name           = "Generic PHY",
+	.soft_reset     = genphy_soft_reset,
+	.config_init    = genphy_config_init,
+	.features       = PHY_GBIT_FEATURES | SUPPORTED_MII |
+			  SUPPORTED_AUI | SUPPORTED_FIBRE |
+			  SUPPORTED_BNC,
+	.config_aneg    = genphy_config_aneg,
+	.aneg_done      = genphy_aneg_done,
+	.read_status    = genphy_read_status,
+	.suspend        = genphy_suspend,
+	.resume         = genphy_resume,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE, },
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id         = 0xffffffff,
 	.phy_id_mask    = 0xffffffff,
@@ -1468,8 +1740,13 @@ static struct phy_driver genphy_driver[] = {
 	.read_status    = gen10g_read_status,
 	.suspend        = gen10g_suspend,
 	.resume         = gen10g_resume,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver         = {.owner = THIS_MODULE, },
+#endif /* MY_ABC_HERE */
 } };
+#endif /* MY_DEF_HERE */
 
 static int __init phy_init(void)
 {
@@ -1479,18 +1756,43 @@ static int __init phy_init(void)
 	if (rc)
 		return rc;
 
+#if defined(MY_ABC_HERE)
+	rc = phy_drivers_register(genphy_driver,
+				  ARRAY_SIZE(genphy_driver), THIS_MODULE);
+#elif defined(MY_DEF_HERE)
+	rc = phy_driver_register(&genphy_10g_driver, THIS_MODULE);
+#else /* MY_ABC_HERE */
 	rc = phy_drivers_register(genphy_driver,
 				  ARRAY_SIZE(genphy_driver));
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_DEF_HERE)
+	if (rc)
+		goto err_10g;
+
+	rc = phy_driver_register(&genphy_driver, THIS_MODULE);
+	if (rc) {
+		phy_driver_unregister(&genphy_10g_driver);
+err_10g:
+		mdio_bus_exit();
+	}
+#else /* MY_DEF_HERE */
 	if (rc)
 		mdio_bus_exit();
+#endif /* MY_DEF_HERE */
 
 	return rc;
 }
 
 static void __exit phy_exit(void)
 {
+#if defined(MY_DEF_HERE)
+	phy_driver_unregister(&genphy_10g_driver);
+	phy_driver_unregister(&genphy_driver);
+#else /* MY_DEF_HERE */
 	phy_drivers_unregister(genphy_driver,
 			       ARRAY_SIZE(genphy_driver));
+#endif /* MY_DEF_HERE */
 	mdio_bus_exit();
 }
 

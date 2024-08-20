@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/net/dsa/mv88e6060.h - Marvell 88e6060 switch chip support
  * Copyright (c) 2015 Neil Armstrong
@@ -108,4 +111,16 @@
 #define GLOBAL_ATU_MAC_23	0x0e
 #define GLOBAL_ATU_MAC_45	0x0f
 
+#if defined(MY_ABC_HERE)
+struct mv88e6060_priv {
+	/* MDIO bus and address on bus to use. When in single chip
+	 * mode, address is 0, and the switch uses multiple addresses
+	 * on the bus.  When in multi-chip mode, the switch uses a
+	 * single address which contains two registers used for
+	 * indirect access to more registers.
+	 */
+	struct mii_bus *bus;
+	int sw_addr;
+};
+#endif /* MY_ABC_HERE */
 #endif

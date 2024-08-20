@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/stat.h>
 #include <linux/sysctl.h>
 #include "../fs/xfs/xfs_sysctl.h"
@@ -796,6 +799,13 @@ static const struct bin_table bin_inotify_table[] = {
 	{}
 };
 
+#ifdef MY_ABC_HERE
+static const struct bin_table bin_synotify_table[] = {
+	{ CTL_INT,      SYNOTIFY_MAX_QUEUED_EVENTS,     "max_queued_events" },
+	{}
+};
+#endif /* MY_ABC_HERE */
+
 static const struct bin_table bin_fs_table[] = {
 	{ CTL_INT,	FS_NRINODE,		"inode-nr" },
 	{ CTL_INT,	FS_STATINODE,		"inode-state" },
@@ -817,6 +827,9 @@ static const struct bin_table bin_fs_table[] = {
 	{ CTL_ULONG,	FS_AIO_NR,		"aio-nr" },
 	{ CTL_ULONG,	FS_AIO_MAX_NR,		"aio-max-nr" },
 	{ CTL_DIR,	FS_INOTIFY,		"inotify",	bin_inotify_table },
+#ifdef MY_ABC_HERE
+	{ CTL_DIR,      FS_SYNOTIFY,            "synotify",     bin_synotify_table },
+#endif /* MY_ABC_HERE */
 	{ CTL_DIR,	FS_OCFS2,		"ocfs2",	bin_fs_ocfs2_table },
 	{ CTL_INT,	KERN_SETUID_DUMPABLE,	"suid_dumpable" },
 	{}

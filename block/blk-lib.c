@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Functions related to generic helpers functions
  */
@@ -299,3 +302,86 @@ int blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
 	return __blkdev_issue_zeroout(bdev, sector, nr_sects, gfp_mask);
 }
 EXPORT_SYMBOL(blkdev_issue_zeroout);
+
+#ifdef MY_ABC_HERE
+int blkdev_hint_unused(struct block_device *bdev, sector_t sector,
+		sector_t nr_sects, gfp_t gfp_mask)
+{
+	DECLARE_COMPLETION_ONSTACK(wait);
+	struct request_queue *q = bdev_get_queue(bdev);
+	struct bio_batch bb;
+	struct bio *bio;
+	int ret = 0;
+	struct blk_plug plug;
+	sector_t bs_mask = 0;
+	sector_t aligned_sector = 0;
+
+	if (!q)
+		return -ENXIO;
+
+	if (!blk_queue_unused_hint(q))
+		return -EOPNOTSUPP;
+
+	atomic_set(&bb.done, 1);
+	bb.error = 0;
+	bb.wait = &wait;
+
+	bs_mask = (bdev_logical_block_size(bdev) >> 9) - 1;
+
+	//if start lba is unaligned, abort front-part to align logical block size.
+	aligned_sector = (sector + bs_mask) & ~bs_mask;
+	if (sector != aligned_sector) {
+		if (nr_sects > aligned_sector - sector)
+			nr_sects -= aligned_sector - sector;
+		else
+			nr_sects = 0;
+		sector = aligned_sector;
+	}
+	nr_sects = nr_sects & ~bs_mask;
+
+	blk_start_plug(&plug);
+	while (nr_sects) {
+		unsigned int req_sects;
+		sector_t end_sect;
+
+		bio = bio_alloc(gfp_mask, 1);
+		if (!bio) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		/* Make sure bi_size doesn't overflow */
+		req_sects = min_t(sector_t, nr_sects, (UINT_MAX >> 9) & ~bs_mask);
+		end_sect = sector + req_sects;
+
+		bio->bi_iter.bi_sector = sector;
+		bio->bi_end_io = bio_batch_end_io;
+		bio->bi_bdev = bdev;
+		bio->bi_private = &bb;
+
+		bio->bi_iter.bi_size = req_sects << 9;
+		nr_sects -= req_sects;
+		sector = end_sect;
+
+		atomic_inc(&bb.done);
+		submit_bio(REQ_UNUSED_HINT, bio);
+
+		/*
+		 * We can loop for a long time in here. Be nice and allow
+		 * us to schedule out to avoid softlocking if preempt
+		 * is disabled.
+		 */
+		cond_resched();
+	}
+	blk_finish_plug(&plug);
+
+	/* Wait for bios in-flight */
+	if (!atomic_dec_and_test(&bb.done))
+		wait_for_completion_io(&wait);
+
+	if (bb.error)
+		return bb.error;
+	return ret;
+}
+EXPORT_SYMBOL(blkdev_hint_unused);
+#endif /* MY_ABC_HERE */

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * phy-core.c  --  Generic Phy framework.
  *
@@ -299,8 +302,13 @@ int phy_power_on(struct phy *phy)
 			dev_err(&phy->dev, "phy poweron failed --> %d\n", ret);
 			goto err_pwr_on;
 		}
+#if defined(MY_ABC_HERE)
+		++phy->power_count;
+	}
+#else /* MY_ABC_HERE */
 	}
 	++phy->power_count;
+#endif /* MY_ABC_HERE */
 	mutex_unlock(&phy->mutex);
 	return 0;
 
@@ -330,8 +338,13 @@ int phy_power_off(struct phy *phy)
 			mutex_unlock(&phy->mutex);
 			return ret;
 		}
+#if defined(MY_ABC_HERE)
+		--phy->power_count;
+	}
+#else /* MY_ABC_HERE */
 	}
 	--phy->power_count;
+#endif /* MY_ABC_HERE */
 	mutex_unlock(&phy->mutex);
 	phy_pm_runtime_put(phy);
 
@@ -342,6 +355,73 @@ int phy_power_off(struct phy *phy)
 }
 EXPORT_SYMBOL_GPL(phy_power_off);
 
+#if defined(MY_ABC_HERE) || defined(CONFIG_SYNO_LSP_RTD1619)
+int phy_set_mode(struct phy *phy, enum phy_mode mode)
+{
+	int ret;
+
+	if (!phy || !phy->ops->set_mode)
+		return 0;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->set_mode(phy, mode);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phy_set_mode);
+#endif /* MY_ABC_HERE / CONFIG_SYNO_LSP_RTD1619 */
+
+#if defined(MY_ABC_HERE)
+enum phy_mode phy_get_mode(struct phy *phy)
+{
+	int ret;
+
+	if (!phy || !phy->ops->get_mode)
+		return 0;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->get_mode(phy);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phy_get_mode);
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+int phy_send_command(struct phy *phy, u32 command)
+{
+	int ret;
+
+	if (!phy || !phy->ops->get_mode)
+		return 0;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->send_command(phy, command);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phy_send_command);
+
+#endif /* MY_ABC_HERE */
+int phy_is_pll_locked(struct phy *phy)
+{
+	int ret;
+
+	if (!phy || !phy->ops->is_pll_locked)
+		return 0;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->is_pll_locked(phy);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+
+#endif /* MY_ABC_HERE */
 /**
  * _of_phy_get() - lookup and obtain a reference to a phy by phandle
  * @np: device_node for which to get the phy

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2001 Sistina Software (UK) Limited.
  * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
@@ -27,6 +30,10 @@
 #define NODE_SIZE L1_CACHE_BYTES
 #define KEYS_PER_NODE (NODE_SIZE / sizeof(sector_t))
 #define CHILDREN_PER_NODE (KEYS_PER_NODE + 1)
+
+#ifdef MY_ABC_HERE
+extern int gSynoDebugFlag;
+#endif /* MY_ABC_HERE */
 
 struct dm_table {
 	struct mapped_device *md;
@@ -364,6 +371,19 @@ static int upgrade_mode(struct dm_dev_internal *dd, fmode_t new_mode,
 	return 0;
 }
 
+#ifdef MY_DEF_HERE
+struct mapped_device* SynoGetMdFromDmTarget(struct dm_target *ti)
+{
+	if (ti && ti->table) {
+		return ti->table->md;
+	}
+	return NULL;
+}
+
+EXPORT_SYMBOL(SynoGetMdFromDmTarget);
+#endif
+
+
 /*
  * Convert the path to a device
  */
@@ -436,6 +456,36 @@ int dm_get_device(struct dm_target *ti, const char *path, fmode_t mode,
 	return 0;
 }
 EXPORT_SYMBOL(dm_get_device);
+
+#ifdef MY_ABC_HERE
+int dm_handle_4kn_target_support(struct dm_target *ti, struct dm_dev *dev,
+			 sector_t start, sector_t len, void *data)
+{
+	struct queue_limits *limits = data;
+	struct block_device *bdev = dev->bdev;
+	struct request_queue *target_queue = bdev_get_queue(bdev);
+	char b[BDEVNAME_SIZE];
+	unsigned short logical_block_size = 0;
+
+	if (unlikely(!target_queue)) {
+		DMWARN("%s: requset_queue should not be NULL (%s)",
+		       dm_device_name(ti->table->md), bdevname(bdev, b));
+		return 0;
+	}
+
+	logical_block_size = target_queue->limits.logical_block_size;
+
+	if (4096 == logical_block_size) {
+		// Target is a 4KN disk
+		syno_limits_logical_block_size(limits, logical_block_size);
+	}
+
+	return 0;
+}
+
+EXPORT_SYMBOL_GPL(dm_handle_4kn_target_support);
+#endif /* MY_ABC_HERE */
+
 
 static int dm_set_device_limits(struct dm_target *ti, struct dm_dev *dev,
 				sector_t start, sector_t len, void *data)
@@ -1324,6 +1374,12 @@ int dm_calculate_queue_limits(struct dm_table *table,
 			return -EINVAL;
 
 combine_limits:
+#ifdef MY_ABC_HERE
+		if (ti->type->handle_4kn_target_support) {
+			ti->type->handle_4kn_target_support(ti, dm_handle_4kn_target_support,
+						  &ti_limits);
+		}
+#endif /* MY_ABC_HERE */
 		/*
 		 * Merge this target's queue limits into the overall limits
 		 * for the table.
@@ -1508,6 +1564,28 @@ static bool dm_table_supports_discards(struct dm_table *t)
 	return false;
 }
 
+#ifdef MY_ABC_HERE
+static bool dm_table_supports_unused_hint(struct dm_table *t)
+{
+	struct dm_target *ti;
+	unsigned i = 0;
+
+	/*
+	 * Return true if and only if all targets support unused hint.
+	 * It is possible to set support if only one target support unused hint,
+	 * but we want strict condition for first version.
+	 */
+	while (i < dm_table_get_num_targets(t)) {
+		ti = dm_table_get_target(t, i++);
+
+		/* target should set num_unused_hint_bios to none zero explicitly. */
+		if (!ti->num_unused_hint_bios)
+			return false;
+	}
+	return true;
+}
+#endif /* MY_ABC_HERE */
+
 void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 			       struct queue_limits *limits)
 {
@@ -1522,6 +1600,18 @@ void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 		queue_flag_clear_unlocked(QUEUE_FLAG_DISCARD, q);
 	else
 		queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, q);
+
+#ifdef MY_ABC_HERE
+	if (!dm_table_supports_unused_hint(t)) {
+		queue_flag_clear_unlocked(QUEUE_FLAG_UNUSED_HINT, q);
+#ifdef MY_ABC_HERE
+		if (gSynoDebugFlag)
+			DMWARN("%s unused hint is NOT supported", dm_device_name(t->md));
+#endif /* MY_ABC_HERE */
+	}
+	else
+		queue_flag_set_unlocked(QUEUE_FLAG_UNUSED_HINT, q);
+#endif /* MY_ABC_HERE */
 
 	if (dm_table_supports_flush(t, REQ_FLUSH)) {
 		flush |= REQ_FLUSH;
@@ -1688,7 +1778,7 @@ int dm_table_any_congested(struct dm_table *t, int bdi_bits)
 		char b[BDEVNAME_SIZE];
 
 		if (likely(q))
-			r |= bdi_congested(&q->backing_dev_info, bdi_bits);
+			r |= bdi_congested(q->backing_dev_info, bdi_bits);
 		else
 			DMWARN_LIMIT("%s: any_congested: nonexistent device %s",
 				     dm_device_name(t->md),
@@ -1730,4 +1820,24 @@ void dm_table_run_md_queue_async(struct dm_table *t)
 	}
 }
 EXPORT_SYMBOL(dm_table_run_md_queue_async);
+
+#ifdef MY_DEF_HERE
+int syno_dm_table_first_target_data_devices_count(struct dm_table *table)
+{
+	struct dm_target *uninitialized_var(ti);
+	unsigned num_devices = 0;
+
+	if(dm_table_get_num_targets(table) <= 0)
+		return -1;
+
+	ti = dm_table_get_target(table, 0);
+
+	if (!ti->type->iterate_devices)
+		return -1;
+
+	ti->type->iterate_devices(ti, count_device, &num_devices);
+
+	return (int)num_devices;
+}
+#endif /* MY_DEF_HERE */
 

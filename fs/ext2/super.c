@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/ext2/super.c
  *
@@ -131,7 +134,10 @@ static void ext2_put_super (struct super_block * sb)
 
 	dquot_disable(sb, -1, DQUOT_USAGE_ENABLED | DQUOT_LIMITS_ENABLED);
 
-	ext2_xattr_put_super(sb);
+	if (sbi->s_mb_cache) {
+		ext2_xattr_destroy_cache(sbi->s_mb_cache);
+		sbi->s_mb_cache = NULL;
+	}
 	if (!(sb->s_flags & MS_RDONLY)) {
 		struct ext2_super_block *es = sbi->s_es;
 
@@ -635,6 +641,8 @@ static int ext2_setup_super (struct super_block * sb,
 		ext2_msg(sb, KERN_WARNING,
 			"warning: mounting fs with errors, "
 			"running e2fsck is recommended");
+#ifdef MY_ABC_HERE
+#else
 	else if ((__s16) le16_to_cpu(es->s_max_mnt_count) >= 0 &&
 		 le16_to_cpu(es->s_mnt_count) >=
 		 (unsigned short) (__s16) le16_to_cpu(es->s_max_mnt_count))
@@ -647,6 +655,7 @@ static int ext2_setup_super (struct super_block * sb,
 		ext2_msg(sb, KERN_WARNING,
 			"warning: checktime reached, "
 			"running e2fsck is recommended");
+#endif /* MY_ABC_HERE */
 	if (!le16_to_cpu(es->s_max_mnt_count))
 		es->s_max_mnt_count = cpu_to_le16(EXT2_DFL_MAX_MNT_COUNT);
 	le16_add_cpu(&es->s_mnt_count, 1);
@@ -1115,6 +1124,14 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 		ext2_msg(sb, KERN_ERR, "error: insufficient memory");
 		goto failed_mount3;
 	}
+
+#ifdef CONFIG_EXT2_FS_XATTR
+	sbi->s_mb_cache = ext2_xattr_create_cache();
+	if (!sbi->s_mb_cache) {
+		ext2_msg(sb, KERN_ERR, "Failed to create an mb_cache");
+		goto failed_mount3;
+	}
+#endif
 	/*
 	 * set up enough so that it can read an inode
 	 */
@@ -1160,6 +1177,8 @@ cantfind_ext2:
 			sb->s_id);
 	goto failed_mount;
 failed_mount3:
+	if (sbi->s_mb_cache)
+		ext2_xattr_destroy_cache(sbi->s_mb_cache);
 	percpu_counter_destroy(&sbi->s_freeblocks_counter);
 	percpu_counter_destroy(&sbi->s_freeinodes_counter);
 	percpu_counter_destroy(&sbi->s_dirs_counter);
@@ -1566,20 +1585,17 @@ MODULE_ALIAS_FS("ext2");
 
 static int __init init_ext2_fs(void)
 {
-	int err = init_ext2_xattr();
-	if (err)
-		return err;
+	int err;
+
 	err = init_inodecache();
 	if (err)
-		goto out1;
+		return err;
         err = register_filesystem(&ext2_fs_type);
 	if (err)
 		goto out;
 	return 0;
 out:
 	destroy_inodecache();
-out1:
-	exit_ext2_xattr();
 	return err;
 }
 
@@ -1587,7 +1603,6 @@ static void __exit exit_ext2_fs(void)
 {
 	unregister_filesystem(&ext2_fs_type);
 	destroy_inodecache();
-	exit_ext2_xattr();
 }
 
 MODULE_AUTHOR("Remy Card and others");

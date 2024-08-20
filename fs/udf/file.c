@@ -122,7 +122,7 @@ static ssize_t udf_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct udf_inode_info *iinfo = UDF_I(inode);
 	int err;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	retval = generic_write_checks(iocb, from);
 	if (retval <= 0)
@@ -136,7 +136,7 @@ static ssize_t udf_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 				(udf_file_entry_alloc_offset(inode) + end)) {
 			err = udf_expand_file_adinicb(inode);
 			if (err) {
-				mutex_unlock(&inode->i_mutex);
+				inode_unlock(inode);
 				udf_debug("udf_expand_adinicb: err=%d\n", err);
 				return err;
 			}
@@ -149,7 +149,7 @@ static ssize_t udf_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	retval = __generic_file_write_iter(iocb, from);
 out:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 
 	if (retval > 0) {
 		mark_inode_dirty(inode);
@@ -173,7 +173,8 @@ long udf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		goto out;
 	}
 
-	if (!arg) {
+	if (!arg && ((cmd == UDF_GETVOLIDENT) || (cmd == UDF_GETEASIZE) ||
+		     (cmd == UDF_RELOCATE_BLOCKS) || (cmd == UDF_GETEABLOCK))) {
 		udf_debug("invalid argument to udf_ioctl\n");
 		result = -EINVAL;
 		goto out;
@@ -209,6 +210,8 @@ long udf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				      UDF_I(inode)->i_ext.i_data,
 				      UDF_I(inode)->i_lenEAttr) ? -EFAULT : 0;
 		goto out;
+	default:
+		return -ENOIOCTLCMD;
 	}
 
 out:
@@ -223,12 +226,12 @@ static int udf_release_file(struct inode *inode, struct file *filp)
 		 * Grab i_mutex to avoid races with writes changing i_size
 		 * while we are running.
 		 */
-		mutex_lock(&inode->i_mutex);
+		inode_lock(inode);
 		down_write(&UDF_I(inode)->i_data_sem);
 		udf_discard_prealloc(inode);
 		udf_truncate_tail_extent(inode);
 		up_write(&UDF_I(inode)->i_data_sem);
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 	}
 	return 0;
 }

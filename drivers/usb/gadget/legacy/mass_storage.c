@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * mass_storage.c -- Mass Storage USB Gadget
  *
@@ -95,7 +98,7 @@ static struct fsg_module_parameters mod_data = {
 
 static unsigned int fsg_num_buffers = CONFIG_USB_GADGET_STORAGE_NUM_BUFFERS;
 
-#else
+#else /* MY_ABC_HERE */
 
 /*
  * Number of buffers we will use.
@@ -106,6 +109,19 @@ static unsigned int fsg_num_buffers = CONFIG_USB_GADGET_STORAGE_NUM_BUFFERS;
 #endif /* CONFIG_USB_GADGET_DEBUG_FILES */
 
 FSG_MODULE_PARAMETERS(/* no prefix */, mod_data);
+
+static unsigned long msg_registered;
+static void msg_cleanup(void);
+
+static int msg_thread_exits(struct fsg_common *common)
+{
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
+	msg_cleanup();
+#endif /* MY_ABC_HERE */
+	return 0;
+}
 
 static int msg_do_config(struct usb_configuration *c)
 {

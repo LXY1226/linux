@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Broadcom Starfighter2 private context
  *
@@ -50,6 +53,10 @@ struct bcm_sf2_port_status {
 	struct ethtool_eee eee;
 
 	u32 vlan_ctl_mask;
+
+#if defined(MY_ABC_HERE)
+	struct net_device *bridge_dev;
+#endif /* MY_ABC_HERE */
 };
 
 struct bcm_sf2_arl_entry {

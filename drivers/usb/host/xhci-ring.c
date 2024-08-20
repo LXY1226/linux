@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * xHCI host controller driver
  *
@@ -1468,6 +1471,33 @@ static void handle_vendor_event(struct xhci_hcd *xhci,
 		handle_cmd_completion(xhci, &event->event_cmd);
 }
 
+#ifdef MY_ABC_HERE
+static void xhci_giveback_error_urb(struct xhci_hcd *xhci,
+				int slot_id)
+{
+	struct xhci_virt_device *virt_dev;
+	int i;
+
+	virt_dev = xhci->devs[slot_id];
+	for (i = LAST_EP_INDEX; i > 0; i--) {
+			struct xhci_virt_ep *ep = &virt_dev->eps[i];
+			struct xhci_ring *ring = ep->ring;
+			if (!ring)
+					continue;
+
+			if (!list_empty(&ring->td_list)) {
+					struct xhci_td *cur_td = list_first_entry(&ring->td_list,
+							struct xhci_td,
+							td_list);
+					list_del_init(&cur_td->td_list);
+					if (!list_empty(&cur_td->cancelled_td_list))
+							list_del_init(&cur_td->cancelled_td_list);
+					xhci_giveback_urb_in_irq(xhci, cur_td, -EPROTO);
+			}
+	}
+}
+#endif /* MY_ABC_HERE */
+
 /* @port_id: the one-based port ID from the hardware (indexed from array of all
  * port registers -- USB 3.0 and USB 2.0).
  *
@@ -1602,6 +1632,25 @@ static void handle_port_status(struct xhci_hcd *xhci,
 		usb_hcd_resume_root_hub(hcd);
 	}
 
+#if defined(CONFIG_SYNO_LSP_RTD1619) || defined(MY_DEF_HERE)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	if (hcd->speed >= HCD_USB3 && (temp & PORT_PLS_MASK) == XDEV_INACTIVE &&
+		   (temp & PORT_PLC)) {
+		bus_state->port_remote_wakeup |= (1 << faked_port_index);
+		xhci_dbg(xhci, "Get port link state XDEV_INACTIVE and port link change "
+			    "to set port_remote_wakeup (port_status=0x%x)\n", temp);
+		if (bus_state->port_remote_wakeup & (1 << faked_port_index)) {
+			bus_state->port_remote_wakeup &=
+				~(1 << faked_port_index);
+			xhci_test_and_clear_bit(xhci, port_array,
+					faked_port_index, PORT_PLC);
+			usb_wakeup_notification(hcd->self.root_hub,
+					faked_port_index + 1);
+		}
+	}
+#endif
+#endif /* CONFIG_SYNO_LSP_RTD1619 || MY_DEF_HERE */
+
 	if ((temp & PORT_PLC) && (temp & PORT_PLS_MASK) == XDEV_RESUME) {
 		xhci_dbg(xhci, "port resume event for port %d\n", port_id);
 
@@ -1639,6 +1688,19 @@ static void handle_port_status(struct xhci_hcd *xhci,
 			/* Do the rest in GetPortStatus */
 		}
 	}
+
+#ifdef MY_ABC_HERE
+	if (!(temp & PORT_CONNECT) &&
+			(temp & PORT_WRC)) {
+			slot_id = xhci_find_slot_id_by_port(hcd, xhci,
+					faked_port_index + 1);
+			if (slot_id && xhci->devs[slot_id]) {
+					xhci_warn(xhci, "device is plugged out, empty URBs\n");
+					xhci->devs[slot_id]->disconnected = true;
+					xhci_giveback_error_urb(xhci, slot_id);
+			}
+	}
+#endif /* MY_ABC_HERE */
 
 	if ((temp & PORT_PLC) &&
 	    DEV_SUPERSPEED_ANY(temp) &&

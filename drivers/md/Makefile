@@ -16,7 +16,7 @@ dm-cache-mq-y   += dm-cache-policy-mq.o
 dm-cache-smq-y   += dm-cache-policy-smq.o
 dm-cache-cleaner-y += dm-cache-policy-cleaner.o
 dm-era-y	+= dm-era-target.o
-md-mod-y	+= md.o bitmap.o
+md-mod-y	+= md.o bitmap.o libmd-report.o libmd-sync-report.o
 raid456-y	+= raid5.o raid5-cache.o
 
 # Note: link order is important.  All raid personalities
@@ -24,6 +24,9 @@ raid456-y	+= raid5.o raid5-cache.o
 # themselves, and md.o may use the personalities when it 
 # auto-initialised.
 
+ifeq ($(CONFIG_SYNO_MD_FAST_REBUILD),y)
+obj-y				+= md-hint.o
+endif
 obj-$(CONFIG_MD_LINEAR)		+= linear.o
 obj-$(CONFIG_MD_RAID0)		+= raid0.o
 obj-$(CONFIG_MD_RAID1)		+= raid1.o

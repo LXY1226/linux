@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright © 2006-2014 Intel Corporation.
  *
@@ -3258,6 +3261,9 @@ static int __init init_dmars(void)
 	if (iommu_pass_through)
 		iommu_identity_mapping |= IDENTMAP_ALL;
 
+#ifdef MY_DEF_HERE
+	printk(KERN_INFO "IOMMU passthrough mode = %d\n", iommu_pass_through);
+#endif /* MY_DEF_HERE */
 #ifdef CONFIG_INTEL_IOMMU_BROKEN_GFX_WA
 	dmar_map_gfx = 0;
 #endif

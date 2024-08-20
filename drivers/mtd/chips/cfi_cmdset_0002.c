@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Common Flash Interface support:
  *   AMD & Fujitsu Standard Vendor Command Set (ID 0x0002)
@@ -446,6 +449,17 @@ static void cfi_fixup_major_minor(struct cfi_private *cfi,
 		extp->MinorVersion = '0';
 	}
 }
+#ifdef MY_ABC_HERE
+static int cfi_amdstd_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+{
+	return 0;
+}
+
+static int cfi_amdstd_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+{
+	return 0;
+}
+#endif /* MY_ABC_HERE */
 
 static int is_m29ew(struct cfi_private *cfi)
 {
@@ -529,6 +543,10 @@ struct mtd_info *cfi_cmdset_0002(struct map_info *map, int primary)
 	mtd->_sync    = cfi_amdstd_sync;
 	mtd->_suspend = cfi_amdstd_suspend;
 	mtd->_resume  = cfi_amdstd_resume;
+#ifdef MY_ABC_HERE
+	mtd->lock    = cfi_amdstd_lock;
+	mtd->unlock  = cfi_amdstd_unlock;
+#endif /* MY_ABC_HERE */
 	mtd->_read_user_prot_reg = cfi_amdstd_read_user_prot_reg;
 	mtd->_read_fact_prot_reg = cfi_amdstd_read_fact_prot_reg;
 	mtd->_get_fact_prot_info = cfi_amdstd_get_fact_prot_info;

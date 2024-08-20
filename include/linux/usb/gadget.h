@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * <linux/usb/gadget.h>
  *
@@ -1035,6 +1038,11 @@ static inline int usb_gadget_activate(struct usb_gadget *gadget)
  * @reset: Invoked on USB bus reset. It is mandatory for all gadget drivers
  *	and should be called in_interrupt.
  * @driver: Driver model state for this driver.
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+ * @udc_name: A name of UDC this driver should be bound to. If udc_name is NULL,
+ *	this driver will be bound to any available UDC.
+ * @pending: UDC core private data used for deferred probe of this driver.
+#endif // CONFIG_SYNO_LSP_RTD1619
  *
  * Devices are disabled till a gadget driver successfully bind()s, which
  * means the driver will handle setup() requests needed to enumerate (and
@@ -1095,6 +1103,11 @@ struct usb_gadget_driver {
 
 	/* FIXME support safe rmmod */
 	struct device_driver	driver;
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+
+	char			*udc_name;
+	struct list_head	pending;
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 };
 
 
@@ -1282,5 +1295,27 @@ extern struct usb_ep *usb_ep_autoconfig_ss(struct usb_gadget *,
 extern void usb_ep_autoconfig_release(struct usb_ep *);
 
 extern void usb_ep_autoconfig_reset(struct usb_gadget *);
+
+#if defined(MY_ABC_HERE)
+/**
+ * struct usb_udc - describes one usb device controller
+ * @driver - the gadget driver pointer. For use by the class code
+ * @dev - the child device to the actual controller
+ * @gadget - the gadget. For use by the class code
+ * @list - for use by the udc class driver
+ *
+ * This represents the internal data structure which is used by the UDC-class
+ * to hold information about udc driver and gadget together.
+ */
+struct usb_udc {
+	struct usb_gadget_driver	*driver;
+	struct usb_gadget		*gadget;
+	struct device			dev;
+	struct list_head		list;
+	bool				vbus;
+};
+
+extern struct usb_udc *udc_detect(struct list_head *udc_list, struct usb_gadget_driver *driver);
+#endif /* MY_ABC_HERE */
 
 #endif /* __LINUX_USB_GADGET_H */

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *	linux/mm/filemap.c
  *
@@ -45,6 +48,11 @@
 #include <linux/buffer_head.h> /* for try_to_free_buffers */
 
 #include <asm/mman.h>
+
+#ifdef MY_ABC_HERE
+#include <linux/tcp.h>
+#include <net/tcp.h>
+#endif /* MY_ABC_HERE */
 
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,
@@ -301,7 +309,7 @@ void delete_from_page_cache(struct page *page)
 }
 EXPORT_SYMBOL(delete_from_page_cache);
 
-static int filemap_check_errors(struct address_space *mapping)
+int filemap_check_errors(struct address_space *mapping)
 {
 	int ret = 0;
 	/* Check for outstanding write errors */
@@ -313,6 +321,7 @@ static int filemap_check_errors(struct address_space *mapping)
 		ret = -EIO;
 	return ret;
 }
+EXPORT_SYMBOL(filemap_check_errors);
 
 /**
  * __filemap_fdatawrite_range - start writeback on mapping dirty pages in range
@@ -381,6 +390,38 @@ int filemap_flush(struct address_space *mapping)
 	return __filemap_fdatawrite(mapping, WB_SYNC_NONE);
 }
 EXPORT_SYMBOL(filemap_flush);
+
+/**
+ * filemap_range_has_page - check if a page exists in range.
+ * @mapping:           address space within which to check
+ * @start_byte:        offset in bytes where the range starts
+ * @end_byte:          offset in bytes where the range ends (inclusive)
+ *
+ * Find at least one page in the range supplied, usually used to check if
+ * direct writing in this range will trigger a writeback.
+ */
+bool filemap_range_has_page(struct address_space *mapping,
+			   loff_t start_byte, loff_t end_byte)
+{
+	pgoff_t index = start_byte >> PAGE_SHIFT;
+	pgoff_t end = end_byte >> PAGE_SHIFT;
+	struct pagevec pvec;
+	bool ret;
+
+	if (end_byte < start_byte)
+		return false;
+
+	if (mapping->nrpages == 0)
+		return false;
+
+	pagevec_init(&pvec, 0);
+	if (!pagevec_lookup(&pvec, mapping, index, 1))
+		return false;
+	ret = (pvec.pages[0]->index <= end);
+	pagevec_release(&pvec);
+	return ret;
+}
+EXPORT_SYMBOL(filemap_range_has_page);
 
 static int __filemap_fdatawait_range(struct address_space *mapping,
 				     loff_t start_byte, loff_t end_byte)
@@ -1547,6 +1588,9 @@ static ssize_t do_generic_file_read(struct file *filp, loff_t *ppos,
 	unsigned long offset;      /* offset into pagecache page */
 	unsigned int prev_offset;
 	int error = 0;
+#ifdef MY_ABC_HERE
+	bool pattern_failed = false;
+#endif /* MY_ABC_HERE */
 
 	index = *ppos >> PAGE_CACHE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_CACHE_SHIFT;
@@ -1652,6 +1696,13 @@ page_ok:
 		 * now we can copy it to user space...
 		 */
 
+#ifdef MY_ABC_HERE
+		if (!pattern_failed && inode->i_op->syno_pattern_check) {
+			if (0 > inode->i_op->syno_pattern_check(inode, page, offset, nr, SYNO_PATTERN_CHECK_CACHE_PAGES)) {
+				pattern_failed = true;
+			}
+		}
+#endif /* MY_ABC_HERE */
 		ret = copy_page_to_iter(page, offset, nr, iter);
 		offset += ret;
 		index += offset >> PAGE_CACHE_SHIFT;
@@ -2151,7 +2202,11 @@ int filemap_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 	int ret = VM_FAULT_LOCKED;
 
 	sb_start_pagefault(inode->i_sb);
+#ifdef CONFIG_AUFS_FHSM
+	vma_file_update_time(vma);
+#else
 	file_update_time(vma->vm_file);
+#endif /* CONFIG_AUFS_FHSM */
 	lock_page(page);
 	if (page->mapping != inode->i_mapping) {
 		unlock_page(page);
@@ -2391,6 +2446,20 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	if (iocb->ki_flags & IOCB_APPEND)
 		iocb->ki_pos = i_size_read(inode);
 
+#ifdef MY_DEF_HERE
+	/*
+	 * for locker appendable, data is appended to the file in chunk. when data
+	 * is written to bytes n*CHUNK_SIZE+1 of the file, the previous chunk
+	 * becomes locked.
+	 */
+	if (syno_op_locker_is_appendable(inode) &&
+	    iocb->ki_pos < round_down(i_size_read(inode), LOCKER_CHUNK_SIZE)) {
+		pr_warn_ratelimited("locker: append data to %pD at offset 0x%llx before 0x%llx\n",
+				file, iocb->ki_pos, round_down(i_size_read(inode), LOCKER_CHUNK_SIZE));
+		return -EPERM;
+	}
+#endif /* MY_DEF_HERE */
+
 	pos = iocb->ki_pos;
 
 	if (limit != RLIM_INFINITY) {
@@ -2446,6 +2515,344 @@ int pagecache_write_end(struct file *file, struct address_space *mapping,
 	return aops->write_end(file, mapping, pos, len, copied, page, fsdata);
 }
 EXPORT_SYMBOL(pagecache_write_end);
+
+#ifdef MY_ABC_HERE
+static int sock2iov(struct socket *sock, struct kvec *iov,
+			int page_count, int start_page, size_t bytes_to_received, size_t *bytes_received)
+{
+	int             kmsg_ret = 0;
+	long            rcvtimeo = 0;
+	struct msghdr   msg = {0};
+
+	msg.msg_flags = MSG_KERNSPACE;
+	rcvtimeo = sock->sk->sk_rcvtimeo;
+	sock->sk->sk_rcvtimeo = 64 * HZ;
+
+	kmsg_ret = kernel_recvmsg(
+			sock, &msg, &iov[start_page], page_count, bytes_to_received,
+			MSG_WAITALL | MSG_NOCATCHSIGNAL);
+
+	sock->sk->sk_rcvtimeo = rcvtimeo;
+	if (kmsg_ret >= 0) {
+		*bytes_received = (size_t) kmsg_ret;
+		if (kmsg_ret == bytes_to_received) {
+			/*
+			 * remains 0 here,
+			 * bytes_received is set and matches desired length.
+			 *
+			 */
+			kmsg_ret = 0;
+		} else {
+			kmsg_ret = -EPIPE;
+		}
+	}
+
+	return kmsg_ret;
+}
+
+int do_recvfile(struct file *file, struct socket *sock, loff_t pos,
+			size_t count, size_t * rbytes, size_t * wbytes)
+{
+	int                    err = 0;
+	int                    pages_allocated = 0;
+	int                    page_index = 0;
+	int                    flags = AOP_FLAG_UNINTERRUPTIBLE | AOP_FLAG_RECVFILE | AOP_FLAG_NOFS;
+	int                    write_end_ret = 0, failed_write_flag = 0;
+	loff_t                 firstPagePos = 0, lastPagePos = 0;
+	unsigned               firstPageBytes = 0, lastPageBytes = 0;
+	unsigned               bytes = 0;
+	pgoff_t                offset = (pos & (PAGE_CACHE_SIZE - 1));
+	void                  *fsdata = NULL; // cifs/ecryptfs/ext23/fat/fuse/hfsplus needn't, ext4 will be handled later
+	size_t                 bytes_received = 0, bytes_wrote = 0;
+	ssize_t                bytes_to_received = 0;
+	struct kvec            iov[MAX_PAGES_PER_RECVFILE + 1];
+	struct page           *page = NULL;
+	struct page           *rgPageList[MAX_PAGES_PER_RECVFILE + 1];
+	struct address_space  *mapping = file->f_mapping;
+
+	/* Check hook functions */
+	if ((!mapping->a_ops->write_begin || !mapping->a_ops->write_end)) {
+		printk("write_begin() or write_end() or syno_recvfile() are not implemented\n");
+		goto done;
+	}
+	if (mapping->a_ops->recvfile_da_check && mapping->a_ops->recvfile_da_check(mapping->host->i_sb)) {
+		flags |= AOP_FLAG_RECVFILE_NONDA;
+	}
+
+	do {
+		bytes = min_t(unsigned int, PAGE_CACHE_SIZE - offset, count);
+
+		err = mapping->a_ops->write_begin(
+					file, mapping, pos, bytes, flags,
+					&page, &fsdata);
+		if (err) {
+			goto release_pages;
+		}
+
+		/* Bookkeep info about this allocated page */
+		rgPageList[pages_allocated] = page;
+		if (!pages_allocated) {
+			firstPageBytes = bytes;
+			firstPagePos = pos;
+		}
+		if (bytes == count) {
+			lastPageBytes = bytes;
+			lastPagePos = pos;
+		}
+		iov[pages_allocated].iov_base = kmap(page) + offset;
+		iov[pages_allocated].iov_len = bytes;
+		pages_allocated++;
+
+		BUG_ON(pages_allocated > MAX_PAGES_PER_RECVFILE + 1);
+
+		count -= bytes;
+		pos += bytes;
+		bytes_to_received += bytes;
+		offset = 0;
+		flags |= AOP_FLAG_RECVFILE_ECRYPTFS_NO_TRUNCATE;
+	} while (count);
+
+	err = sock2iov(sock, iov, pages_allocated, 0, bytes_to_received, &bytes_received);
+
+release_pages:
+	*rbytes = bytes_received;
+	bytes_wrote = bytes_received;
+	if (unlikely(mapping->a_ops->aggregate_write_end)) {
+		for (page_index = 0; page_index < pages_allocated; page_index++) {
+			kunmap(rgPageList[page_index]);
+		}
+		write_end_ret = mapping->a_ops->aggregate_write_end(
+				file, mapping, firstPagePos,
+				bytes_to_received, bytes_to_received,
+				rgPageList, NULL, pages_allocated);
+		/* Keep error code if write_end() failed for some reason */
+		if (0 > write_end_ret) {
+			bytes_wrote = 0;
+			if (!err) {
+				err = write_end_ret;
+			}
+		}
+	} else {
+		// If ext4 trans to no delayed allocation, we should give a hint.
+		if (flags & AOP_FLAG_RECVFILE_NONDA)
+			fsdata = (void *)1; //FALL_BACK_TO_NONDELALLOC, only for ext4.
+		for (page_index = 0; page_index < pages_allocated; page_index++) {
+			page = rgPageList[page_index];
+			kunmap(page);
+			if (!page_index) {
+				bytes = firstPageBytes;
+				pos = firstPagePos;
+			} else if (page_index == pages_allocated - 1) {
+				bytes = lastPageBytes;
+				pos = lastPagePos;
+			} else {
+				pos += bytes;
+				bytes = PAGE_CACHE_SIZE;
+			}
+			write_end_ret = mapping->a_ops->write_end(file, mapping, pos,
+								bytes, bytes, page, fsdata);
+			/* Keep error code if write_end() failed for some reason */
+			if (0 > write_end_ret) {
+				if (!failed_write_flag) {
+					failed_write_flag = 1;
+					if (page_index) {
+						bytes_wrote = firstPageBytes + ((page_index-1) * PAGE_CACHE_SIZE);
+						if (bytes_wrote > bytes_received)
+							bytes_wrote = bytes_received;
+					} else {
+						bytes_wrote = 0;
+					}
+				}
+				if (!err) {
+					err = write_end_ret;
+				}
+			}
+		}
+	}
+	*wbytes = bytes_wrote;
+	balance_dirty_pages_ratelimited(mapping);
+
+done:
+	return err?err:bytes_received;
+}
+extern int aggregate_fd;
+extern spinlock_t aggregate_lock;
+extern atomic_t syno_aggregate_recvfile_count;
+
+int do_aggregate_recvfile(struct file *file, struct socket *sock, loff_t pos,
+			size_t count, size_t * rbytes, size_t * wbytes, unsigned flush_only)
+{
+	int                    err = 0;
+	int                    page_index = 0;
+	int                    write_end_ret = 0;
+	int                    page_alloc_last_time;
+	int                    isPageAlign = 1;
+	unsigned               bytes = 0;
+	pgoff_t                offset = (pos & (PAGE_CACHE_SIZE - 1));
+	void                  *fsdata = NULL; // cifs/ecryptfs/ext23/fat/fuse/hfsplus needn't, ext4 will be handled later
+	size_t                 bytes_received = 0, bytes_wrote = 0;
+	ssize_t                bytes_to_received = 0;
+	struct page           *page = NULL;
+	struct address_space  *mapping = file->f_mapping;
+	struct inode          *inode = mapping->host;
+	static int             pages_allocated = 0;
+	static loff_t          rgPos[MAX_PAGES_PER_AGGREGATE_RECVFILE + 1];
+	static unsigned        rgBytes[MAX_PAGES_PER_AGGREGATE_RECVFILE + 1];
+	static struct kvec     iov[MAX_PAGES_PER_AGGREGATE_RECVFILE + 1];
+	static struct page    *rgPageList[MAX_PAGES_PER_AGGREGATE_RECVFILE + 1];
+
+	/* Check address_ops functions */
+	if (!mapping->a_ops->write_begin || !mapping->a_ops->aggregate_write_end) {
+		printk("write_begin() or aggregate_write_end() is not implemented\n");
+		dump_stack();
+		goto done;
+	}
+	if (flush_only) {
+		if (!pages_allocated) {
+			goto done;
+		}
+		goto release_pages;
+	}
+	if (count == 0) {
+		goto done;
+	}
+	if (offset || (count & (PAGE_CACHE_SIZE - 1))) {
+		isPageAlign = 0;
+	}
+
+	page_alloc_last_time = pages_allocated;
+	do {
+		bytes = min_t(unsigned int, PAGE_CACHE_SIZE - offset, count);
+
+		err = mapping->a_ops->write_begin(
+					file, mapping, pos, bytes, AOP_FLAG_UNINTERRUPTIBLE | AOP_FLAG_RECVFILE | AOP_FLAG_NOFS,
+					&page, &fsdata);
+		if (err) {
+			goto release_pages;
+		}
+
+		/* Bookkeep info about this allocated page */
+		rgPageList[pages_allocated] = page;
+		rgPos[pages_allocated] = pos;
+		rgBytes[pages_allocated] = bytes;
+		iov[pages_allocated].iov_base = kmap(page) + offset;
+		iov[pages_allocated].iov_len = bytes;
+		pages_allocated++;
+
+		BUG_ON(pages_allocated > MAX_PAGES_PER_AGGREGATE_RECVFILE + 1);
+
+		count -= bytes;
+		pos += bytes;
+		bytes_to_received += bytes;
+		offset = 0;
+	} while (count);
+
+	err = sock2iov(sock, iov, pages_allocated-page_alloc_last_time,
+			page_alloc_last_time, bytes_to_received, &bytes_received);
+
+	if (!err && isPageAlign && (pages_allocated <= MAX_PAGES_PER_AGGREGATE_RECVFILE - MAX_PAGES_PER_RECVFILE)) {
+		*rbytes = bytes_received;
+		*wbytes = bytes_received;
+
+		return bytes_received;
+	}
+release_pages:
+
+	*rbytes = bytes_received;
+	*wbytes = bytes_received;
+	for (page_index = 0; page_index < pages_allocated; page_index++) {
+		bytes_wrote += rgBytes[page_index];
+		kunmap(rgPageList[page_index]);
+	}
+	write_end_ret = mapping->a_ops->aggregate_write_end(
+			file, mapping, rgPos[0],
+			bytes_wrote, bytes_wrote,
+			rgPageList, NULL, pages_allocated);
+	/* Keep error code if write_end() failed for some reason */
+	if (0 > write_end_ret) {
+		*wbytes = 0;
+		if (!err) {
+			err = write_end_ret;
+		}
+	}
+
+	pages_allocated = 0;
+	aggregate_fd = -1;
+	inode->aggregate_flag &= ~AGGREGATE_RECVFILE_DOING;
+
+	balance_dirty_pages_ratelimited(mapping);
+
+done:
+	return err?err:bytes_received;
+}
+
+void aggregate_recvfile_flush_only(struct file *file)
+{
+	struct socket *sock = NULL;
+	size_t bytes_received;
+	size_t bytes_written;
+
+	do_aggregate_recvfile(file, sock, 0, 0, &bytes_received, &bytes_written, 1);
+}
+EXPORT_SYMBOL(aggregate_recvfile_flush_only);
+
+static int __flush_aggregate_recvfile(struct file *file)
+{
+	int ret = 0;
+	struct inode *inode = NULL;
+
+	if (!file || !file->f_mapping->a_ops->aggregate_write_end) {
+		goto out;
+	}
+	if (!(file->f_mode & FMODE_WRITE)) {
+		ret = -EBADF;
+		goto out;
+	}
+	inode = file->f_path.dentry->d_inode->i_mapping->host;
+	spin_lock(&aggregate_lock);
+	inode->aggregate_flag |= AGGREGATE_RECVFILE_FLUSH;
+	if (AGGREGATE_RECVFILE_DOING & inode->aggregate_flag) {
+		while (atomic_read(&syno_aggregate_recvfile_count)) {
+			spin_unlock(&aggregate_lock);
+			schedule_timeout_uninterruptible(HZ/2);
+			spin_lock(&aggregate_lock);
+		}
+		atomic_inc(&syno_aggregate_recvfile_count);
+		spin_unlock(&aggregate_lock);
+		aggregate_recvfile_flush_only(file);
+		atomic_dec(&syno_aggregate_recvfile_count);
+	} else {
+		spin_unlock(&aggregate_lock);
+	}
+	inode->aggregate_flag &= ~AGGREGATE_RECVFILE_FLUSH;
+
+out:
+	if (file)
+		fput(file);
+
+	return ret;
+}
+
+int flush_aggregate_recvfile_filp(struct file *file)
+{
+	return __flush_aggregate_recvfile(file);
+}
+EXPORT_SYMBOL(flush_aggregate_recvfile_filp);
+
+int flush_aggregate_recvfile(int fd)
+{
+	struct file *file = NULL;                /* reg file struct */
+
+	/* check fd for regular file */
+	if (-1 != fd) {
+		file = fget(fd);
+	} else {
+		file = fget(aggregate_fd);
+	}
+	return __flush_aggregate_recvfile(file);
+}
+EXPORT_SYMBOL(flush_aggregate_recvfile);
+#endif /* MY_ABC_HERE */
 
 ssize_t
 generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from, loff_t pos)
@@ -2734,11 +3141,11 @@ ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = file->f_mapping->host;
 	ssize_t ret;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	ret = generic_write_checks(iocb, from);
 	if (ret > 0)
 		ret = __generic_file_write_iter(iocb, from);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 
 	if (ret > 0) {
 		ssize_t err;

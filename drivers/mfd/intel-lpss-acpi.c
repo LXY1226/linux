@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Intel LPSS ACPI support.
  *
@@ -33,6 +36,13 @@ static const struct intel_lpss_platform_info bxt_i2c_info = {
 	.clk_rate = 133000000,
 };
 
+#ifdef MY_DEF_HERE
+static const struct intel_lpss_platform_info cfl_uart_info = {
+	.clk_rate = 100000000,
+	.clk_con_id = "baudclk",
+};
+#endif /* MY_DEF_HERE */
+
 static const struct acpi_device_id intel_lpss_acpi_ids[] = {
 	/* SPT */
 	{ "INT3446", (kernel_ulong_t)&spt_info },
@@ -45,6 +55,10 @@ static const struct acpi_device_id intel_lpss_acpi_ids[] = {
 	{ "80865AAC", (kernel_ulong_t)&bxt_i2c_info },
 	{ "80865ABC", (kernel_ulong_t)&bxt_info },
 	{ "80865AC2", (kernel_ulong_t)&bxt_info },
+#ifdef MY_DEF_HERE
+	/* CFL */
+	{ "INT34B8", (kernel_ulong_t)&cfl_uart_info },
+#endif /* MY_DEF_HERE */
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, intel_lpss_acpi_ids);

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * net-sysfs.c - network device class and attributes
  *
@@ -24,6 +27,11 @@
 #include <linux/jiffies.h>
 #include <linux/pm_runtime.h>
 #include <linux/of.h>
+#ifdef MY_DEF_HERE
+#include <linux/pci.h>
+#include <linux/synolib.h>
+#include <linux/platform_device.h>
+#endif /* MY_DEF_HERE */
 
 #include "net-sysfs.h"
 
@@ -199,9 +207,15 @@ static ssize_t speed_show(struct device *dev,
 		return restart_syscall();
 
 	if (netif_running(netdev)) {
+#if defined(MY_ABC_HERE)
+		struct ethtool_link_ksettings cmd;
+		if (!__ethtool_get_link_ksettings(netdev, &cmd))
+			ret = sprintf(buf, fmt_dec, cmd.base.speed);
+#else /* MY_ABC_HERE */
 		struct ethtool_cmd cmd;
 		if (!__ethtool_get_settings(netdev, &cmd))
 			ret = sprintf(buf, fmt_dec, ethtool_cmd_speed(&cmd));
+#endif /* MY_ABC_HERE */
 	}
 	rtnl_unlock();
 	return ret;
@@ -218,6 +232,26 @@ static ssize_t duplex_show(struct device *dev,
 		return restart_syscall();
 
 	if (netif_running(netdev)) {
+#if defined(MY_ABC_HERE)
+		struct ethtool_link_ksettings cmd;
+
+		if (!__ethtool_get_link_ksettings(netdev, &cmd)) {
+			const char *duplex;
+
+			switch (cmd.base.duplex) {
+			case DUPLEX_HALF:
+				duplex = "half";
+				break;
+			case DUPLEX_FULL:
+				duplex = "full";
+				break;
+			default:
+				duplex = "unknown";
+				break;
+			}
+			ret = sprintf(buf, "%s\n", duplex);
+		}
+#else /* MY_ABC_HERE */
 		struct ethtool_cmd cmd;
 		if (!__ethtool_get_settings(netdev, &cmd)) {
 			const char *duplex;
@@ -234,6 +268,7 @@ static ssize_t duplex_show(struct device *dev,
 			}
 			ret = sprintf(buf, "%s\n", duplex);
 		}
+#endif /* MY_ABC_HERE */
 	}
 	rtnl_unlock();
 	return ret;
@@ -290,6 +325,63 @@ static ssize_t carrier_changes_show(struct device *dev,
 		       atomic_read(&netdev->carrier_changes));
 }
 static DEVICE_ATTR_RO(carrier_changes);
+
+#ifdef MY_DEF_HERE
+extern int syno_pciepath_dts_pattern_get(struct pci_dev *pdev, char *szPciePath, const int size);
+static void syno_pciepath_enum(struct device *dev, char *buf) {
+	struct pci_dev *pdev = NULL;
+	char sztemp[SYNO_DTS_PROPERTY_CONTENT_LENGTH] = {'\0'};
+	char buftemp[512] = {'\0'};
+
+	if (NULL == buf || NULL == dev) {
+		return;
+	}
+	pdev = to_pci_dev(dev);
+
+	if (-1 == syno_pciepath_dts_pattern_get(pdev, sztemp, sizeof(sztemp))) {
+		return;
+	}
+
+	if ('\0' != sztemp[0]) {
+		snprintf(buftemp, sizeof(buftemp), "%s", buf);
+		snprintf(buf, 512, "%spciepath=%s", buftemp, sztemp);
+	}
+}
+
+static void syno_platdev_path_enum(struct device *dev, char *buf) {
+	struct platform_device *pdev = NULL;
+	char buftemp[512] = {'\0'};
+
+	if (NULL == buf || NULL == dev) {
+		return;
+	}
+	pdev = to_platform_device(dev);
+
+	if (NULL != pdev->name) {
+		snprintf(buftemp, sizeof(buftemp), "%s", buf);
+		snprintf(buf, 512, "%splatdev_path=%s", buftemp, pdev->name);
+	}
+}
+
+static ssize_t syno_eth_info_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	char szDevPath[SYNO_DTS_PROPERTY_CONTENT_LENGTH] = {'\0'};
+
+	if (netdev->dev.parent) {
+		if (dev_is_pci(netdev->dev.parent)) {
+			syno_pciepath_enum(netdev->dev.parent, szDevPath);
+		} else if (dev_is_platform(netdev->dev.parent)) {
+			syno_platdev_path_enum(netdev->dev.parent, szDevPath);
+		}
+	}
+
+	return sprintf(buf, "%s\n", szDevPath);
+}
+static DEVICE_ATTR_RO(syno_eth_info);
+#endif /* MY_DEF_HERE */
 
 /* read-write attributes */
 
@@ -514,6 +606,9 @@ static struct attribute *net_class_attrs[] = {
 	&dev_attr_phys_port_name.attr,
 	&dev_attr_phys_switch_id.attr,
 	&dev_attr_proto_down.attr,
+#ifdef MY_DEF_HERE
+	&dev_attr_syno_eth_info.attr,
+#endif /* MY_DEF_HERE */
 	NULL,
 };
 ATTRIBUTE_GROUPS(net_class);
@@ -895,6 +990,8 @@ static int rx_queue_add_kobject(struct net_device *dev, int index)
 	if (error)
 		goto exit;
 
+	dev_hold(queue->dev);
+
 	if (dev->sysfs_rx_queue_group) {
 		error = sysfs_create_group(kobj, dev->sysfs_rx_queue_group);
 		if (error)
@@ -902,7 +999,6 @@ static int rx_queue_add_kobject(struct net_device *dev, int index)
 	}
 
 	kobject_uevent(kobj, KOBJ_ADD);
-	dev_hold(queue->dev);
 
 	return error;
 exit:
@@ -1287,6 +1383,8 @@ static int netdev_queue_add_kobject(struct net_device *dev, int index)
 	if (error)
 		goto exit;
 
+	dev_hold(queue->dev);
+
 #ifdef CONFIG_BQL
 	error = sysfs_create_group(kobj, &dql_group);
 	if (error)
@@ -1294,7 +1392,6 @@ static int netdev_queue_add_kobject(struct net_device *dev, int index)
 #endif
 
 	kobject_uevent(kobj, KOBJ_ADD);
-	dev_hold(queue->dev);
 
 	return 0;
 exit:

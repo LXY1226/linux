@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Xilinx gpio driver for xps/axi_gpio IP.
  *
@@ -305,7 +308,11 @@ static int xgpio_probe(struct platform_device *pdev)
 	}
 
 	chip->mmchip.gc.ngpio = chip->gpio_width[0] + chip->gpio_width[1];
+#if defined(MY_ABC_HERE)
+	chip->mmchip.gc.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	chip->mmchip.gc.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	chip->mmchip.gc.direction_input = xgpio_dir_in;
 	chip->mmchip.gc.direction_output = xgpio_dir_out;
 	chip->mmchip.gc.get = xgpio_get;

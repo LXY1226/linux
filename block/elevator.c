@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Block device elevator/IO-scheduler.
  *
@@ -369,6 +372,11 @@ void elv_dispatch_sort(struct request_queue *q, struct request *rq)
 		if ((rq->cmd_flags & REQ_DISCARD) !=
 		    (pos->cmd_flags & REQ_DISCARD))
 			break;
+#ifdef MY_ABC_HERE
+		if ((rq->cmd_flags & REQ_UNUSED_HINT) !=
+		    (pos->cmd_flags & REQ_UNUSED_HINT))
+			break;
+#endif /* MY_ABC_HERE */
 		if (rq_data_dir(rq) != rq_data_dir(pos))
 			break;
 		if (pos->cmd_flags & stop_flags)

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/net/sunrpc/clnt.c
  *
@@ -1784,6 +1787,9 @@ call_bind_status(struct rpc_task *task)
 retry_timeout:
 	task->tk_status = 0;
 	task->tk_action = call_timeout;
+#ifdef MY_ABC_HERE
+	task->syno_stage_name = "bind";
+#endif /* MY_ABC_HERE */
 }
 
 /*
@@ -1849,6 +1855,9 @@ call_connect_status(struct rpc_task *task)
 		/* Check for timeouts before looping back to call_bind */
 	case -ETIMEDOUT:
 		task->tk_action = call_timeout;
+#ifdef MY_ABC_HERE
+		task->syno_stage_name = "connect";
+#endif /* MY_ABC_HERE */
 		return;
 	case 0:
 		clnt->cl_stats->netreconn++;
@@ -2068,6 +2077,9 @@ call_status(struct rpc_task *task)
 		rpc_delay(task, 3*HZ);
 	case -ETIMEDOUT:
 		task->tk_action = call_timeout;
+#ifdef MY_ABC_HERE
+		task->syno_stage_name = "call status";
+#endif /* MY_ABC_HERE */
 		if (!(task->tk_flags & RPC_TASK_NO_RETRANS_TIMEOUT)
 		    && task->tk_client->cl_discrtry)
 			xprt_conditional_disconnect(req->rq_xprt,
@@ -2116,6 +2128,11 @@ call_timeout(struct rpc_task *task)
 	}
 
 	dprintk("RPC: %5u call_timeout (major)\n", task->tk_pid);
+#ifdef MY_ABC_HERE
+        pr_warn_ratelimited(
+            KERN_WARNING "RPC: %5u call_timeout in %s stage\n", task->tk_pid,
+            (task->syno_stage_name) ? task->syno_stage_name : "unknown");
+#endif /* MY_ABC_HERE */
 	task->tk_timeouts++;
 
 	if (RPC_IS_SOFTCONN(task)) {
@@ -2202,6 +2219,9 @@ call_decode(struct rpc_task *task)
 		dprintk("RPC:       %s: too small RPC reply size (%d bytes)\n",
 				clnt->cl_program->name, task->tk_status);
 		task->tk_action = call_timeout;
+#ifdef MY_ABC_HERE
+		task->syno_stage_name = "call status";
+#endif /* MY_ABC_HERE */
 		goto out_retry;
 	}
 

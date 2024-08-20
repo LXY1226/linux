@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * SMP initialisation and IPI support
  * Based on arch/arm/kernel/smp.c
@@ -57,6 +60,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
 
+#if defined(MY_ABC_HERE)
+extern bool gBlSynoSysrqB;
+#endif /* defined(MY_ABC_HERE) */
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
  * so we need some other way of telling a new secondary core
@@ -689,7 +695,13 @@ static void ipi_cpu_stop(unsigned int cpu)
 	    system_state == SYSTEM_RUNNING) {
 		raw_spin_lock(&stop_lock);
 		pr_crit("CPU%u: stopping\n", cpu);
+#if defined(MY_ABC_HERE)
+		if (false == gBlSynoSysrqB) {
+			dump_stack();
+		}
+#else /* defined(MY_ABC_HERE) */
 		dump_stack();
+#endif /* defined(MY_ABC_HERE) */
 		raw_spin_unlock(&stop_lock);
 	}
 

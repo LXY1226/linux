@@ -1,5 +1,42 @@
 menu "Platform selection"
 
+config ARCH_MVEBU
+	bool "Marvell EBU SoC Family"
+	select SYNO_LSP_ARMADA37XX
+	select ARM_GIC_ODMI
+	select ARM_GIC_V2M
+	select MVEBU_PIC
+	select MVEBU_ICU_IRQ
+	select MVEBU_CLK_COMMON
+	select ARMADA_37XX_CLK
+	select GPIOLIB
+	select GPIOLIB_IRQCHIP
+	select OF_GPIO
+	select PINCTRL
+	select PINCTRL_ARMADA_37XX
+	select ARMADA_AP806_CORE_CLK
+	select ARMADA_AP806_RING_CLK
+	select ARMADA_AP806_CPU_CLK
+	select ARMADA_AP806_SYSCON
+	select ARMADA_CP110_SYSCON
+	select PINCTRL_ARMADA_AP806
+	select PINCTRL_ARMADA_CP110
+	select ARMADA_37XX_PM_CLK if SYNO_LSP_ARMADA_17_04_02
+	help
+	  This enables support for Marvell EBU familly, including:
+	   - Armada 3700 SoC Family
+	   - Armada 7K SoC Family
+	   - Armada 8K SoC Family
+
+config ARCH_MVEBU_PD
+	bool "Marvell EBU SoC Emulation"
+	select ARCH_MVEBU
+	help
+	  This enables emulation support for Marvell EBU family, including:
+	   - Armada 3700 SoC Family
+	   - Armada 7K SoC Family
+	   - Armada 8K SoC Family
+
 config ARCH_BCM_IPROC
 	bool "Broadcom iProc SoC Family"
 	help
@@ -126,5 +163,33 @@ config ARCH_ZYNQMP
 	bool "Xilinx ZynqMP Family"
 	help
 	  This enables support for Xilinx ZynqMP Family
+
+config ARCH_RTD129X
+	bool "Realtek RTD1296 SoC"
+	select ARM_GIC
+	select CLKSRC_OF
+	select PINCTR
+	help
+	  This enables support for Realtek RTD129X SoC.
+
+config ARCH_RTD16xx
+	bool "Realtek RTD16xx SoC Family"
+	select ARM_GIC
+	select CLKSRC_OF
+	select PINCTRL
+	select RTK_PLATFORM
+	select RTK_PLATFORM_PSCI
+	select PM_OPP
+#	select IRDA
+	help
+	  This enables support for Realtek RTD16xx SoC Family
+
+config RTK_PLATFORM
+	def_bool n
+	help
+	  Realtek Platform except RTD129X
+
+config RTK_PLATFORM_PSCI
+	def_bool n
 
 endmenu

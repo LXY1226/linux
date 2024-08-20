@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright © 2009 - Maxim Levitsky
  * Common routines & support for xD format
@@ -102,7 +105,11 @@ static struct nand_flash_dev nand_xd_flash_ids[] = {
 
 int sm_register_device(struct mtd_info *mtd, int smartmedia)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	int ret;
 
 	chip->options |= NAND_SKIP_BBTSCAN;

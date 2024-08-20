@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Synopsys DesignWare I2C adapter driver (master only).
  *
@@ -107,17 +110,44 @@ struct dw_i2c_dev {
 	int			(*acquire_lock)(struct dw_i2c_dev *dev);
 	void			(*release_lock)(struct dw_i2c_dev *dev);
 	bool			pm_runtime_disabled;
+#if defined(MY_DEF_HERE)
+	struct i2c_bus_recovery_info rinfo;
+	char		proc_dir_name[15];
+	struct proc_dir_entry * i2c_proc_dir;
+	void __iomem *iomux_base;
+	void __iomem *gpio_base;
+#endif /* MY_DEF_HERE */
 };
 
 #define ACCESS_SWAP		0x00000001
 #define ACCESS_16BIT		0x00000002
 #define ACCESS_INTR_MASK	0x00000004
 
+#if defined(MY_DEF_HERE)
+#define AMD_IOMUX_BASE 0xFED80D00
+#define AMD_IOMUX_BASE_SIZE 0x100
+#define AMD_GPIO_BASE 0xFED81500
+#define AMD_GPIO_BASE_SIZE 0x400
+#define SMB_CLK_DELAY_TIME_MS 42
+#define AMD_PIN_STS_OFFSET 16
+
+static unsigned long delay_try_cnt = 0;
+static unsigned long delay_suc_cnt = 0;
+static unsigned long pulse_try_cnt = 0;
+static unsigned long pulse_suc_cnt = 0;
+#endif /* MY_DEF_HERE */
+
 extern int i2c_dw_init(struct dw_i2c_dev *dev);
 extern void i2c_dw_disable(struct dw_i2c_dev *dev);
 extern void i2c_dw_disable_int(struct dw_i2c_dev *dev);
 extern u32 i2c_dw_read_comp_param(struct dw_i2c_dev *dev);
 extern int i2c_dw_probe(struct dw_i2c_dev *dev);
+#if defined(MY_DEF_HERE)
+extern int syno_dw_i2c_get_sda(struct i2c_adapter *adap);
+extern int syno_dw_i2c_get_scl(struct i2c_adapter *adap);
+extern void syno_dw_i2c_set_scl(struct i2c_adapter *adap, int val);
+extern int syno_dw_delay_recovery(struct i2c_adapter *adap);
+#endif /* MY_DEF_HERE */
 
 #if IS_ENABLED(CONFIG_I2C_DESIGNWARE_BAYTRAIL)
 extern int i2c_dw_eval_lock_support(struct dw_i2c_dev *dev);

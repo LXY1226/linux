@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * include/net/switchdev.h - Switch device API
  * Copyright (c) 2014-2015 Jiri Pirko <jiri@resnulli.us>
@@ -47,6 +50,9 @@ enum switchdev_attr_id {
 	SWITCHDEV_ATTR_ID_PORT_STP_STATE,
 	SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS,
 	SWITCHDEV_ATTR_ID_BRIDGE_AGEING_TIME,
+#if defined(MY_ABC_HERE)
+	SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING,
+#endif /* MY_ABC_HERE */
 };
 
 struct switchdev_attr {
@@ -57,6 +63,9 @@ struct switchdev_attr {
 		u8 stp_state;				/* PORT_STP_STATE */
 		unsigned long brport_flags;		/* PORT_BRIDGE_FLAGS */
 		u32 ageing_time;			/* BRIDGE_AGEING_TIME */
+#if defined(MY_ABC_HERE)
+		bool vlan_filtering;			/* BRIDGE_VLAN_FILTERING */
+#endif /* MY_ABC_HERE */
 	} u;
 };
 

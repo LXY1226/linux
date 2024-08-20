@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
   File: linux/xattr.h
 
@@ -31,6 +34,14 @@ struct xattr_handler {
 		   const char *name, const void *buffer, size_t size,
 		   int flags);
 };
+
+#ifdef MY_ABC_HERE
+struct syno_xattr_archive_version {
+	__le16	v_magic;
+	__le16	v_struct_version;
+	__le32	v_archive_version;
+} __attribute__ ((__packed__));
+#endif /* MY_ABC_HERE */
 
 const char *xattr_full_name(const struct xattr_handler *, const char *);
 

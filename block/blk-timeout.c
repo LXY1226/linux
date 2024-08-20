@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Functions related to generic timeout handling of requests.
  */
@@ -127,14 +130,15 @@ static void blk_rq_check_expired(struct request *rq, unsigned long *next_timeout
 	}
 }
 
-void blk_rq_timed_out_timer(unsigned long data)
+void blk_timeout_work(struct work_struct *work)
 {
-	struct request_queue *q = (struct request_queue *) data;
+	struct request_queue *q =
+		container_of(work, struct request_queue, timeout_work);
 	unsigned long flags, next = 0;
 	struct request *rq, *tmp;
 	int next_set = 0;
 
-	if (blk_queue_enter(q, GFP_NOWAIT))
+	if (blk_queue_enter(q, true))
 		return;
 	spin_lock_irqsave(q->queue_lock, flags);
 
@@ -182,6 +186,11 @@ unsigned long blk_rq_timeout(unsigned long timeout)
 	return timeout;
 }
 
+#ifdef MY_ABC_HERE
+unsigned int blk_timeout_factory = 0;
+EXPORT_SYMBOL(blk_timeout_factory);
+#endif /* MY_ABC_HERE */
+
 /**
  * blk_add_timer - Start timeout timer for a single request
  * @req:	request that is about to start running.
@@ -210,6 +219,12 @@ void blk_add_timer(struct request *req)
 	 */
 	if (!req->timeout)
 		req->timeout = q->rq_timeout;
+
+#ifdef MY_ABC_HERE
+	if (blk_timeout_factory) {
+		req->timeout = 3 * HZ;
+	}
+#endif /* MY_ABC_HERE */
 
 	req->deadline = jiffies + req->timeout;
 	if (!q->mq_ops)

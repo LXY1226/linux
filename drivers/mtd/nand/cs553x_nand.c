@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/mtd/nand/cs553x_nand.c
  *
@@ -97,7 +100,11 @@
 
 static void cs553x_read_buf(struct mtd_info *mtd, u_char *buf, int len)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	while (unlikely(len > 0x800)) {
 		memcpy_fromio(buf, this->IO_ADDR_R, 0x800);
@@ -109,7 +116,11 @@ static void cs553x_read_buf(struct mtd_info *mtd, u_char *buf, int len)
 
 static void cs553x_write_buf(struct mtd_info *mtd, const u_char *buf, int len)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	while (unlikely(len > 0x800)) {
 		memcpy_toio(this->IO_ADDR_R, buf, 0x800);
@@ -121,13 +132,21 @@ static void cs553x_write_buf(struct mtd_info *mtd, const u_char *buf, int len)
 
 static unsigned char cs553x_read_byte(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	return readb(this->IO_ADDR_R);
 }
 
 static void cs553x_write_byte(struct mtd_info *mtd, u_char byte)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	int i = 100000;
 
 	while (i && readb(this->IO_ADDR_R + MM_NAND_STS) & CS_NAND_CTLR_BUSY) {
@@ -140,7 +159,11 @@ static void cs553x_write_byte(struct mtd_info *mtd, u_char byte)
 static void cs553x_hwcontrol(struct mtd_info *mtd, int cmd,
 			     unsigned int ctrl)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	void __iomem *mmio_base = this->IO_ADDR_R;
 	if (ctrl & NAND_CTRL_CHANGE) {
 		unsigned char ctl = (ctrl & ~NAND_CTRL_CHANGE ) ^ 0x01;
@@ -152,7 +175,11 @@ static void cs553x_hwcontrol(struct mtd_info *mtd, int cmd,
 
 static int cs553x_device_ready(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	void __iomem *mmio_base = this->IO_ADDR_R;
 	unsigned char foo = readb(mmio_base + MM_NAND_STS);
 
@@ -161,7 +188,11 @@ static int cs553x_device_ready(struct mtd_info *mtd)
 
 static void cs_enable_hwecc(struct mtd_info *mtd, int mode)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	void __iomem *mmio_base = this->IO_ADDR_R;
 
 	writeb(0x07, mmio_base + MM_NAND_ECC_CTL);
@@ -170,7 +201,11 @@ static void cs_enable_hwecc(struct mtd_info *mtd, int mode)
 static int cs_calculate_ecc(struct mtd_info *mtd, const u_char *dat, u_char *ecc_code)
 {
 	uint32_t ecc;
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	void __iomem *mmio_base = this->IO_ADDR_R;
 
 	ecc = readl(mmio_base + MM_NAND_STS);
@@ -337,7 +372,11 @@ static void __exit cs553x_cleanup(void)
 		if (!mtd)
 			continue;
 
+#if defined(MY_ABC_HERE)
+		this = mtd_to_nand(cs553x_mtd[i]);
+#else /* MY_ABC_HERE */
 		this = cs553x_mtd[i]->priv;
+#endif /* MY_ABC_HERE */
 		mmio_base = this->IO_ADDR_R;
 
 		/* Release resources, unregister device */

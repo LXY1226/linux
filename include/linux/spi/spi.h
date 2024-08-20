@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2005 David Brownell
  *
@@ -153,6 +156,9 @@ struct spi_device {
 #define	SPI_TX_QUAD	0x200			/* transmit with 4 wires */
 #define	SPI_RX_DUAL	0x400			/* receive with 2 wires */
 #define	SPI_RX_QUAD	0x800			/* receive with 4 wires */
+#if defined(MY_ABC_HERE)
+#define	SPI_1BYTE_CS	0x1000			/* switch CS every byte */
+#endif /* MY_ABC_HERE */
 	int			irq;
 	void			*controller_state;
 	void			*controller_data;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* Abilis Systems MODULE DESCRIPTION
  *
  * Copyright (C) Abilis Systems 2013
@@ -197,7 +200,11 @@ static int tb10x_gpio_probe(struct platform_device *pdev)
 		return PTR_ERR(tb10x_gpio->base);
 
 	tb10x_gpio->gc.label		= of_node_full_name(dn);
+#if defined(MY_ABC_HERE)
+	tb10x_gpio->gc.parent		= &pdev->dev;
+#else /* MY_ABC_HERE */
 	tb10x_gpio->gc.dev		= &pdev->dev;
+#endif /* MY_ABC_HERE */
 	tb10x_gpio->gc.owner		= THIS_MODULE;
 	tb10x_gpio->gc.direction_input	= tb10x_gpio_direction_in;
 	tb10x_gpio->gc.get		= tb10x_gpio_get;

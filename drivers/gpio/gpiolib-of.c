@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * OF helpers for the GPIO API
  *
@@ -423,8 +426,13 @@ int of_gpiochip_add(struct gpio_chip *chip)
 {
 	int status;
 
+#if defined(MY_ABC_HERE)
+	if ((!chip->of_node) && (chip->parent))
+		chip->of_node = chip->parent->of_node;
+#else /* MY_ABC_HERE */
 	if ((!chip->of_node) && (chip->dev))
 		chip->of_node = chip->dev->of_node;
+#endif /* MY_ABC_HERE */
 
 	if (!chip->of_node)
 		return 0;

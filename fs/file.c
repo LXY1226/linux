@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/file.c
  *
@@ -648,6 +651,11 @@ int __close_fd(struct files_struct *files, unsigned fd)
 	__clear_close_on_exec(fd, fdt);
 	__put_unused_fd(files, fd);
 	spin_unlock(&files->file_lock);
+#ifdef MY_ABC_HERE
+	if (file->f_mapping->a_ops->aggregate_write_end &&
+	      file->f_inode && (file->f_inode->aggregate_flag & AGGREGATE_RECVFILE_DOING))
+		flush_aggregate_recvfile_filp(file);
+#endif /* MY_ABC_HERE */
 	return filp_close(file, files);
 
 out_unlock:

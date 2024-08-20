@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/kernel/printk.c
  *
@@ -54,6 +57,7 @@
 
 #include "console_cmdline.h"
 #include "braille.h"
+#include "internal.h"
 
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
@@ -239,7 +243,7 @@ struct printk_log {
  * within the scheduler's rq lock. It must be released before calling
  * console_unlock() or anything else that might wake up a process.
  */
-static DEFINE_RAW_SPINLOCK(logbuf_lock);
+DEFINE_RAW_SPINLOCK(logbuf_lock);
 
 #ifdef CONFIG_PRINTK
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
@@ -248,6 +252,11 @@ static u64 syslog_seq;
 static u32 syslog_idx;
 static enum log_flags syslog_prev;
 static size_t syslog_partial;
+
+#if defined(MY_DEF_HERE)
+static u64 dnv_console_seq = 0;
+static u32 dnv_console_idx = 0;
+#endif
 
 /* index and sequence number of the first record stored in the buffer */
 static u64 log_first_seq;
@@ -1679,6 +1688,7 @@ asmlinkage int vprintk_emit(int facility, int level,
 	unsigned long flags;
 	int this_cpu;
 	int printed_len = 0;
+	int nmi_message_lost;
 	bool in_sched = false;
 	/* cpu currently holding logbuf_lock in this function */
 	static unsigned int logbuf_cpu = UINT_MAX;
@@ -1727,6 +1737,15 @@ asmlinkage int vprintk_emit(int facility, int level,
 		printed_len += log_store(0, 2, LOG_PREFIX|LOG_NEWLINE, 0,
 					 NULL, 0, recursion_msg,
 					 strlen(recursion_msg));
+	}
+
+	nmi_message_lost = get_nmi_message_lost();
+	if (unlikely(nmi_message_lost)) {
+		text_len = scnprintf(textbuf, sizeof(textbuf),
+				     "BAD LUCK: lost %d message(s) from NMI context!",
+				     nmi_message_lost);
+		printed_len += log_store(0, 2, LOG_PREFIX|LOG_NEWLINE, 0,
+					 NULL, 0, textbuf, text_len);
 	}
 
 	/*
@@ -1878,14 +1897,6 @@ int vprintk_default(const char *fmt, va_list args)
 }
 EXPORT_SYMBOL_GPL(vprintk_default);
 
-/*
- * This allows printk to be diverted to another function per cpu.
- * This is useful for calling printk functions from within NMI
- * without worrying about race conditions that can lock up the
- * box.
- */
-DEFINE_PER_CPU(printk_func_t, printk_func) = vprintk_default;
-
 /**
  * printk - print a kernel message
  * @fmt: format string
@@ -1909,21 +1920,11 @@ DEFINE_PER_CPU(printk_func_t, printk_func) = vprintk_default;
  */
 asmlinkage __visible int printk(const char *fmt, ...)
 {
-	printk_func_t vprintk_func;
 	va_list args;
 	int r;
 
 	va_start(args, fmt);
-
-	/*
-	 * If a caller overrides the per_cpu printk_func, then it needs
-	 * to disable preemption when calling printk(). Otherwise
-	 * the printk_func should be set to the default. No need to
-	 * disable preemption here.
-	 */
-	vprintk_func = this_cpu_read(printk_func);
 	r = vprintk_func(fmt, args);
-
 	va_end(args);
 
 	return r;
@@ -2485,6 +2486,33 @@ static int __init keep_bootcon_setup(char *str)
 
 early_param("keep_bootcon", keep_bootcon_setup);
 
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+static int syno_setup_console(struct console *newcon)
+{
+	int ret = -1;
+#if defined(MY_DEF_HERE)
+	short console_index = 2;
+#else /* defined(MY_DEF_HERE) */
+	short console_index = 0;
+#endif /* defined(MY_DEF_HERE) */
+	struct console *bcon = NULL;
+
+	if (0 == strcmp(newcon->name, "ttyS") && console_index == newcon->index) {
+		console_lock();
+		for_each_console(bcon) {
+			if ((bcon->flags & CON_BOOT) && bcon->deinit)
+				bcon->deinit();
+		}
+		ret = newcon->setup(newcon, NULL);
+		console_unlock();
+	} else {
+		ret = newcon->setup(newcon, NULL);
+	}
+
+	return ret;
+}
+#endif /* MY_DEF_HERE || MY_DEF_HERE */
+
 /*
  * The console driver calls this routine during kernel initialization
  * to register the console printing procedure with printk() and to
@@ -2548,7 +2576,11 @@ void register_console(struct console *newcon)
 		if (newcon->index < 0)
 			newcon->index = 0;
 		if (newcon->setup == NULL ||
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+		    syno_setup_console(newcon) == 0) {
+#else /* MY_DEF_HERE || MY_DEF_HERE */
 		    newcon->setup(newcon, NULL) == 0) {
+#endif /* MY_DEF_HERE || MY_DEF_HERE */
 			newcon->flags |= CON_ENABLED;
 			if (newcon->device) {
 				newcon->flags |= CON_CONSDEV;
@@ -2629,8 +2661,13 @@ void register_console(struct console *newcon)
 		 * for us.
 		 */
 		raw_spin_lock_irqsave(&logbuf_lock, flags);
+#if defined(MY_DEF_HERE)
+		console_seq = dnv_console_seq;
+		console_idx = dnv_console_idx;
+#else
 		console_seq = syslog_seq;
 		console_idx = syslog_idx;
+#endif
 		console_prev = syslog_prev;
 		raw_spin_unlock_irqrestore(&logbuf_lock, flags);
 		/*
@@ -2666,6 +2703,17 @@ void register_console(struct console *newcon)
 }
 EXPORT_SYMBOL(register_console);
 
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+static void __ref pci_console_unmap_memory(void __iomem *addr, u32 size)
+{
+	if (!addr || !size)
+		return;
+
+	else
+		early_iounmap(addr, size);
+}
+#endif /* MY_DEF_HERE */
+
 int unregister_console(struct console *console)
 {
         struct console *a, *b;
@@ -2674,6 +2722,11 @@ int unregister_console(struct console *console)
 	pr_info("%sconsole [%s%d] disabled\n",
 		(console->flags & CON_BOOT) ? "boot" : "" ,
 		console->name, console->index);
+
+#if defined(MY_DEF_HERE)
+	dnv_console_seq = console_seq;
+	dnv_console_idx = console_idx;
+#endif
 
 	res = _braille_unregister_console(console);
 	if (res)
@@ -2708,6 +2761,11 @@ int unregister_console(struct console *console)
 	console->flags &= ~CON_ENABLED;
 	console_unlock();
 	console_sysfs_notify();
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+	if (console->pcimapaddress) {
+		pci_console_unmap_memory(console->pcimapaddress, console->pcimapsize);
+	}
+#endif /* MY_DEF_HERE */
 	return res;
 }
 EXPORT_SYMBOL(unregister_console);

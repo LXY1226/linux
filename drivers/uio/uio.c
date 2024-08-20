@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/uio/uio.c
  *
@@ -379,6 +382,28 @@ static int uio_get_minor(struct uio_device *idev)
 	mutex_unlock(&minor_lock);
 	return retval;
 }
+
+#if defined(MY_DEF_HERE) || defined(CONFIG_SYNO_LSP_RTD1619)
+#if defined(CONFIG_UIO_ASSIGN_MINOR)
+static int uio_use_minor(struct uio_device *idev, int minor)
+{
+	int retval = -ENOMEM;
+
+	mutex_lock(&minor_lock);
+	retval = idr_alloc(&uio_idr, idev, minor, minor+1, GFP_KERNEL);
+	if (retval >= 0) {
+		idev->minor = retval;
+		retval = 0;
+	} else if (retval == -ENOSPC) {
+		dev_err(idev->dev, "too many uio devices\n");
+		retval = -EINVAL;
+	}
+
+	mutex_unlock(&minor_lock);
+	return retval;
+}
+#endif /* CONFIG_UIO_ASSIGN_MINOR */
+#endif /* MY_DEF_HERE || CONFIG_SYNO_LSP_RTD1619 */
 
 static void uio_free_minor(struct uio_device *idev)
 {
@@ -825,7 +850,19 @@ int __uio_register_device(struct module *owner,
 	init_waitqueue_head(&idev->wait);
 	atomic_set(&idev->event, 0);
 
+#if defined(CONFIG_UIO_ASSIGN_MINOR) && (defined(MY_DEF_HERE) || defined(CONFIG_SYNO_LSP_RTD1619))
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+	if(info->minor > 0) {
+#else /* CONFIG_SYNO_LSP_RTD1619 */
+	if(info->minor >= 0) {
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
+		ret = uio_use_minor(idev, info->minor);
+	} else {
+		ret = uio_get_minor(idev);
+	}
+#else /* CONFIG_UIO_ASSIGN_MINOR && (MY_DEF_HERE || CONFIG_SYNO_LSP_RTD1619) */
 	ret = uio_get_minor(idev);
+#endif /* CONFIG_UIO_ASSIGN_MINOR && (MY_DEF_HERE || CONFIG_SYNO_LSP_RTD1619) */
 	if (ret)
 		return ret;
 

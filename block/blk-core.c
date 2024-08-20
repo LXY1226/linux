@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 1991, 1992 Linus Torvalds
  * Copyright (C) 1994,      Karl Keyte: Added support for disk statistics
@@ -40,6 +43,10 @@
 #include "blk.h"
 #include "blk-mq.h"
 
+#ifdef MY_ABC_HERE
+#include <linux/synolib.h>
+#endif /* MY_ABC_HERE */
+
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_remap);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_remap);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_complete);
@@ -47,6 +54,10 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(block_split);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_unplug);
 
 DEFINE_IDA(blk_queue_ida);
+#ifdef MY_DEF_HERE
+static inline unsigned int syno_block_latency_bucket_offset_get(const u64 u64Latency);
+static void syno_block_latency_cal(struct request *req);
+#endif /* MY_DEF_HERE */
 
 /*
  * For the allocated request tables
@@ -73,7 +84,7 @@ static void blk_clear_congested(struct request_list *rl, int sync)
 	 * flip its congestion state for events on other blkcgs.
 	 */
 	if (rl == &rl->q->root_rl)
-		clear_wb_congested(rl->q->backing_dev_info.wb.congested, sync);
+		clear_wb_congested(rl->q->backing_dev_info->wb.congested, sync);
 #endif
 }
 
@@ -84,7 +95,7 @@ static void blk_set_congested(struct request_list *rl, int sync)
 #else
 	/* see blk_clear_congested() */
 	if (rl == &rl->q->root_rl)
-		set_wb_congested(rl->q->backing_dev_info.wb.congested, sync);
+		set_wb_congested(rl->q->backing_dev_info->wb.congested, sync);
 #endif
 }
 
@@ -103,22 +114,6 @@ void blk_queue_congestion_threshold(struct request_queue *q)
 	q->nr_congestion_off = nr;
 }
 
-/**
- * blk_get_backing_dev_info - get the address of a queue's backing_dev_info
- * @bdev:	device
- *
- * Locates the passed device's request queue and returns the address of its
- * backing_dev_info.  This function can only be called if @bdev is opened
- * and the return value is never NULL.
- */
-struct backing_dev_info *blk_get_backing_dev_info(struct block_device *bdev)
-{
-	struct request_queue *q = bdev_get_queue(bdev);
-
-	return &q->backing_dev_info;
-}
-EXPORT_SYMBOL(blk_get_backing_dev_info);
-
 void blk_rq_init(struct request_queue *q, struct request *rq)
 {
 	memset(rq, 0, sizeof(*rq));
@@ -134,6 +129,9 @@ void blk_rq_init(struct request_queue *q, struct request *rq)
 	rq->cmd_len = BLK_MAX_CDB;
 	rq->tag = -1;
 	rq->start_time = jiffies;
+#ifdef MY_DEF_HERE
+	rq->syno_seq = 0;
+#endif /* MY_DEF_HERE */
 	set_start_time_ns(rq);
 	rq->part = NULL;
 }
@@ -464,6 +462,23 @@ static void __blk_drain_queue(struct request_queue *q, bool drain_all)
 	}
 }
 
+#ifdef MY_ABC_HERE
+/**
+ * blk_drain_queue - drain requests from request_queue
+ * @q: queue to drain
+ *
+ * Drain requests from @q.  All pending requests are drained.
+ * The caller is responsible for ensuring that no new requests
+ * which need to be drained are queued.
+ */
+void blk_drain_queue(struct request_queue *q)
+{
+	spin_lock_irq(q->queue_lock);
+	__blk_drain_queue(q, true);
+	spin_unlock_irq(q->queue_lock);
+}
+#endif /* MY_ABC_HERE */
+
 /**
  * blk_queue_bypass_start - enter queue bypass mode
  * @q: queue of interest
@@ -574,8 +589,11 @@ void blk_cleanup_queue(struct request_queue *q)
 	 */
 	blk_freeze_queue(q);
 	spin_lock_irq(lock);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 	if (!q->mq_ops)
 		__blk_drain_queue(q, true);
+#endif /* MY_ABC_HERE */
 	queue_flag_set(QUEUE_FLAG_DEAD, q);
 	spin_unlock_irq(lock);
 
@@ -583,7 +601,7 @@ void blk_cleanup_queue(struct request_queue *q)
 	blk_flush_integrity();
 
 	/* @q won't process any more request, flush async actions */
-	del_timer_sync(&q->backing_dev_info.laptop_mode_wb_timer);
+	del_timer_sync(&q->backing_dev_info->laptop_mode_wb_timer);
 	blk_sync_queue(q);
 
 	if (q->mq_ops)
@@ -594,8 +612,6 @@ void blk_cleanup_queue(struct request_queue *q)
 	if (q->queue_lock != &q->__queue_lock)
 		q->queue_lock = &q->__queue_lock;
 	spin_unlock_irq(lock);
-
-	bdi_unregister(&q->backing_dev_info);
 
 	/* @q is and will stay empty, shutdown and put */
 	blk_put_queue(q);
@@ -648,17 +664,17 @@ struct request_queue *blk_alloc_queue(gfp_t gfp_mask)
 }
 EXPORT_SYMBOL(blk_alloc_queue);
 
-int blk_queue_enter(struct request_queue *q, gfp_t gfp)
+int blk_queue_enter(struct request_queue *q, bool nowait)
 {
 	while (true) {
 		if (percpu_ref_tryget_live(&q->q_usage_counter))
 			return 0;
 
-		if (!gfpflags_allow_blocking(gfp))
+		if (nowait)
 			return -EBUSY;
 
 		wait_event(q->mq_freeze_wq,
-			   !atomic_read(&q->mq_freeze_depth) ||
+			   !q->mq_freeze_depth ||
 			   blk_queue_dying(q));
 		if (blk_queue_dying(q))
 			return -ENODEV;
@@ -678,10 +694,16 @@ static void blk_queue_usage_counter_release(struct percpu_ref *ref)
 	wake_up_all(&q->mq_freeze_wq);
 }
 
+static void blk_rq_timed_out_timer(unsigned long data)
+{
+	struct request_queue *q = (struct request_queue *)data;
+
+	kblockd_schedule_work(&q->timeout_work);
+}
+
 struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 {
 	struct request_queue *q;
-	int err;
 
 	q = kmem_cache_alloc_node(blk_requestq_cachep,
 				gfp_mask | __GFP_ZERO, node_id);
@@ -696,17 +718,17 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 	if (!q->bio_split)
 		goto fail_id;
 
-	q->backing_dev_info.ra_pages =
-			(VM_MAX_READAHEAD * 1024) / PAGE_CACHE_SIZE;
-	q->backing_dev_info.capabilities = BDI_CAP_CGROUP_WRITEBACK;
-	q->backing_dev_info.name = "block";
-	q->node = node_id;
-
-	err = bdi_init(&q->backing_dev_info);
-	if (err)
+	q->backing_dev_info = bdi_alloc_node(gfp_mask, node_id);
+	if (!q->backing_dev_info)
 		goto fail_split;
 
-	setup_timer(&q->backing_dev_info.laptop_mode_wb_timer,
+	q->backing_dev_info->ra_pages =
+			(VM_MAX_READAHEAD * 1024) / PAGE_CACHE_SIZE;
+	q->backing_dev_info->capabilities = BDI_CAP_CGROUP_WRITEBACK;
+	q->backing_dev_info->name = "block";
+	q->node = node_id;
+
+	setup_timer(&q->backing_dev_info->laptop_mode_wb_timer,
 		    laptop_mode_timer_fn, (unsigned long) q);
 	setup_timer(&q->timeout, blk_rq_timed_out_timer, (unsigned long) q);
 	INIT_LIST_HEAD(&q->queue_head);
@@ -741,6 +763,7 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 	__set_bit(QUEUE_FLAG_BYPASS, &q->queue_flags);
 
 	init_waitqueue_head(&q->mq_freeze_wq);
+	mutex_init(&q->mq_freeze_lock);
 
 	/*
 	 * Init percpu_ref in atomic mode so that it's faster to shutdown.
@@ -759,7 +782,7 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 fail_ref:
 	percpu_ref_exit(&q->q_usage_counter);
 fail_bdi:
-	bdi_destroy(&q->backing_dev_info);
+	bdi_put(q->backing_dev_info);
 fail_split:
 	bioset_free(q->bio_split);
 fail_id:
@@ -842,6 +865,7 @@ blk_init_allocated_queue(struct request_queue *q, request_fn_proc *rfn,
 	if (blk_init_rl(&q->root_rl, q, GFP_KERNEL))
 		goto fail;
 
+	INIT_WORK(&q->timeout_work, blk_timeout_work);
 	q->request_fn		= rfn;
 	q->prep_rq_fn		= NULL;
 	q->unprep_rq_fn		= NULL;
@@ -1059,7 +1083,19 @@ static struct io_context *rq_ioc(struct bio *bio)
  * Returns ERR_PTR on failure, with @q->queue_lock held.
  * Returns request pointer on success, with @q->queue_lock *not held*.
  */
-static struct request *__get_request(struct request_list *rl, int rw_flags,
+#ifdef MY_ABC_HERE
+/*
+ * because REQ_IO_STAT == (1ULL << 31),
+ * it will let rw_flags overflow,
+ * so we change rw_flags to u64.
+ */
+#endif /* MY_ABC_HERE */
+static struct request *__get_request(struct request_list *rl,
+#ifdef MY_ABC_HERE
+					 u64 rw_flags,
+#else
+					 int rw_flags,
+#endif /* MY_ABC_HERE */
 				     struct bio *bio, gfp_t gfp_mask)
 {
 	struct request_queue *q = rl->q;
@@ -1183,7 +1219,7 @@ fail_elvpriv:
 	 * disturb iosched and blkcg but weird is bettern than dead.
 	 */
 	printk_ratelimited(KERN_WARNING "%s: dev %s: request aux data allocation failed, iosched may be disturbed\n",
-			   __func__, dev_name(q->backing_dev_info.dev));
+			   __func__, dev_name(q->backing_dev_info->dev));
 
 	rq->cmd_flags &= ~REQ_ELVPRIV;
 	rq->elv.icq = NULL;
@@ -1294,7 +1330,9 @@ static struct request *blk_old_get_request(struct request_queue *q, int rw,
 struct request *blk_get_request(struct request_queue *q, int rw, gfp_t gfp_mask)
 {
 	if (q->mq_ops)
-		return blk_mq_alloc_request(q, rw, gfp_mask, false);
+		return blk_mq_alloc_request(q, rw,
+			(gfp_mask & __GFP_DIRECT_RECLAIM) ?
+				0 : BLK_MQ_REQ_NOWAIT);
 	else
 		return blk_old_get_request(q, rw, gfp_mask);
 }
@@ -1794,11 +1832,16 @@ get_rq:
 		/*
 		 * If this is the first request added after a plug, fire
 		 * of a plug trace.
+		 *
+		 * @request_count may become stale because of schedule
+		 * out, so check plug list again.
 		 */
-		if (!request_count)
+		if (!request_count || list_empty(&plug->list))
 			trace_block_plug(q);
 		else {
-			if (request_count >= BLK_MAX_REQUEST_COUNT) {
+			struct request *last = list_entry_rq(plug->list.prev);
+			if (request_count >= BLK_MAX_REQUEST_COUNT ||
+			    blk_rq_bytes(last) >= BLK_PLUG_FLUSH_SIZE) {
 				blk_flush_plug_list(plug, false);
 				trace_block_plug(q);
 			}
@@ -1838,13 +1881,18 @@ static inline void blk_partition_remap(struct bio *bio)
 static void handle_bad_sector(struct bio *bio)
 {
 	char b[BDEVNAME_SIZE];
-
+#ifdef MY_ABC_HERE
+    if (printk_ratelimit()) {
+#endif /* MY_ABC_HERE */
 	printk(KERN_INFO "attempt to access beyond end of device\n");
 	printk(KERN_INFO "%s: rw=%ld, want=%Lu, limit=%Lu\n",
 			bdevname(bio->bi_bdev, b),
 			bio->bi_rw,
 			(unsigned long long)bio_end_sector(bio),
 			(long long)(i_size_read(bio->bi_bdev->bd_inode) >> 9));
+#ifdef MY_ABC_HERE
+    }
+#endif /* MY_ABC_HERE */
 }
 
 #ifdef CONFIG_FAIL_MAKE_REQUEST
@@ -1911,6 +1959,20 @@ static inline int bio_check_eod(struct bio *bio, unsigned int nr_sectors)
 	return 0;
 }
 
+#ifdef MY_ABC_HERE
+static inline bool bio_check_ro(struct bio *bio, struct block_device *part)
+{
+	if (bdev_read_only(part) && bio->bi_rw & REQ_WRITE) {
+		if (bio->bi_rw & REQ_FLUSH && !bio_sectors(bio))
+			return false;
+
+		return true;
+	}
+
+	return false;
+}
+#endif /* MY_ABC_HERE */
+
 static noinline_for_stack bool
 generic_make_request_checks(struct bio *bio)
 {
@@ -1947,6 +2009,11 @@ generic_make_request_checks(struct bio *bio)
 	 */
 	blk_partition_remap(bio);
 
+#ifdef MY_ABC_HERE
+	if (unlikely(bio_check_ro(bio, bio->bi_bdev)))
+		goto end_io;
+#endif /* MY_ABC_HERE */
+
 	if (bio_check_eod(bio, nr_sectors))
 		goto end_io;
 
@@ -1970,6 +2037,13 @@ generic_make_request_checks(struct bio *bio)
 		goto end_io;
 	}
 
+#ifdef MY_ABC_HERE
+	if (bio->bi_rw & REQ_UNUSED_HINT && !blk_queue_unused_hint(q)) {
+		err = -EOPNOTSUPP;
+		goto end_io;
+	}
+#endif /* MY_ABC_HERE */
+
 	if (bio->bi_rw & REQ_WRITE_SAME && !bdev_write_same(bio->bi_bdev)) {
 		err = -EOPNOTSUPP;
 		goto end_io;
@@ -1986,7 +2060,18 @@ generic_make_request_checks(struct bio *bio)
 	if (!blkcg_bio_issue_check(q, bio))
 		return false;
 
+#ifdef MY_ABC_HERE
+	if (!bio_flagged(bio, BIO_TRACE_COMPLETION)) {
+		trace_block_bio_queue(q, bio);
+		/* Now that enqueuing has been traced, we need to trace
+		 * completion as well.
+		 */
+		bio_set_flag(bio, BIO_TRACE_COMPLETION);
+	}
+#else
 	trace_block_bio_queue(q, bio);
+#endif /* MY_ABC_HERE */
+
 	return true;
 
 end_io:
@@ -2030,6 +2115,9 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 */
 	struct bio_list bio_list_on_stack[2];
 	blk_qc_t ret = BLK_QC_T_NONE;
+#ifdef MY_ABC_HERE
+	unsigned int noio_flag;
+#endif /* MY_ABC_HERE */
 
 	if (!generic_make_request_checks(bio))
 		goto out;
@@ -2045,6 +2133,12 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * should be added at the tail
 	 */
 	if (current->bio_list) {
+#if defined(MY_ABC_HERE)
+		if (bio_flagged(bio, BIO_DELAYED)) {
+			bio_clear_flag(bio, BIO_DELAYED);
+			bio_list_add_head(&current->bio_list[1], bio);
+		} else
+#endif /* MY_ABC_HERE */
 		bio_list_add(&current->bio_list[0], bio);
 		goto out;
 	}
@@ -2064,12 +2158,15 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * bio_list, and call into ->make_request() again.
 	 */
 	BUG_ON(bio->bi_next);
+#ifdef MY_ABC_HERE
+	noio_flag = memalloc_noio_save();
+#endif /* MY_ABC_HERE */
 	bio_list_init(&bio_list_on_stack[0]);
 	current->bio_list = bio_list_on_stack;
 	do {
 		struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 
-		if (likely(blk_queue_enter(q, __GFP_DIRECT_RECLAIM) == 0)) {
+		if (likely(blk_queue_enter(q, false) == 0)) {
 			struct bio_list lower, same;
 
 			/* Create a fresh bio_list for all subordinate requests */
@@ -2099,6 +2196,9 @@ blk_qc_t generic_make_request(struct bio *bio)
 		bio = bio_list_pop(&bio_list_on_stack[0]);
 	} while (bio);
 	current->bio_list = NULL; /* deactivate */
+#ifdef MY_ABC_HERE
+	memalloc_noio_restore(noio_flag);
+#endif /* MY_ABC_HERE */
 
 out:
 	return ret;
@@ -2140,13 +2240,27 @@ blk_qc_t submit_bio(int rw, struct bio *bio)
 
 		if (unlikely(block_dump)) {
 			char b[BDEVNAME_SIZE];
+#ifdef MY_ABC_HERE
+			printk(KERN_DEBUG "ppid:%d(%s), pid:%d(%s), %s block %Lu on %s (%u sectors)\n",
+			task_pid_nr(current->parent), current->parent->comm,
+			task_pid_nr(current), current->comm,
+#else /* MY_ABC_HERE */
 			printk(KERN_DEBUG "%s(%d): %s block %Lu on %s (%u sectors)\n",
 			current->comm, task_pid_nr(current),
+#endif /* MY_ABC_HERE */
 				(rw & WRITE) ? "WRITE" : "READ",
 				(unsigned long long)bio->bi_iter.bi_sector,
 				bdevname(bio->bi_bdev, b),
 				count);
 		}
+
+#ifdef MY_ABC_HERE
+		if (0 < gSynoHibernationLogLevel) {
+			char b[BDEVNAME_SIZE];
+			syno_do_hibernation_bio_log(bdevname(bio->bi_bdev, b));
+		}
+#endif /* MY_ABC_HERE */
+
 	}
 
 	return generic_make_request(bio);
@@ -2322,6 +2436,20 @@ void blk_account_io_done(struct request *req)
 
 		hd_struct_put(part);
 		part_stat_unlock();
+#ifdef MY_DEF_HERE
+		if (0 != req->syno_seq) {
+			req->rq_disk->seq_ios[SYNO_DISK_SEQ_STAT_NEAR_SEQ]++;
+			req->rq_disk->seq_ios[SYNO_DISK_SEQ_STAT_SEQ] +=
+				!!(req->syno_seq & (1 << SYNO_DISK_SEQ_STAT_SEQ));
+		}
+		if (likely(time_after64(
+						rq_io_start_time_ns(req),
+						rq_start_time_ns(req)))) {
+			req->rq_disk->u64WaitTime[rw] +=
+				rq_io_start_time_ns(req) - rq_start_time_ns(req);
+		}
+		syno_block_latency_cal(req);
+#endif /* MY_DEF_HERE */
 	}
 }
 
@@ -2403,6 +2531,10 @@ struct request *blk_peek_request(struct request_queue *q)
 {
 	struct request *rq;
 	int ret;
+#ifdef MY_DEF_HERE
+	sector_t rq_pos = 0;
+	sector_t end_sector = 0;
+#endif /* MY_DEF_HERE */
 
 	while ((rq = __elv_next_request(q)) != NULL) {
 
@@ -2426,6 +2558,11 @@ struct request *blk_peek_request(struct request_queue *q)
 			 */
 			rq->cmd_flags |= REQ_STARTED;
 			trace_block_rq_issue(q, rq);
+#ifdef MY_DEF_HERE
+			if  (rq->rq_disk) {
+				rq->u64IssueTime = cpu_clock(0);
+			}
+#endif /* MY_DEF_HERE */
 		}
 
 		if (!q->boundary_rq || q->boundary_rq == rq) {
@@ -2483,6 +2620,21 @@ struct request *blk_peek_request(struct request_queue *q)
 			break;
 		}
 	}
+#ifdef MY_DEF_HERE
+	if (rq && blk_do_io_stat(rq)) {
+		rq_pos = blk_rq_pos(rq);
+		end_sector = rq->rq_disk->end_sector;
+		if (end_sector == rq_pos) {
+			rq->syno_seq |= (1 << SYNO_DISK_SEQ_STAT_NEAR_SEQ);
+			rq->syno_seq |= (1 << SYNO_DISK_SEQ_STAT_SEQ);
+
+		} else if (end_sector < rq_pos
+				&& end_sector + 256 >= rq_pos) {
+			rq->syno_seq |= (1 << SYNO_DISK_SEQ_STAT_NEAR_SEQ);
+		}
+		rq->rq_disk->end_sector = rq_end_sector(rq);
+	}
+#endif /* MY_DEF_HERE */
 
 	return rq;
 }
@@ -2565,6 +2717,58 @@ struct request *blk_fetch_request(struct request_queue *q)
 }
 EXPORT_SYMBOL(blk_fetch_request);
 
+#ifdef MY_DEF_HERE
+static inline unsigned int syno_block_latency_bucket_offset_get(const u64 u64Latency)
+{
+	unsigned int uOffset = 0;
+
+	/* latency >= 1024 us */
+	if ( 0x1F < u64Latency) {
+		uOffset += 1;
+	}
+
+	/* latency >= 32ms */
+	if (unlikely( 0x3FF < u64Latency)) {
+		uOffset += 1;
+	}
+
+	/* latency >= 1024ms */
+	if (unlikely( 0x7FFF < u64Latency)) {
+		uOffset += 1;
+	}
+
+	return uOffset;
+}
+
+static void syno_block_latency_cal(struct request *req)
+{
+	int iDirection = rq_data_dir(req);
+	unsigned int uBucketOffset = 0;
+	u64 u64StepOffset = 0;
+	u64 u64CmdRespTime = 0;
+
+	if  (!req->rq_disk) {
+		return;
+	}
+	u64CmdRespTime = cpu_clock(0) - req->u64IssueTime;
+
+	req->rq_disk->u64CplCmdCnt[iDirection] += 1;
+
+	// calculate the response time buckets
+	// shift to 32us
+	u64StepOffset = (u64CmdRespTime >> 15);
+	// calculate the offset of buckets with the response time
+	uBucketOffset = syno_block_latency_bucket_offset_get(u64StepOffset);
+	u64StepOffset >>= (5 * uBucketOffset);
+	if (unlikely(31 < u64StepOffset)) {
+		uBucketOffset = (SYNO_BLOCK_RESPONSE_BUCKETS_END - 1);
+		u64StepOffset = 31;
+	}
+	req->rq_disk->u64RespTimeSum[iDirection] += u64CmdRespTime;
+	req->rq_disk->u64RespTimeBuckets[iDirection][uBucketOffset][u64StepOffset] += 1;
+}
+#endif /* MY_DEF_HERE */
+
 /**
  * blk_update_request - Special helper function for request stacking drivers
  * @req:      the request being processed
@@ -2590,6 +2794,10 @@ EXPORT_SYMBOL(blk_fetch_request);
 bool blk_update_request(struct request *req, int error, unsigned int nr_bytes)
 {
 	int total_bytes;
+
+#ifdef MY_ABC_HERE
+	static unsigned long long blk_rq_pos_last = 0;
+#endif /* MY_ABC_HERE */
 
 	trace_block_rq_complete(req->q, req, nr_bytes);
 
@@ -2635,11 +2843,26 @@ bool blk_update_request(struct request *req, int error, unsigned int nr_bytes)
 			error_type = "I/O";
 			break;
 		}
+#ifdef MY_ABC_HERE
+		if (blk_rq_pos_last == (unsigned long long)blk_rq_pos(req)) {
+			printk_ratelimited(KERN_ERR "%s: %s error, dev %s, sector %llu\n",
+					__func__, error_type, req->rq_disk ?
+					req->rq_disk->disk_name : "?",
+					blk_rq_pos_last);
+		} else {
+			blk_rq_pos_last = (unsigned long long)blk_rq_pos(req);
+			printk_ratelimited(KERN_ERR "%s: %s error, dev %s, sector in range %llu + 0-2(%d)\n",
+					__func__, error_type, req->rq_disk ?
+					req->rq_disk->disk_name : "?",
+					(blk_rq_pos_last >> CONFIG_SYNO_IO_ERROR_LIMIT_MSG_SHIFT) << CONFIG_SYNO_IO_ERROR_LIMIT_MSG_SHIFT,
+					CONFIG_SYNO_IO_ERROR_LIMIT_MSG_SHIFT);
+		}
+#else
 		printk_ratelimited(KERN_ERR "%s: %s error, dev %s, sector %llu\n",
 				   __func__, error_type, req->rq_disk ?
 				   req->rq_disk->disk_name : "?",
 				   (unsigned long long)blk_rq_pos(req));
-
+#endif /* MY_ABC_HERE */
 	}
 
 	blk_account_io_completion(req, nr_bytes);
@@ -2652,6 +2875,10 @@ bool blk_update_request(struct request *req, int error, unsigned int nr_bytes)
 		if (bio_bytes == bio->bi_iter.bi_size)
 			req->bio = bio->bi_next;
 
+#ifdef MY_ABC_HERE
+		/* Completion has already been traced */
+		bio_clear_flag(bio, BIO_TRACE_COMPLETION);
+#endif /* MY_ABC_HERE */
 		req_bio_endio(req, bio, bio_bytes, error);
 
 		total_bytes += bio_bytes;
@@ -2751,7 +2978,7 @@ void blk_finish_request(struct request *req, int error)
 	BUG_ON(blk_queued_rq(req));
 
 	if (unlikely(laptop_mode) && req->cmd_type == REQ_TYPE_FS)
-		laptop_io_completion(&req->q->backing_dev_info);
+		laptop_io_completion(req->q->backing_dev_info);
 
 	blk_delete_timer(req);
 
@@ -3337,6 +3564,9 @@ void blk_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 
 	local_irq_restore(flags);
 }
+#ifdef MY_ABC_HERE
+EXPORT_SYMBOL(blk_flush_plug_list);
+#endif /* MY_ABC_HERE */
 
 void blk_finish_plug(struct blk_plug *plug)
 {
@@ -3543,6 +3773,20 @@ void blk_post_runtime_resume(struct request_queue *q, int err)
 }
 EXPORT_SYMBOL(blk_post_runtime_resume);
 #endif
+#ifdef MY_ABC_HERE
+void syno_flashcache_return_error(struct bio *bio)
+{
+	/* defined in blk_types.h */
+	if (bio_flagged(bio, BIO_MD_RETURN_ERROR)) {
+		bio->bi_error = -EIO;
+		bio_endio(bio);
+	} else {
+		bio->bi_error = -EIO;
+		bio_endio(bio);
+	}
+}
+EXPORT_SYMBOL(syno_flashcache_return_error);
+#endif /* MY_ABC_HERE */
 
 int __init blk_dev_init(void)
 {

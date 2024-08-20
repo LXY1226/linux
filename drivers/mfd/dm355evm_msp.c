@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * dm355evm_msp.c - driver for MSP430 firmware on DM355EVM board
  *
@@ -259,7 +262,11 @@ static int add_children(struct i2c_client *client)
 	int		i;
 
 	/* GPIO-ish stuff */
+#if defined(MY_ABC_HERE)
+	dm355evm_msp_gpio.parent = &client->dev;
+#else /* MY_ABC_HERE */
 	dm355evm_msp_gpio.dev = &client->dev;
+#endif /* MY_ABC_HERE */
 	status = gpiochip_add(&dm355evm_msp_gpio);
 	if (status < 0)
 		return status;

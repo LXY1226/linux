@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  gendisk handling
  */
@@ -43,6 +46,25 @@ static void disk_alloc_events(struct gendisk *disk);
 static void disk_add_events(struct gendisk *disk);
 static void disk_del_events(struct gendisk *disk);
 static void disk_release_events(struct gendisk *disk);
+
+#ifdef MY_DEF_HERE
+extern int g_is_sas_model;
+static inline char *make_class_name(const char *name, struct kobject *kobj)
+{
+	char *class_name = NULL;
+	int size = 0;
+
+	size = strlen(name) + strlen(kobject_name(kobj)) + 2;
+
+	class_name = kmalloc(size, GFP_KERNEL);
+	if (!class_name)
+		return NULL;
+
+	snprintf(class_name, size, "%s:%s", name, kobject_name(kobj));
+
+	return class_name;
+}
+#endif /* MY_DEF_HERE */
 
 /**
  * disk_get_part - get partition
@@ -515,6 +537,9 @@ static void register_disk(struct gendisk *disk)
 	struct disk_part_iter piter;
 	struct hd_struct *part;
 	int err;
+#ifdef MY_DEF_HERE
+	int error = 0;
+#endif /* MY_DEF_HERE */
 
 	ddev->parent = disk->driverfs_dev;
 
@@ -525,10 +550,33 @@ static void register_disk(struct gendisk *disk)
 
 	if (device_add(ddev))
 		return;
+#ifdef MY_DEF_HERE
+	if (1 == g_is_sas_model && ddev->parent) {
+		char *class_name = NULL;
+		class_name = make_class_name(ddev->class->name,
+						&ddev->kobj);
+		if (class_name) {
+			error = sysfs_create_link(&ddev->parent->kobj,
+						&ddev->kobj, class_name);
+			kfree(class_name);
+		}
+	}
+#endif /* MY_DEF_HERE */
 	if (!sysfs_deprecated) {
 		err = sysfs_create_link(block_depr, &ddev->kobj,
 					kobject_name(&ddev->kobj));
 		if (err) {
+#ifdef MY_DEF_HERE
+			if (1 == g_is_sas_model && ddev->parent && !error) {
+				char *class_name = NULL;
+				class_name = make_class_name(ddev->class->name,
+							&ddev->kobj);
+				if (class_name) {
+					sysfs_remove_link(&ddev->parent->kobj, class_name);
+					kfree(class_name);
+				}
+			}
+#endif /* MY_DEF_HERE */
 			device_del(ddev);
 			return;
 		}
@@ -614,7 +662,7 @@ void add_disk(struct gendisk *disk)
 	disk_alloc_events(disk);
 
 	/* Register BDI before referencing it from bdev */
-	bdi = &disk->queue->backing_dev_info;
+	bdi = disk->queue->backing_dev_info;
 	bdi_register_owner(bdi, disk_to_dev(disk));
 
 	blk_register_region(disk_devt(disk), disk->minors, NULL,
@@ -641,6 +689,9 @@ void del_gendisk(struct gendisk *disk)
 {
 	struct disk_part_iter piter;
 	struct hd_struct *part;
+#ifdef MY_DEF_HERE
+	struct device *ddev = disk_to_dev(disk);
+#endif /* MY_DEF_HERE */
 
 	blk_integrity_del(disk);
 	disk_del_events(disk);
@@ -649,17 +700,30 @@ void del_gendisk(struct gendisk *disk)
 	disk_part_iter_init(&piter, disk,
 			     DISK_PITER_INCL_EMPTY | DISK_PITER_REVERSE);
 	while ((part = disk_part_iter_next(&piter))) {
+		bdev_unhash_inode(MKDEV(disk->major,
+					disk->first_minor + part->partno));
 		invalidate_partition(disk, part->partno);
+		bdev_unhash_inode(part_devt(part));
 		delete_partition(disk, part->partno);
 	}
 	disk_part_iter_exit(&piter);
 
 	invalidate_partition(disk, 0);
+	bdev_unhash_inode(disk_devt(disk));
 	set_capacity(disk, 0);
 	disk->flags &= ~GENHD_FL_UP;
 
 	sysfs_remove_link(&disk_to_dev(disk)->kobj, "bdi");
-	blk_unregister_queue(disk);
+	if (disk->queue) {
+		/*
+		 * Unregister bdi before releasing device numbers (as they can
+		 * get reused and we'd get clashes in sysfs).
+		 */
+		bdi_unregister(disk->queue->backing_dev_info);
+		blk_unregister_queue(disk);
+	} else {
+		WARN_ON(1);
+	}
 	blk_unregister_region(disk_devt(disk), disk->minors);
 
 	part_stat_set_all(&disk->part0, 0);
@@ -669,6 +733,17 @@ void del_gendisk(struct gendisk *disk)
 	kobject_put(disk->slave_dir);
 	if (!sysfs_deprecated)
 		sysfs_remove_link(block_depr, dev_name(disk_to_dev(disk)));
+#ifdef MY_DEF_HERE
+	if (1 == g_is_sas_model && ddev && ddev->parent) {
+		char *class_name = NULL;
+		class_name = make_class_name(ddev->class->name,
+					&ddev->kobj);
+		if (class_name) {
+			sysfs_remove_link(&ddev->parent->kobj, class_name);
+			kfree(class_name);
+		}
+	}
+#endif /* MY_DEF_HERE */
 	pm_runtime_set_memalloc_noio(disk_to_dev(disk), false);
 	device_del(disk_to_dev(disk));
 }
@@ -982,10 +1057,148 @@ static ssize_t disk_discard_alignment_show(struct device *dev,
 	return sprintf(buf, "%d\n", queue_discard_alignment(disk->queue));
 }
 
+#ifdef MY_DEF_HERE
+static ssize_t block_resp_stat_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	ssize_t len = 0;
+	char szTmp[512] = {'\0'};
+
+	if (!disk) {
+		goto END;
+	}
+	// Disk uuid
+	snprintf(szTmp, sizeof(szTmp), "%pU\n",
+			disk->block_latency_uuid);
+	len += strlen(szTmp);
+	strncat(buf, szTmp, PAGE_SIZE - len - 1);
+
+	// Latency info
+	snprintf(szTmp, sizeof(szTmp), "%llu %llu %llu %llu\n",
+			disk->u64CplCmdCnt[0],
+			disk->u64RespTimeSum[0],
+			disk->u64CplCmdCnt[1],
+			disk->u64RespTimeSum[1]);
+	len += strlen(szTmp);
+	strncat(buf, szTmp, PAGE_SIZE - len - 1);
+	// Extend info
+	snprintf(szTmp, sizeof(szTmp), "%lu %lu %llu %llu\n",
+			disk->seq_ios[SYNO_DISK_SEQ_STAT_NEAR_SEQ],
+			disk->seq_ios[SYNO_DISK_SEQ_STAT_SEQ],
+			disk->u64WaitTime[0],
+			disk->u64WaitTime[1]
+			);
+	len += strlen(szTmp);
+	strncat(buf, szTmp, PAGE_SIZE - len - 1);
+
+END:
+	return len;
+}
+
+static void block_latency_hist_get(u64 u64TimeBuckets[SYNO_BLOCK_RESPONSE_BUCKETS_END][32],
+		char *szBuf, int cbBuf)
+{
+	ssize_t len = 0;
+	unsigned int j = 0;
+	unsigned int i = 0;
+	char szTmp[32] = {'\0'};
+	for (j = 0; j < SYNO_BLOCK_RESPONSE_BUCKETS_END; j++) {
+		for (i = 0; i < 32; i++) {
+			snprintf(szTmp, sizeof(szTmp), "%llu ", u64TimeBuckets[j][i]);
+			len += strlen(szTmp);
+			strncat(szBuf, szTmp, cbBuf - len - 1);
+		}
+		szBuf[len - 1] = '\n';
+	}
+}
+
+static ssize_t block_resp_read_hist_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	char szHist[2048] = {'\0'};
+
+	if (!disk) {
+		goto END;
+	}
+        block_latency_hist_get(disk->u64RespTimeBuckets[0], szHist, sizeof(szHist));
+
+END:
+	return sprintf(buf, "%s", szHist);
+}
+
+static ssize_t block_resp_write_hist_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	char szHist[2048] = {'\0'};
+
+	if (!disk) {
+		goto END;
+	}
+
+        block_latency_hist_get(disk->u64RespTimeBuckets[1], szHist, sizeof(szHist));
+
+END:
+	return sprintf(buf, "%s", szHist);
+}
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_ABC_HERE
+void DiskRemapModeSet(struct gendisk *disk, unsigned char blAutoRemap);
+
+static ssize_t
+disk_auto_remap_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	return sprintf(buf, "%u\n", disk->auto_remap);
+}
+
+static ssize_t
+disk_auto_remap_store(struct device *dev, struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	int val = 0;
+
+	if (!count || !sscanf(buf, "%d", &val))
+		return -EINVAL;
+
+	DiskRemapModeSet(disk, val ? 1 : 0);
+	return count;
+}
+static DEVICE_ATTR(auto_remap, S_IRUGO | S_IWUSR, disk_auto_remap_show, disk_auto_remap_store);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+static ssize_t disk_ro_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct gendisk *disk = dev_to_disk(dev);
+	int ro = 0;
+
+	if (!count || !sscanf(buf, "%d", &ro))
+		return -EINVAL;
+
+	set_disk_ro(disk, ro ? 1 : 0);
+	pr_err("%s: set read-only mode to %d\n",
+	       disk->disk_name, ro ? 1 : 0);
+	return count;
+}
+#endif /* MY_ABC_HERE */
+
 static DEVICE_ATTR(range, S_IRUGO, disk_range_show, NULL);
 static DEVICE_ATTR(ext_range, S_IRUGO, disk_ext_range_show, NULL);
 static DEVICE_ATTR(removable, S_IRUGO, disk_removable_show, NULL);
+#ifdef MY_ABC_HERE
+static DEVICE_ATTR(ro, S_IRUGO|S_IWUSR, disk_ro_show, disk_ro_store);
+#else /* MY_ABC_HERE */
 static DEVICE_ATTR(ro, S_IRUGO, disk_ro_show, NULL);
+#endif /* MY_ABC_HERE */
 static DEVICE_ATTR(size, S_IRUGO, part_size_show, NULL);
 static DEVICE_ATTR(alignment_offset, S_IRUGO, disk_alignment_offset_show, NULL);
 static DEVICE_ATTR(discard_alignment, S_IRUGO, disk_discard_alignment_show,
@@ -1002,6 +1215,11 @@ static struct device_attribute dev_attr_fail_timeout =
 	__ATTR(io-timeout-fail,  S_IRUGO|S_IWUSR, part_timeout_show,
 		part_timeout_store);
 #endif
+#ifdef MY_DEF_HERE
+static DEVICE_ATTR(block_resp_stat, S_IRUGO, block_resp_stat_show, NULL);
+static DEVICE_ATTR(block_resp_read_hist, S_IRUGO, block_resp_read_hist_show, NULL);
+static DEVICE_ATTR(block_resp_write_hist, S_IRUGO, block_resp_write_hist_show, NULL);
+#endif /* MY_DEF_HERE */
 
 static struct attribute *disk_attrs[] = {
 	&dev_attr_range.attr,
@@ -1020,6 +1238,14 @@ static struct attribute *disk_attrs[] = {
 #ifdef CONFIG_FAIL_IO_TIMEOUT
 	&dev_attr_fail_timeout.attr,
 #endif
+#ifdef MY_DEF_HERE
+	&dev_attr_block_resp_stat.attr,
+	&dev_attr_block_resp_read_hist.attr,
+	&dev_attr_block_resp_write_hist.attr,
+#endif /* MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+	&dev_attr_auto_remap.attr,
+#endif /* MY_ABC_HERE */
 	NULL
 };
 
@@ -1118,6 +1344,10 @@ static void disk_release(struct device *dev)
 	hd_free_part(&disk->part0);
 	if (disk->queue)
 		blk_put_queue(disk->queue);
+#ifdef MY_DEF_HERE
+	kfree(disk->mpath_info);
+	disk->mpath_info = NULL;
+#endif
 	kfree(disk);
 }
 struct class block_class = {
@@ -1300,6 +1530,18 @@ struct gendisk *alloc_disk_node(int minors, int node_id)
 		disk_to_dev(disk)->class = &block_class;
 		disk_to_dev(disk)->type = &disk_type;
 		device_initialize(disk_to_dev(disk));
+#ifdef MY_DEF_HERE
+		disk->end_sector = 0;
+		generate_random_uuid(disk->block_latency_uuid);
+		memset(&(disk->u64CplCmdCnt), 0, sizeof(disk->u64CplCmdCnt[0]) * 2);
+		memset(&(disk->u64RespTimeSum), 0, sizeof(disk->u64RespTimeSum[0]) * 2);
+		memset(&(disk->seq_ios), 0, sizeof(disk->seq_ios[0]) * SYNO_DISK_SEQ_STAT_END);
+		memset(&(disk->u64WaitTime), 0, sizeof(disk->u64WaitTime[0]) * 2);
+		memset(&(disk->u64RespTimeBuckets), 0, sizeof(disk->u64RespTimeBuckets[0][0][0]) * 2 * SYNO_BLOCK_RESPONSE_BUCKETS_END * 32);
+#endif /* MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+		disk->auto_remap = 0;
+#endif /* MY_ABC_HERE */
 	}
 	return disk;
 }
@@ -1315,7 +1557,7 @@ struct kobject *get_disk(struct gendisk *disk)
 	owner = disk->fops->owner;
 	if (owner && !try_module_get(owner))
 		return NULL;
-	kobj = kobject_get(&disk_to_dev(disk)->kobj);
+	kobj = kobject_get_unless_zero(&disk_to_dev(disk)->kobj);
 	if (kobj == NULL) {
 		module_put(owner);
 		return NULL;
@@ -1852,3 +2094,277 @@ static void disk_release_events(struct gendisk *disk)
 	WARN_ON_ONCE(disk->ev && disk->ev->block != 1);
 	kfree(disk->ev);
 }
+
+#ifdef MY_ABC_HERE
+/**
+ * Set the partition to specify remap mode
+ *
+ * @param gd     [IN] general disk. Should not be NULL
+ * @param phd    [IN] partition. Should not be NULL
+ * @param blAutoRemap
+ *               [IN] remap mode
+ */
+void
+PartitionRemapModeSet(struct gendisk *gd,
+					  struct hd_struct *phd,
+					  unsigned char blAutoRemap)
+{
+	if (!gd || !phd) {
+		goto END;
+	}
+
+	phd->auto_remap = blAutoRemap;
+
+	if (!blAutoRemap) {
+		gd->auto_remap = 0;
+	}
+END:
+	return;
+}
+
+/**
+ * Set the gendisk to specify remap mode.
+ *
+ * And also set the relative partition to that mode.
+ *
+ * @param sdev   [IN] gendisk of the target disk. Should not be NULL.
+ * @param blAutoRemap
+ *               [IN] auto remap mode.
+ */
+void
+DiskRemapModeSet(struct gendisk *disk,
+				 unsigned char blAutoRemap)
+{
+	struct hd_struct *phd = NULL;
+	int i = 0;
+
+	if (!disk) {
+		goto END;
+	}
+
+	disk->auto_remap = blAutoRemap;
+
+	/* disk part */
+	for (i = 0; i < disk->part_tbl->len; i++) {
+		phd = disk_get_part(disk, i+1);
+
+		if (!phd || !phd->nr_sects)
+			continue;
+
+		phd->auto_remap = blAutoRemap;
+	}
+END:
+	return;
+}
+
+void DiskAndPartRemapModeSet(struct gendisk *disk, struct hd_struct *bd_part, unsigned char blAutoRemap)
+{
+	/*
+	 * TOFIX: There is bd_part in a bdev, even if it is a whole disk.
+	 * Therefore the whole disk condition in the "else part" is
+	 * unreachable. You should use different branching criterion.
+	 */
+	if (bd_part) {
+		/* is a partition of some disks */
+		bd_part->auto_remap = blAutoRemap;
+	} else {
+		/* is whole disk */
+		DiskRemapModeSet(disk, blAutoRemap);
+	}
+}
+EXPORT_SYMBOL(DiskAndPartRemapModeSet);
+
+/**
+ * Set the block device to specify remap mode
+ *
+ * @param bdev   [IN] block device. Should not be NULL.
+ * @param blAutoRemap
+ *               [IN] remap mode
+ */
+void
+RaidRemapModeSet(struct block_device *bdev, unsigned char blAutoRemap)
+{
+	struct gendisk *disk = NULL;
+
+	if (!bdev) {
+		WARN_ON(1);
+		goto END;
+	}
+
+	disk = bdev->bd_disk;
+	if (!disk) {
+		WARN_ON(1);
+		goto END;
+	}
+
+#ifdef MY_DEF_HERE
+	if (disk->syno_ops && disk->syno_ops->autoremap_stackable_dev_target_set) {
+		if (0 != disk->syno_ops->autoremap_stackable_dev_target_set(bdev, blAutoRemap)) {
+			WARN_ON(1);
+			goto END;
+		}
+    }
+#endif
+
+    DiskAndPartRemapModeSet(disk, bdev->bd_part, blAutoRemap);
+
+END:
+	return;
+}
+
+unsigned char
+blSectorNeedAutoRemap(struct gendisk *disk,
+					  sector_t lba)
+{
+	struct hd_struct *phd;
+	char szName[BDEVNAME_SIZE];
+	sector_t start, end;
+	u8 ret = 0;
+	int i = 0;
+
+	if (!disk) {
+		WARN_ON(1);
+		goto END;
+	}
+
+	/* global disk auto remap */
+	if (disk->auto_remap) {
+		ret = 1;
+		printk("%s auto remap is on\n", disk->disk_name);
+		goto END;
+	}
+
+	/* disk part */
+	for (i = 0; i < disk->part_tbl->len; i++) {
+		phd = disk_get_part(disk, i+1);
+		if (!phd || !phd->nr_sects)
+			continue;
+
+		start = phd->start_sect;
+		end = phd->nr_sects + start - 1;
+
+		if (lba >= start && lba <= end) {
+			printk("lba %llu start %llu end %llu\n", (unsigned long long)lba, (unsigned long long)start, (unsigned long long)end);
+			ret = phd->auto_remap;
+			printk("%s auto_remap %u\n", disk_name(disk, i+1, szName), phd->auto_remap);
+			break;
+		}
+	}
+END:
+	return ret;
+}
+
+#ifdef MY_ABC_HERE
+void syno_req_set_bio_auto_remap_flag(struct request *req, sector_t lba)
+{
+	struct bio* b = NULL;
+	unsigned int len = 0;
+	int i = 0;
+
+	for (b = req->bio; b; b = b->bi_next) {
+		len = 0;
+		for (i = 0; i < b->bi_vcnt; i++) {
+			len += b->bi_io_vec[i].bv_len;
+		}
+		if (b->bi_iter.bi_sector <= lba && lba < b->bi_iter.bi_sector + (len >> 9)) {
+			bio_set_flag(b, BIO_AUTO_REMAP);
+			printk("%s:%s(%d) set bio BIO_AUTO_REMAP bit on\n",
+				__FILE__, __FUNCTION__, __LINE__);
+			break;
+		}
+	}
+}
+EXPORT_SYMBOL(syno_req_set_bio_auto_remap_flag);
+#endif /* MY_ABC_HERE */
+
+EXPORT_SYMBOL(blSectorNeedAutoRemap);
+EXPORT_SYMBOL(RaidRemapModeSet);
+EXPORT_SYMBOL(DiskRemapModeSet);
+EXPORT_SYMBOL(PartitionRemapModeSet);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+int
+IsDeviceDisappear(struct block_device *bdev)
+{
+	struct gendisk *disk = NULL;
+	int ret = 0;
+
+	if (!bdev) {
+		WARN_ON(1);
+		goto END;
+	}
+
+	disk = bdev->bd_disk;
+	if (!disk) {
+		WARN_ON(1);
+		goto END;
+	}
+
+	if (disk->syno_ops && disk->syno_ops->is_device_disappear) {
+		ret = disk->syno_ops->is_device_disappear(disk) ? 1 : 0;
+	} else {
+		printk("The is_device_disappear of disk %s not implemented\n",
+				disk->disk_name);
+	}
+END:
+	return ret;
+}
+
+EXPORT_SYMBOL(IsDeviceDisappear);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+int SynoDiskGetDeviceIndex(struct block_device *bdev)
+{
+	struct gendisk *disk = NULL;
+	int ret = 0;
+
+	if (!bdev) {
+		WARN_ON(1);
+		goto END;
+	}
+
+	disk = bdev->bd_disk;
+	if (!disk) {
+		WARN_ON(1);
+		goto END;
+	}
+
+	if (disk->syno_ops && disk->syno_ops->get_device_index) {
+		ret = disk->syno_ops->get_device_index(disk);
+	} else {
+		printk("The get_device_index of disk %s not implemented\n",
+				disk->disk_name);
+	}
+END:
+	return ret;
+}
+
+EXPORT_SYMBOL(SynoDiskGetDeviceIndex);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+bool IsSynoRbdDeviceEnabled(struct block_device *bdev)
+{
+#ifdef MY_ABC_HERE
+	bool ret = false;
+	struct gendisk *disk = NULL;
+
+	if (!bdev) {
+		WARN_ON(1);
+		goto out;
+	}
+
+	disk = bdev->bd_disk;
+	if (disk && disk->syno_ops && disk->syno_ops->check_device_status)
+		ret = (1 == disk->syno_ops->check_device_status(disk,
+					SYNO_DEVICE_STATUS_IS_RBD_ENABLED));
+out:
+	return ret;
+#else /* MY_ABC_HERE */
+	return false;
+#endif /* MY_ABC_HERE */
+}
+EXPORT_SYMBOL(IsSynoRbdDeviceEnabled);
+#endif /* MY_ABC_HERE */

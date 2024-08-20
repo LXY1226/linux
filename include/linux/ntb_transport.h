@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
@@ -48,13 +51,69 @@
  * Jon Mason <jon.mason@intel.com>
  */
 
+#include <linux/sizes.h>
+
+#ifdef MY_DEF_HERE
+#define NTB_QP_ID_NETWORK	0
+#define NTB_QP_ID_CACHE_PROTECTION	1
+#endif /* MY_DEF_HERE */
 struct ntb_transport_qp;
+
+#ifdef MY_DEF_HERE
+#define NTB_RAW_BLOCK_ID_MD_JOURNAL	0
+#define NTB_RAW_BLOCK_ID_CACHE_PROTECTION	1
+#define NTB_RAW_BLOCK_ID_MAX	2
+struct ntb_raw_block_attr {
+	u64 offset;
+	u64 size;
+};
+struct ntb_raw_block_attr ntb_raw_block_mapping[NTB_RAW_BLOCK_ID_MAX] = {
+	[NTB_RAW_BLOCK_ID_MD_JOURNAL] = { .offset = 0, .size = SZ_32M },
+	[NTB_RAW_BLOCK_ID_CACHE_PROTECTION] = { .offset = SZ_32M, .size = SZ_16M },
+};
+
+enum {
+	NTB_BRD_LINK_DOWN = 0,
+	NTB_BRD_LINK_UP,
+};
+struct ntb_transport_ctx;
+struct ntb_transport_raw_block {
+	struct list_head list;
+	struct ntb_transport_ctx *nt;
+	int idx;
+	void __iomem *tx_buff;
+	void *rx_buff;
+	void *client_dev;
+	void (*event_handler)(struct ntb_transport_raw_block *block, int status);
+	bool link_is_up;
+	u64 offset;
+	u64 size;
+};
+#endif /* MY_DEF_HERE */
 
 struct ntb_transport_client {
 	struct device_driver driver;
 	int (*probe)(struct device *client_dev);
 	void (*remove)(struct device *client_dev);
 };
+
+#ifdef MY_DEF_HERE
+
+struct SYNO_NTB_CONFIG_VER_INFO {
+	unsigned int mtu;
+};
+
+#ifdef MY_DEF_HERE
+/* Version is start from 0 as default */
+#define SYNO_NTB_CONFIG_VER 1
+
+struct SYNO_NTB_CONFIG_VER_INFO gSynoConfigVerInfo[SYNO_NTB_CONFIG_VER + 1] = {
+	{.mtu = 30000},     //Version 0
+	{.mtu = 1500},      //Version 1
+};
+#endif /* MY_DEF_HERE */
+#endif /* MY_DEF_HERE */
+
 
 int ntb_transport_register_client(struct ntb_transport_client *drvr);
 void ntb_transport_unregister_client(struct ntb_transport_client *drvr);
@@ -74,6 +133,11 @@ unsigned int ntb_transport_max_size(struct ntb_transport_qp *qp);
 struct ntb_transport_qp *
 ntb_transport_create_queue(void *data, struct device *client_dev,
 			   const struct ntb_queue_handlers *handlers);
+#ifdef MY_DEF_HERE
+struct ntb_transport_qp *
+ntb_transport_create_queue_by_idx(void *data, struct device *client_dev, int idx,
+			   const struct ntb_queue_handlers *handlers);
+#endif /* MY_DEF_HERE */
 void ntb_transport_free_queue(struct ntb_transport_qp *qp);
 int ntb_transport_rx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 			     unsigned int len);
@@ -83,4 +147,14 @@ void *ntb_transport_rx_remove(struct ntb_transport_qp *qp, unsigned int *len);
 void ntb_transport_link_up(struct ntb_transport_qp *qp);
 void ntb_transport_link_down(struct ntb_transport_qp *qp);
 bool ntb_transport_link_query(struct ntb_transport_qp *qp);
+#ifdef MY_DEF_HERE
+u32 ntb_transport_remote_syno_conf_ver(struct ntb_transport_qp *qp);
+#endif /* MY_DEF_HERE */
 unsigned int ntb_transport_tx_free_entry(struct ntb_transport_qp *qp);
+
+#ifdef MY_DEF_HERE
+struct ntb_transport_raw_block *
+ntb_transport_create_block(struct device *client_dev, int idx,
+		void (*event_handler)(struct ntb_transport_raw_block *block, int status));
+void ntb_transport_free_block(struct ntb_transport_raw_block *block);
+#endif /* MY_DEF_HERE */

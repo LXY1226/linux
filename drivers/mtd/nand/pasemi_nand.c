@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2006-2007 PA Semi, Inc
  *
@@ -45,7 +48,11 @@ static const char driver_name[] = "pasemi-nand";
 
 static void pasemi_read_buf(struct mtd_info *mtd, u_char *buf, int len)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	while (len > 0x800) {
 		memcpy_fromio(buf, chip->IO_ADDR_R, 0x800);
@@ -57,7 +64,11 @@ static void pasemi_read_buf(struct mtd_info *mtd, u_char *buf, int len)
 
 static void pasemi_write_buf(struct mtd_info *mtd, const u_char *buf, int len)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	while (len > 0x800) {
 		memcpy_toio(chip->IO_ADDR_R, buf, 0x800);
@@ -70,7 +81,11 @@ static void pasemi_write_buf(struct mtd_info *mtd, const u_char *buf, int len)
 static void pasemi_hwcontrol(struct mtd_info *mtd, int cmd,
 			     unsigned int ctrl)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	if (cmd == NAND_CMD_NONE)
 		return;
@@ -194,7 +209,11 @@ static int pasemi_nand_remove(struct platform_device *ofdev)
 	if (!pasemi_nand_mtd)
 		return 0;
 
+#if defined(MY_ABC_HERE)
+	chip = mtd_to_nand(pasemi_nand_mtd);
+#else /* MY_ABC_HERE */
 	chip = pasemi_nand_mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	/* Release resources, unregister device */
 	nand_release(pasemi_nand_mtd);

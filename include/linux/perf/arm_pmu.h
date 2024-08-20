@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/arch/arm/include/asm/pmu.h
  *
@@ -104,14 +107,24 @@ struct arm_pmu {
 	atomic_t	active_events;
 	struct mutex	reserve_mutex;
 	u64		max_period;
+#if defined(MY_ABC_HERE)
+	bool		secure_access; /* 32-bit ARM only */
+#endif /* MY_ABC_HERE */
 	struct platform_device	*plat_device;
 	struct pmu_hw_events	__percpu *hw_events;
 	struct notifier_block	hotplug_nb;
+#if defined(MY_ABC_HERE)
+	struct notifier_block	cpu_pm_nb;
+#endif /* MY_ABC_HERE */
 };
 
 #define to_arm_pmu(p) (container_of(p, struct arm_pmu, pmu))
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 int armpmu_register(struct arm_pmu *armpmu, int type);
+#endif /* MY_ABC_HERE */
 
 u64 armpmu_event_update(struct perf_event *event);
 

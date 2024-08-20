@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2007, 2008, Marvell International Ltd.
  *
@@ -37,6 +40,9 @@
 #define XOR_DESC_OPERATION_XOR          (0 << 24)
 #define XOR_DESC_OPERATION_CRC32C       (1 << 24)
 #define XOR_DESC_OPERATION_MEMCPY       (2 << 24)
+#if defined(MY_ABC_HERE)
+#define XOR_DESC_OPERATION_PQ           (5 << 24)
+#endif /* MY_ABC_HERE */
 
 #define XOR_DESC_DMA_OWNED		BIT(31)
 #define XOR_DESC_EOD_INT_EN		BIT(31)
@@ -85,6 +91,9 @@ struct mv_xor_device {
 	void __iomem	     *xor_high_base;
 	struct clk	     *clk;
 	struct mv_xor_chan   *channels[MV_XOR_MAX_CHANNELS];
+#if defined(MY_ABC_HERE)
+	bool                 xor_armada3700;
+#endif /* MY_ABC_HERE */
 };
 
 /**
@@ -110,7 +119,11 @@ struct mv_xor_chan {
 	void __iomem		*mmr_high_base;
 	unsigned int		idx;
 	int                     irq;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	enum dma_transaction_type	current_type;
+#endif /* MY_ABC_HERE */
 	struct list_head	chain;
 	struct list_head	free_slots;
 	struct list_head	allocated_slots;
@@ -126,6 +139,9 @@ struct mv_xor_chan {
 	char			dummy_src[MV_XOR_MIN_BYTE_COUNT];
 	char			dummy_dst[MV_XOR_MIN_BYTE_COUNT];
 	dma_addr_t		dummy_src_addr, dummy_dst_addr;
+#if defined(MY_ABC_HERE)
+	u32                     saved_config_reg, saved_int_mask_reg;
+#endif /* MY_ABC_HERE */
 };
 
 /**
@@ -162,9 +178,17 @@ struct mv_xor_desc {
 	u32 desc_command;	/* type of operation to be carried out */
 	u32 phy_next_desc;	/* next descriptor address pointer */
 	u32 byte_count;		/* size of src/dst blocks in bytes */
+#if defined(MY_ABC_HERE)
+	u32 phy_dest_addr;	/* destination block address, or P buffer address */
+#else /* MY_ABC_HERE */
 	u32 phy_dest_addr;	/* destination block address */
+#endif /* MY_ABC_HERE */
 	u32 phy_src_addr[8];	/* source block addresses */
+#if defined(MY_ABC_HERE)
+	u32 phy_q_dest_addr;	/* Q buffer address */
+#else /* MY_ABC_HERE */
 	u32 reserved0;
+#endif /* MY_ABC_HERE */
 	u32 reserved1;
 };
 #define mv_phy_src_idx(src_idx) (src_idx)
@@ -174,11 +198,19 @@ struct mv_xor_desc {
 	u32 status;		/* descriptor execution status */
 	u32 phy_next_desc;	/* next descriptor address pointer */
 	u32 desc_command;	/* type of operation to be carried out */
+#if defined(MY_ABC_HERE)
+	u32 phy_dest_addr;	/* destination block address, or P buffer address */
+#else /* MY_ABC_HERE */
 	u32 phy_dest_addr;	/* destination block address */
+#endif /* MY_ABC_HERE */
 	u32 byte_count;		/* size of src/dst blocks in bytes */
 	u32 phy_src_addr[8];	/* source block addresses */
 	u32 reserved1;
+#if defined(MY_ABC_HERE)
+	u32 phy_q_dest_addr;	/* Q buffer address */
+#else /* MY_ABC_HERE */
 	u32 reserved0;
+#endif /* MY_ABC_HERE */
 };
 #define mv_phy_src_idx(src_idx) (src_idx ^ 1)
 #endif

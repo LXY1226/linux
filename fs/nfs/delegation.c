@@ -236,6 +236,8 @@ static struct inode *nfs_delegation_grab_inode(struct nfs_delegation *delegation
 	spin_lock(&delegation->lock);
 	if (delegation->inode != NULL)
 		inode = igrab(delegation->inode);
+	if (!inode)
+		set_bit(NFS_DELEGATION_INODE_FREEING, &delegation->flags);
 	spin_unlock(&delegation->lock);
 	return inode;
 }
@@ -841,6 +843,9 @@ restart:
 	list_for_each_entry_rcu(server, &clp->cl_superblocks, client_link) {
 		list_for_each_entry_rcu(delegation, &server->delegations,
 								super_list) {
+			if (test_bit(NFS_DELEGATION_INODE_FREEING,
+						&delegation->flags))
+				continue;
 			if (test_bit(NFS_DELEGATION_RETURNING,
 						&delegation->flags))
 				continue;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * iSCSI Initiator over TCP/IP Data-Path
  *
@@ -371,24 +374,41 @@ static inline int iscsi_sw_tcp_xmit_qlen(struct iscsi_conn *conn)
 static int iscsi_sw_tcp_pdu_xmit(struct iscsi_task *task)
 {
 	struct iscsi_conn *conn = task->conn;
+#ifdef MY_ABC_HERE
+	int rc;
+#else
 	unsigned long pflags = current->flags;
 	int rc = 0;
 
 	current->flags |= PF_MEMALLOC;
+#endif /* MY_ABC_HERE */
 
 	while (iscsi_sw_tcp_xmit_qlen(conn)) {
 		rc = iscsi_sw_tcp_xmit(conn);
+#ifdef MY_ABC_HERE
+		if (rc == 0)
+			return -EAGAIN;
+#else
 		if (rc == 0) {
 			rc = -EAGAIN;
 			break;
 		}
+#endif /* MY_ABC_HERE */
 		if (rc < 0)
+#ifdef MY_ABC_HERE
+			return rc;
+#else
 			break;
 		rc = 0;
+#endif /* MY_ABC_HERE */
 	}
 
+#ifdef MY_ABC_HERE
+	return 0;
+#else
 	tsk_restore_flags(current, pflags, PF_MEMALLOC);
 	return rc;
+#endif /* MY_ABC_HERE */
 }
 
 /*
@@ -673,7 +693,10 @@ iscsi_sw_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	sk->sk_reuse = SK_CAN_REUSE;
 	sk->sk_sndtimeo = 15 * HZ; /* FIXME: make it configurable */
 	sk->sk_allocation = GFP_ATOMIC;
+#ifdef MY_ABC_HERE
+#else
 	sk_set_memalloc(sk);
+#endif /* MY_ABC_HERE */
 
 	iscsi_sw_tcp_conn_set_callbacks(conn);
 	tcp_sw_conn->sendpage = tcp_sw_conn->sock->ops->sendpage;
@@ -953,6 +976,13 @@ static int iscsi_sw_tcp_slave_configure(struct scsi_device *sdev)
 	return 0;
 }
 
+#if defined(MY_ABC_HERE) && defined(MY_ABC_HERE)
+static int syno_iscsi_index_get(struct Scsi_Host *host, uint channel, uint id, uint lun)
+{
+	return SYNO_ISCSI_DEVICE_INDEX;
+}
+#endif /* MY_ABC_HERE && MY_ABC_HERE*/
+
 static struct scsi_host_template iscsi_sw_tcp_sht = {
 	.module			= THIS_MODULE,
 	.name			= "iSCSI Initiator over TCP/IP",
@@ -972,6 +1002,9 @@ static struct scsi_host_template iscsi_sw_tcp_sht = {
 	.proc_name		= "iscsi_tcp",
 	.this_id		= -1,
 	.track_queue_depth	= 1,
+#if defined(MY_ABC_HERE) && defined(MY_ABC_HERE)
+	.syno_index_get 	= syno_iscsi_index_get,
+#endif /* MY_ABC_HERE && MY_ABC_HERE*/
 };
 
 static struct iscsi_transport iscsi_sw_tcp_transport = {

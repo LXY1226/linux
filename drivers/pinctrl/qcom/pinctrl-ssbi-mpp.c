@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2015, Sony Mobile Communications AB.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
@@ -821,7 +824,11 @@ static int pm8xxx_mpp_probe(struct platform_device *pdev)
 
 	pctrl->chip = pm8xxx_mpp_template;
 	pctrl->chip.base = -1;
+#if defined(MY_ABC_HERE)
+	pctrl->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	pctrl->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	pctrl->chip.of_node = pdev->dev.of_node;
 	pctrl->chip.of_gpio_n_cells = 2;
 	pctrl->chip.label = dev_name(pctrl->dev);

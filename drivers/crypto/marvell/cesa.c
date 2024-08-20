@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Support for Marvell's Cryptographic Engine and Security Accelerator (CESA)
  * that can be found on the following platform: Orion, Kirkwood, Armada. This
@@ -31,22 +34,60 @@
 
 #include "cesa.h"
 
+#if defined(MY_ABC_HERE)
+/* Limit of the crypto queue before reaching the backlog */
+#define CESA_CRYPTO_DEFAULT_MAX_QLEN 128
+
+#endif /* MY_ABC_HERE */
 static int allhwsupport = !IS_ENABLED(CONFIG_CRYPTO_DEV_MV_CESA);
 module_param_named(allhwsupport, allhwsupport, int, 0444);
 MODULE_PARM_DESC(allhwsupport, "Enable support for all hardware (even it if overlaps with the mv_cesa driver)");
 
 struct mv_cesa_dev *cesa_dev;
 
-static void mv_cesa_dequeue_req_unlocked(struct mv_cesa_engine *engine)
+#if defined(MY_ABC_HERE)
+struct crypto_async_request *
+mv_cesa_dequeue_req_locked(struct mv_cesa_engine *engine,
+			   struct crypto_async_request **backlog)
 {
+	struct crypto_async_request *req;
+
+	*backlog = crypto_get_backlog(&engine->queue);
+	req = crypto_dequeue_request(&engine->queue);
+
+	if (!req)
+		return NULL;
+
+	return req;
+}
+
+static void mv_cesa_rearm_engine(struct mv_cesa_engine *engine)
+#else /* MY_ABC_HERE */
+static void mv_cesa_dequeue_req_unlocked(struct mv_cesa_engine *engine)
+#endif /* MY_ABC_HERE */
+{
+#if defined(MY_ABC_HERE)
+	struct crypto_async_request *req = NULL, *backlog = NULL;
+#else /* MY_ABC_HERE */
 	struct crypto_async_request *req, *backlog;
+#endif /* MY_ABC_HERE */
 	struct mv_cesa_ctx *ctx;
 
+#if defined(MY_ABC_HERE)
+
+	spin_lock_bh(&engine->lock);
+	if (!engine->req) {
+		req = mv_cesa_dequeue_req_locked(engine, &backlog);
+		engine->req = req;
+	}
+	spin_unlock_bh(&engine->lock);
+#else /* MY_ABC_HERE */
 	spin_lock_bh(&cesa_dev->lock);
 	backlog = crypto_get_backlog(&cesa_dev->queue);
 	req = crypto_dequeue_request(&cesa_dev->queue);
 	engine->req = req;
 	spin_unlock_bh(&cesa_dev->lock);
+#endif /* MY_ABC_HERE */
 
 	if (!req)
 		return;
@@ -55,8 +96,54 @@ static void mv_cesa_dequeue_req_unlocked(struct mv_cesa_engine *engine)
 		backlog->complete(backlog, -EINPROGRESS);
 
 	ctx = crypto_tfm_ctx(req->tfm);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	ctx->ops->prepare(req, engine);
+#endif /* MY_ABC_HERE */
 	ctx->ops->step(req);
+#if defined(MY_ABC_HERE)
+
+	return;
+}
+
+static int mv_cesa_std_process(struct mv_cesa_engine *engine, u32 status)
+{
+	struct crypto_async_request *req;
+	struct mv_cesa_ctx *ctx;
+	int res;
+
+	req = engine->req;
+	ctx = crypto_tfm_ctx(req->tfm);
+	res = ctx->ops->process(req, status);
+
+	if (res == 0) {
+		ctx->ops->complete(req);
+		mv_cesa_engine_enqueue_complete_request(engine, req);
+	} else if (res == -EINPROGRESS) {
+		ctx->ops->step(req);
+	}
+
+	return res;
+}
+
+static int mv_cesa_int_process(struct mv_cesa_engine *engine, u32 status)
+{
+	if (engine->chain.first && engine->chain.last)
+		return mv_cesa_tdma_process(engine, status);
+
+	return mv_cesa_std_process(engine, status);
+}
+
+static inline void
+mv_cesa_complete_req(struct mv_cesa_ctx *ctx, struct crypto_async_request *req,
+		     int res)
+{
+	ctx->ops->cleanup(req);
+	local_bh_disable();
+	req->complete(req, res);
+	local_bh_enable();
+#endif /* MY_ABC_HERE */
 }
 
 static irqreturn_t mv_cesa_int(int irq, void *priv)
@@ -83,12 +170,42 @@ static irqreturn_t mv_cesa_int(int irq, void *priv)
 		writel(~status, engine->regs + CESA_SA_FPGA_INT_STATUS);
 		writel(~status, engine->regs + CESA_SA_INT_STATUS);
 
+#if defined(MY_ABC_HERE)
+		/* Process fetched requests */
+		res = mv_cesa_int_process(engine, status & mask);
+#endif /* MY_ABC_HERE */
 		ret = IRQ_HANDLED;
+
 		spin_lock_bh(&engine->lock);
 		req = engine->req;
+#if defined(MY_ABC_HERE)
+		if (res != -EINPROGRESS)
+			engine->req = NULL;
+#endif /* MY_ABC_HERE */
 		spin_unlock_bh(&engine->lock);
+#if defined(MY_ABC_HERE)
+
+		ctx = crypto_tfm_ctx(req->tfm);
+
+		if (res && res != -EINPROGRESS)
+			mv_cesa_complete_req(ctx, req, res);
+
+		/* Launch the next pending request */
+		mv_cesa_rearm_engine(engine);
+
+		/* Iterate over the complete queue */
+		while (true) {
+			req = mv_cesa_engine_dequeue_complete_request(engine);
+			if (!req)
+				break;
+
+#else /* MY_ABC_HERE */
 		if (req) {
+#endif /* MY_ABC_HERE */
 			ctx = crypto_tfm_ctx(req->tfm);
+#if defined(MY_ABC_HERE)
+			mv_cesa_complete_req(ctx, req, 0);
+#else /* MY_ABC_HERE */
 			res = ctx->ops->process(req, status & mask);
 			if (res != -EINPROGRESS) {
 				spin_lock_bh(&engine->lock);
@@ -102,30 +219,54 @@ static irqreturn_t mv_cesa_int(int irq, void *priv)
 			} else {
 				ctx->ops->step(req);
 			}
+#endif /* MY_ABC_HERE */
 		}
 	}
 
 	return ret;
 }
 
+#if defined(MY_ABC_HERE)
+int mv_cesa_queue_req(struct crypto_async_request *req,
+		      struct mv_cesa_req *creq)
+#else /* MY_ABC_HERE */
 int mv_cesa_queue_req(struct crypto_async_request *req)
+#endif /* MY_ABC_HERE */
 {
 	int ret;
+#if defined(MY_ABC_HERE)
+	struct mv_cesa_engine *engine = creq->engine;
+#else /* MY_ABC_HERE */
 	int i;
 
+#endif /* MY_ABC_HERE */
+#if defined(MY_ABC_HERE)
+	spin_lock_bh(&engine->lock);
+	ret = crypto_enqueue_request(&engine->queue, req);
+	if ((mv_cesa_req_get_type(creq) == CESA_DMA_REQ) &&
+	    (ret == -EINPROGRESS ||
+	    (ret == -EBUSY && req->flags & CRYPTO_TFM_REQ_MAY_BACKLOG)))
+		mv_cesa_tdma_chain(engine, creq);
+	spin_unlock_bh(&engine->lock);
+#else /* MY_ABC_HERE */
 	spin_lock_bh(&cesa_dev->lock);
 	ret = crypto_enqueue_request(&cesa_dev->queue, req);
 	spin_unlock_bh(&cesa_dev->lock);
+#endif /* MY_ABC_HERE */
 
 	if (ret != -EINPROGRESS)
 		return ret;
 
+#if defined(MY_ABC_HERE)
+	mv_cesa_rearm_engine(engine);
+#else /* MY_ABC_HERE */
 	for (i = 0; i < cesa_dev->caps->nengines; i++) {
 		spin_lock_bh(&cesa_dev->engines[i].lock);
 		if (!cesa_dev->engines[i].req)
 			mv_cesa_dequeue_req_unlocked(&cesa_dev->engines[i]);
 		spin_unlock_bh(&cesa_dev->engines[i].lock);
 	}
+#endif /* MY_ABC_HERE */
 
 	return -EINPROGRESS;
 }
@@ -416,7 +557,11 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	spin_lock_init(&cesa->lock);
+#if defined(MY_ABC_HERE)
+
+#else /* MY_ABC_HERE */
 	crypto_init_queue(&cesa->queue, 50);
+#endif /* MY_ABC_HERE */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "regs");
 	cesa->regs = devm_ioremap_resource(dev, res);
 	if (IS_ERR(cesa->regs))
@@ -475,20 +620,46 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		engine->regs = cesa->regs + CESA_ENGINE_OFF(i);
 
 		if (dram && cesa->caps->has_tdma)
+#if defined(MY_ABC_HERE)
+			mv_cesa_conf_mbus_windows(engine, dram);
+#else /* MY_ABC_HERE */
 			mv_cesa_conf_mbus_windows(&cesa->engines[i], dram);
+#endif /* MY_ABC_HERE */
 
+#if defined(MY_ABC_HERE)
+		writel(0, engine->regs + CESA_SA_INT_STATUS);
+#else /* MY_ABC_HERE */
 		writel(0, cesa->engines[i].regs + CESA_SA_INT_STATUS);
+#endif /* MY_ABC_HERE */
 		writel(CESA_SA_CFG_STOP_DIG_ERR,
+#if defined(MY_ABC_HERE)
+		       engine->regs + CESA_SA_CFG);
+#else /* MY_ABC_HERE */
 		       cesa->engines[i].regs + CESA_SA_CFG);
+#endif /* MY_ABC_HERE */
 		writel(engine->sram_dma & CESA_SA_SRAM_MSK,
+#if defined(MY_ABC_HERE)
+		       engine->regs + CESA_SA_DESC_P0);
+#else /* MY_ABC_HERE */
 		       cesa->engines[i].regs + CESA_SA_DESC_P0);
+#endif /* MY_ABC_HERE */
 
 		ret = devm_request_threaded_irq(dev, irq, NULL, mv_cesa_int,
 						IRQF_ONESHOT,
 						dev_name(&pdev->dev),
+#if defined(MY_ABC_HERE)
+						engine);
+#else /* MY_ABC_HERE */
 						&cesa->engines[i]);
+#endif /* MY_ABC_HERE */
 		if (ret)
 			goto err_cleanup;
+#if defined(MY_ABC_HERE)
+
+		crypto_init_queue(&engine->queue, CESA_CRYPTO_DEFAULT_MAX_QLEN);
+		atomic_set(&engine->load, 0);
+		INIT_LIST_HEAD(&engine->complete_queue);
+#endif /* MY_ABC_HERE */
 	}
 
 	cesa_dev = cesa;

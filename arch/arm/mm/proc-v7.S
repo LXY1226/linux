@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/arch/arm/mm/proc-v7.S
  *
@@ -274,6 +277,11 @@ __v7_ca5mp_setup:
 __v7_ca9mp_setup:
 __v7_cr7mp_setup:
 	mov	r10, #(1 << 0)			@ Cache/TLB ops broadcasting
+#if defined(MY_ABC_HERE)
+#ifdef CONFIG_CPU_L1_CACHE_PREF_ENABLE
+	orr	r10, r10, #(1 << 2)
+#endif
+#endif /* MY_ABC_HERE */
 	b	1f
 __v7_ca7mp_setup:
 __v7_ca12mp_setup:

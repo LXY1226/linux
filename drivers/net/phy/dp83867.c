@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Driver for the Texas Instruments DP83867 PHY
  *
@@ -106,7 +109,11 @@ static int dp83867_config_intr(struct phy_device *phydev)
 static int dp83867_of_init(struct phy_device *phydev)
 {
 	struct dp83867_private *dp83867 = phydev->priv;
+#if defined(MY_ABC_HERE)
+	struct device *dev = &phydev->mdio.dev;
+#else /* MY_ABC_HERE */
 	struct device *dev = &phydev->dev;
+#endif /* MY_ABC_HERE */
 	struct device_node *of_node = dev->of_node;
 	int ret;
 
@@ -143,8 +150,13 @@ static int dp83867_config_init(struct phy_device *phydev)
 	u16 val, delay;
 
 	if (!phydev->priv) {
+#if defined(MY_ABC_HERE)
+		dp83867 = devm_kzalloc(&phydev->mdio.dev, sizeof(*dp83867),
+				       GFP_KERNEL);
+#else /* MY_ABC_HERE */
 		dp83867 = devm_kzalloc(&phydev->dev, sizeof(*dp83867),
 				       GFP_KERNEL);
+#endif /* MY_ABC_HERE */
 		if (!dp83867)
 			return -ENOMEM;
 
@@ -163,10 +175,17 @@ static int dp83867_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
+#if defined(MY_ABC_HERE)
+	if ((phydev->interface >= PHY_INTERFACE_MODE_RGMII_ID) &&
+	    (phydev->interface <= PHY_INTERFACE_MODE_RGMII_RXID)) {
+		val = phy_read_mmd_indirect(phydev, DP83867_RGMIICTL,
+					    DP83867_DEVADDR);
+#else /* MY_ABC_HERE */
 	if ((phydev->interface >= PHY_INTERFACE_MODE_RGMII_ID) &&
 	    (phydev->interface <= PHY_INTERFACE_MODE_RGMII_RXID)) {
 		val = phy_read_mmd_indirect(phydev, DP83867_RGMIICTL,
 					    DP83867_DEVADDR, phydev->addr);
+#endif /* MY_ABC_HERE */
 
 		if (phydev->interface == PHY_INTERFACE_MODE_RGMII_ID)
 			val |= (DP83867_RGMII_TX_CLK_DELAY_EN | DP83867_RGMII_RX_CLK_DELAY_EN);
@@ -177,14 +196,24 @@ static int dp83867_config_init(struct phy_device *phydev)
 		if (phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID)
 			val |= DP83867_RGMII_RX_CLK_DELAY_EN;
 
+#if defined(MY_ABC_HERE)
+		phy_write_mmd_indirect(phydev, DP83867_RGMIICTL,
+				       DP83867_DEVADDR, val);
+#else /* MY_ABC_HERE */
 		phy_write_mmd_indirect(phydev, DP83867_RGMIICTL,
 				       DP83867_DEVADDR, phydev->addr, val);
+#endif /* MY_ABC_HERE */
 
 		delay = (dp83867->rx_id_delay |
 			(dp83867->tx_id_delay << DP83867_RGMII_TX_CLK_DELAY_SHIFT));
 
+#if defined(MY_ABC_HERE)
+		phy_write_mmd_indirect(phydev, DP83867_RGMIIDCTL,
+				       DP83867_DEVADDR, delay);
+#else /* MY_ABC_HERE */
 		phy_write_mmd_indirect(phydev, DP83867_RGMIIDCTL,
 				       DP83867_DEVADDR, phydev->addr, delay);
+#endif /* MY_ABC_HERE */
 	}
 
 	/* Enable Interrupt output INT_OE in CFG3 register */
@@ -228,7 +257,11 @@ static struct phy_driver dp83867_driver[] = {
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 		.driver		= {.owner = THIS_MODULE,}
+#endif /* MY_ABC_HERE */
 	},
 };
 module_phy_driver(dp83867_driver);

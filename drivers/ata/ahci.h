@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  ahci.h - Common AHCI SATA definitions and declarations
  *
@@ -50,6 +53,16 @@
 #define EM_MSG_LED_VALUE_ACTIVITY     0x00070000
 #define EM_MSG_LED_VALUE_OFF          0xfff80000
 #define EM_MSG_LED_VALUE_ON           0x00010000
+
+#ifdef MY_DEF_HERE
+#define EM_MSG_LOCATE_LED_MASK        0x00380000
+#define EM_MSG_FAULT_LED_MASK         0x01c00000
+
+enum {
+	ATA_FLAG_SW_LOCATE      = (1 << 24), /* driver supports sw locate led */
+	ATA_FLAG_SW_FAULT       = (1 << 25), /* driver supports sw fault led */
+};
+#endif /* MY_DEF_HERE */
 
 enum {
 	AHCI_MAX_PORTS		= 32,
@@ -142,6 +155,10 @@ enum {
 	PORT_SCR_NTF		= 0x3c, /* SATA phy register: SNotification */
 	PORT_FBS		= 0x40, /* FIS-based Switching */
 	PORT_DEVSLP		= 0x44, /* device sleep */
+#if defined(MY_ABC_HERE)
+	PORT_INDIRECT_ADDR	= 0x78, /* Indirect Access Port PHY Address Register */
+	PORT_INDIRECT_DATA	= 0x7c, /* Indirect Access Port PHY Data Register */
+#endif /* MY_ABC_HERE */
 
 	/* PORT_IRQ_{STAT,MASK} bits */
 	PORT_IRQ_COLD_PRES	= (1 << 31), /* cold presence detect */
@@ -215,6 +232,14 @@ enum {
 	PORT_DEVSLP_DSP		= (1 << 1),       /* DevSlp present */
 	PORT_DEVSLP_ADSE	= (1 << 0),       /* Aggressive DevSlp enable */
 
+#if defined(MY_ABC_HERE)
+	/* PORT OOB Params */
+	PORT_OOB_INDIRECT_ADDR	= 0x48,		/* OOB register address */
+	PORT_OOB_COMRESET_U_MASK = 0x3f,	/* OOB COMRESET UPPER LIMIT MASK */
+	PORT_OOB_COMWAKE_OFFSET	= 12,		/* OOB COMWAKE OFFSET */
+	PORT_OOB_COMWAKE_MASK	= (0xf << 12),	/* OOB COMWAKE MASK */
+
+#endif /* MY_ABC_HERE */
 	/* hpriv->flags bits */
 
 #define AHCI_HFLAGS(flags)		.private_data	= (void *)(flags)
@@ -242,6 +267,9 @@ enum {
 	AHCI_HFLAG_NO_FBS		= (1 << 18), /* no FBS */
 	AHCI_HFLAG_EDGE_IRQ		= (1 << 19), /* HOST_IRQ_STAT behaves as
 							Edge Triggered */
+#ifdef MY_ABC_HERE
+	AHCI_HFLAG_YES_MV9235_FIX   = (1 << 31),
+#endif /* MY_ABC_HERE */
 
 	/* ap->flags bits */
 
@@ -294,6 +322,12 @@ struct ahci_em_priv {
 	unsigned long saved_activity;
 	unsigned long activity;
 	unsigned long led_state;
+#ifdef MY_DEF_HERE
+	unsigned long saved_locate;
+	unsigned long locate;
+	unsigned long saved_fault;
+	unsigned long fault;
+#endif /* MY_DEF_HERE */
 };
 
 struct ahci_port_priv {
@@ -346,12 +380,37 @@ struct ahci_host_priv {
 	unsigned		nports;		/* Number of ports */
 	void			*plat_data;	/* Other platform data */
 	unsigned int		irq;		/* interrupt line */
+#if defined(MY_ABC_HERE)
+
+	/* OOB (Out of Band) parameters */
+	/* High limit of the spacing between two bursts of COMRESET */
+	u32 comreset_u;
+	/* High limit of the spacing between two bursts of COMWAKE */
+	u32 comwake;
+
+#endif /* MY_ABC_HERE */
 	/*
 	 * Optional ahci_start_engine override, if not set this gets set to the
 	 * default ahci_start_engine during ahci_save_initial_config, this can
 	 * be overridden anytime before the host is activated.
 	 */
 	void			(*start_engine)(struct ata_port *ap);
+
+#if defined(MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
+	/* In A8k A0 AHCI unit the port register offsets are not
+	 * according to AHCI specification. We determine at runtime the revision
+	 * and set the correct offsets from device-tree.
+	 */
+	u32			port_base;	/* Offset of ports registers */
+	u32			port_offset;	/* Offset between port registers */
+	int			a8k_a0_wa;	/* Boolean to determine if A0
+						 * WA should be applied
+						 */
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 };
 
 extern int ahci_ignore_sss;
@@ -374,6 +433,19 @@ extern struct device_attribute *ahci_sdev_attrs[];
 extern struct ata_port_operations ahci_ops;
 extern struct ata_port_operations ahci_platform_ops;
 extern struct ata_port_operations ahci_pmp_retry_srst_ops;
+
+#ifdef MY_ABC_HERE
+extern int sata_syno_ahci_defer_cmd(struct ata_queued_cmd *qc);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+extern int ahci_syno_pmp_3x26_qc_defer(struct ata_queued_cmd *qc);
+#endif /* MY_DEF_HERE */
+
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+extern struct ata_device *ata_scsi_find_dev(struct ata_port *ap,
+                                            const struct scsi_device *scsidev);
+#endif /* MY_DEF_HERE || MY_DEF_HERE */
 
 unsigned int ahci_dev_classify(struct ata_port *ap);
 void ahci_fill_cmd_slot(struct ahci_port_priv *pp, unsigned int tag,
@@ -401,12 +473,29 @@ void ahci_print_info(struct ata_host *host, const char *scc_s);
 int ahci_host_activate(struct ata_host *host, struct scsi_host_template *sht);
 void ahci_error_handler(struct ata_port *ap);
 
+#if defined(MY_DEF_HERE) || defined(MY_ABC_HERE)
+static inline void __iomem *ahci_host_base(struct ata_host *host)
+{
+	struct ahci_host_priv *hpriv = host->private_data;
+	return hpriv->mmio;
+}
+#endif /* MY_DEF_HERE || MY_ABC_HERE */
+
 static inline void __iomem *__ahci_port_base(struct ata_host *host,
 					     unsigned int port_no)
 {
 	struct ahci_host_priv *hpriv = host->private_data;
 	void __iomem *mmio = hpriv->mmio;
 
+#if defined(MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
+	if (hpriv->a8k_a0_wa && hpriv->port_base && hpriv->port_offset)
+		return mmio + hpriv->port_base + (port_no * hpriv->port_offset);
+
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 	return mmio + 0x100 + (port_no * 0x80);
 }
 
@@ -419,5 +508,15 @@ static inline int ahci_nr_ports(u32 cap)
 {
 	return (cap & 0x1f) + 1;
 }
+
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+/*
+ *	Check PCI vender and device for JMB585, JMB582
+ */
+static inline int syno_jmb58x_check(unsigned short vendor, unsigned short device)
+{
+	return (PCI_VENDOR_ID_JMICRON == vendor && ( 0x0585 == device || 0x0582 == device)) ? 0 : -1;
+}
+#endif /* MY_DEF_HERE || CONFIG_SYNO_JMICRON_585_DUBIOUS_IFS_FIXv|| MY_DEF_HERE */
 
 #endif /* _AHCI_H */

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2011 STRATO.  All rights reserved.
  *
@@ -30,7 +33,11 @@ struct inode_fs_paths {
 };
 
 typedef int (iterate_extent_inodes_t)(u64 inum, u64 offset, u64 root,
-		void *ctx);
+				      void *ctx
+#ifdef MY_DEF_HERE
+				      , int extent_type
+#endif /* MY_DEF_HERE */
+				      );
 
 int extent_from_logical(struct btrfs_fs_info *fs_info, u64 logical,
 			struct btrfs_path *path, struct btrfs_key *found_key,
@@ -51,6 +58,19 @@ int iterate_inodes_from_logical(u64 logical, struct btrfs_fs_info *fs_info,
 
 int paths_from_inode(u64 inum, struct inode_fs_paths *ipath);
 
+#ifdef MY_DEF_HERE
+int check_root_inode_ref(struct btrfs_trans_handle *trans,
+		    struct btrfs_fs_info *fs_info, u64 bytenr,
+		    u64 datao, u64 root_objectid, u64 ino, u64 offset,
+		    int in_run_delayed);
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+int btrfs_find_shared_root(struct btrfs_fs_info *fs_info,
+			 u64 bytenr, u64 parent_bytenr,
+			 u64 datao, u64 *counted_root, struct ulist *root_list,
+			 struct btrfs_snapshot_size_entry *entry,
+			 struct btrfs_snapshot_size_ctx *ctx);
+#endif /* MY_DEF_HERE */
 int btrfs_find_all_roots(struct btrfs_trans_handle *trans,
 			 struct btrfs_fs_info *fs_info, u64 bytenr,
 			 u64 time_seq, struct ulist **roots);

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *	Spanning tree protocol; timer-related code
  *	Linux ethernet bridge
@@ -98,7 +101,11 @@ static void br_forward_delay_timer_expired(unsigned long arg)
 			br_topology_change_detection(br);
 		netif_carrier_on(br->dev);
 	}
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	br_log_state(p);
+#endif /* MY_ABC_HERE */
 	rcu_read_lock();
 	br_ifinfo_notify(RTM_NEWLINK, p);
 	rcu_read_unlock();

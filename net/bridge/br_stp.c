@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *	Spanning tree protocol; generic parts
  *	Linux ethernet bridge
@@ -30,12 +33,16 @@ static const char *const br_port_state_names[] = {
 	[BR_STATE_BLOCKING] = "blocking",
 };
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 void br_log_state(const struct net_bridge_port *p)
 {
 	br_info(p->br, "port %u(%s) entered %s state\n",
 		(unsigned int) p->port_no, p->dev->name,
 		br_port_state_names[p->state]);
 }
+#endif /* MY_ABC_HERE */
 
 void br_set_state(struct net_bridge_port *p, unsigned int state)
 {
@@ -51,6 +58,12 @@ void br_set_state(struct net_bridge_port *p, unsigned int state)
 	if (err && err != -EOPNOTSUPP)
 		br_warn(p->br, "error setting offload STP state on port %u(%s)\n",
 				(unsigned int) p->port_no, p->dev->name);
+#if defined(MY_ABC_HERE)
+	else
+		br_info(p->br, "port %u(%s) entered %s state\n",
+				(unsigned int) p->port_no, p->dev->name,
+				br_port_state_names[p->state]);
+#endif /* MY_ABC_HERE */
 }
 
 /* called under bridge lock */
@@ -125,7 +138,11 @@ static void br_root_port_block(const struct net_bridge *br,
 		  (unsigned int) p->port_no, p->dev->name);
 
 	br_set_state(p, BR_STATE_LISTENING);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	br_log_state(p);
+#endif /* MY_ABC_HERE */
 	br_ifinfo_notify(RTM_NEWLINK, p);
 
 	if (br->forward_delay > 0)
@@ -406,7 +423,11 @@ static void br_make_blocking(struct net_bridge_port *p)
 			br_topology_change_detection(p->br);
 
 		br_set_state(p, BR_STATE_BLOCKING);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 		br_log_state(p);
+#endif /* MY_ABC_HERE */
 		br_ifinfo_notify(RTM_NEWLINK, p);
 
 		del_timer(&p->forward_delay_timer);
@@ -430,7 +451,11 @@ static void br_make_forwarding(struct net_bridge_port *p)
 	else
 		br_set_state(p, BR_STATE_LEARNING);
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	br_log_state(p);
+#endif /* MY_ABC_HERE */
 	br_ifinfo_notify(RTM_NEWLINK, p);
 
 	if (br->forward_delay != 0)

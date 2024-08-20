@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /**
  * Copyright (C) 2006 Juergen Beisert, Pengutronix
  * Copyright (C) 2008 Guennadi Liakhovetski, Pengutronix
@@ -189,7 +192,11 @@ int __max730x_probe(struct max7301 *ts)
 
 	ts->chip.ngpio = PIN_NUMBER;
 	ts->chip.can_sleep = true;
+#if defined(MY_ABC_HERE)
+	ts->chip.parent = dev;
+#else /* MY_ABC_HERE */
 	ts->chip.dev = dev;
+#endif /* MY_ABC_HERE */
 	ts->chip.owner = THIS_MODULE;
 
 	/*

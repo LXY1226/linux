@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/fs.h>
 #include <linux/types.h>
 #include "ctree.h"
@@ -80,18 +83,30 @@ struct dentry *btrfs_get_dentry(struct super_block *sb, u64 objectid,
 		err = PTR_ERR(root);
 		goto fail;
 	}
+#ifdef MY_DEF_HERE
+	btrfs_hold_fs_root(root);
+	srcu_read_unlock(&fs_info->subvol_srcu, index);
+#endif /* MY_DEF_HERE */
 
 	key.objectid = objectid;
 	key.type = BTRFS_INODE_ITEM_KEY;
 	key.offset = 0;
 
 	inode = btrfs_iget(sb, &key, root, NULL);
+#ifdef MY_DEF_HERE
+	btrfs_release_fs_root(root);
+	if (IS_ERR(inode)) {
+		err = PTR_ERR(inode);
+		return ERR_PTR(err);
+	}
+#else
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto fail;
 	}
 
 	srcu_read_unlock(&fs_info->subvol_srcu, index);
+#endif /* MY_DEF_HERE */
 
 	if (check_generation && generation != inode->i_generation) {
 		iput(inode);

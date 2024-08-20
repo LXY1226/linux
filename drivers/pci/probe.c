@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * probe.c - PCI detection and setup code
  */
@@ -17,6 +20,9 @@
 #include <linux/acpi.h>
 #include <asm-generic/pci-bridge.h>
 #include "pci.h"
+#ifdef MY_DEF_HERE
+#include <linux/synobios.h>
+#endif /* MY_DEF_HERE */
 
 #define CARDBUS_LATENCY_TIMER	176	/* secondary latency timer */
 #define CARDBUS_RESERVE_BUSNR	3
@@ -180,6 +186,12 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	struct pci_bus_region region, inverted_region;
 
 	mask = type ? PCI_ROM_ADDRESS_MASK : ~0;
+#ifdef MY_DEF_HERE
+	if (PCI_VENDOR_ID_INTEL == dev->vendor && 0x2934 == dev->device) {
+		dev_printk(KERN_INFO, &dev->dev, "[%04x:%04x] Reading BAR - reg %x\n",
+		   dev->vendor, dev->device, pos);
+	}
+#endif /* MY_DEF_HERE */
 
 	/* No printks while decoding is disabled! */
 	if (!dev->mmio_always_on) {
@@ -310,6 +322,12 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 fail:
 	res->flags = 0;
 out:
+#ifdef MY_DEF_HERE
+	if (PCI_VENDOR_ID_INTEL == dev->vendor && 0x2934 == dev->device) {
+		dev_printk(KERN_INFO, &dev->dev, "[%04x:%04x] Sizing Complete - reg %x\n",
+		   dev->vendor, dev->device, pos);
+	}
+#endif /* MY_DEF_HERE */
 	if (res->flags)
 		dev_printk(KERN_DEBUG, &dev->dev, "reg 0x%x: %pR\n", pos, res);
 
@@ -1059,6 +1077,24 @@ void set_pcie_hotplug_bridge(struct pci_dev *pdev)
 		pdev->is_hotplug_bridge = 1;
 }
 
+static void set_pcie_thunderbolt(struct pci_dev *dev)
+{
+	int vsec = 0;
+	u32 header;
+
+	while ((vsec = pci_find_next_ext_capability(dev, vsec,
+						    PCI_EXT_CAP_ID_VNDR))) {
+		pci_read_config_dword(dev, vsec + PCI_VNDR_HEADER, &header);
+
+		/* Is the device part of a Thunderbolt controller? */
+		if (dev->vendor == PCI_VENDOR_ID_INTEL &&
+		    PCI_VNDR_HEADER_ID(header) == PCI_VSEC_ID_INTEL_TBT) {
+			dev->is_thunderbolt = 1;
+			return;
+		}
+	}
+}
+
 /**
  * pci_ext_cfg_is_aliased - is ext config space just an alias of std config?
  * @dev: PCI device
@@ -1167,6 +1203,47 @@ void pci_msi_setup_pci_dev(struct pci_dev *dev)
 		pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_ENABLE, 0);
 }
 
+#ifdef MY_ABC_HERE
+extern int gSynoResetFlag;
+void syno_pcie_nvme_check(struct pci_dev *dev)
+{
+	u16 slotStat = 0;
+	u16 linkStat = 0;
+	u16 linkStat2 = 0;
+
+	// For RTK 2824 switch and synology subsystem_vendor
+	if (0x1b21 == dev->vendor && 0x2824 == dev->device && 0x7053 == dev->subsystem_vendor) {
+		// For M2D20 and E10M20-T1
+		if ((0x3001 == dev->subsystem_device && (0x4 == PCI_SLOT(dev->devfn) || 0x8 == PCI_SLOT(dev->devfn))) ||
+				(0x2002 == dev->subsystem_device && (0x4 == PCI_SLOT(dev->devfn) || 0x8 == PCI_SLOT(dev->devfn)))) {
+			if (0 != pcie_capability_read_word(dev, PCI_EXP_SLTSTA, &slotStat)) {
+				goto END;
+			}
+			if (0 != pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &linkStat)) {
+				goto END;
+			}
+			if (0 != pcie_capability_read_word(dev, PCI_EXP_LNKSTA2, &linkStat2)) {
+				goto END;
+			}
+			dev_printk(KERN_ERR, &dev->dev, "Present %d Active %d Sta2 reg: %x\n", !!(slotStat & PCI_EXP_SLTSTA_PDS),
+					!!(linkStat & PCI_EXP_LNKSTA_DLLLA), linkStat2);
+			/*
+			 * We check 2 situations
+			 * 1. present = 1 but active = 0
+			 * 2. present = 0 but Equalization Complete | Equalization 1 success | Equalization 2 success | Equalization 3 success
+			 * Ref: Link Status 2 Register (Offset 32h)
+			 */
+			if ((0 != (slotStat & PCI_EXP_SLTSTA_PDS) && 0 == (linkStat & PCI_EXP_LNKSTA_DLLLA)) ||
+					(0 == (slotStat & PCI_EXP_SLTSTA_PDS) && (0 != (linkStat2 & 0x1E)))) {
+				gSynoResetFlag = 1;
+			}
+		}
+	}
+END:
+	return;
+}
+#endif /* MY_ABC_HERE */
+
 /**
  * pci_setup_device - fill in class and map information of a device
  * @dev: the device structure to fill
@@ -1212,9 +1289,11 @@ int pci_setup_device(struct pci_dev *dev)
 
 	dev_printk(KERN_DEBUG, &dev->dev, "[%04x:%04x] type %02x class %#08x\n",
 		   dev->vendor, dev->device, dev->hdr_type, dev->class);
-
 	/* need to have dev->class ready */
 	dev->cfg_size = pci_cfg_space_size(dev);
+
+	/* need to have dev->cfg_size ready */
+	set_pcie_thunderbolt(dev);
 
 	/* "Unknown power state" */
 	dev->current_state = PCI_UNKNOWN;
@@ -1304,6 +1383,15 @@ int pci_setup_device(struct pci_dev *dev)
 			pci_read_config_word(dev, pos + PCI_SSVID_VENDOR_ID, &dev->subsystem_vendor);
 			pci_read_config_word(dev, pos + PCI_SSVID_DEVICE_ID, &dev->subsystem_device);
 		}
+	
+#ifdef MY_DEF_HERE
+		if (syno_is_hw_version(HW_DS1621p) || syno_is_hw_version(HW_DS1520p)) {
+			if ( 0x1b21 == dev->vendor && 0x1806 == dev->device ) {
+				dev->subsystem_vendor = 0;
+				dev->subsystem_device = 0;
+			}
+		}
+#endif /* MY_DEF_HERE */
 		break;
 
 	case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */
@@ -1326,6 +1414,9 @@ int pci_setup_device(struct pci_dev *dev)
 		dev->class = PCI_CLASS_NOT_DEFINED << 8;
 	}
 
+#ifdef MY_ABC_HERE
+	syno_pcie_nvme_check(dev);
+#endif /* MY_ABC_HERE */
 	/* We found a fine healthy device, go go go... */
 	return 0;
 }
@@ -2117,6 +2208,15 @@ unsigned int pci_scan_child_bus(struct pci_bus *bus)
 			if (pci_is_bridge(dev))
 				max = pci_scan_bridge(bus, dev, max, pass);
 		}
+
+	/*
+	 * Make sure a hotplug bridge has at least the minimum requested
+	 * number of buses.
+	 */
+	if (bus->self && bus->self->is_hotplug_bridge && pci_hotplug_bus_size) {
+		if (max - bus->busn_res.start < pci_hotplug_bus_size - 1)
+			max = bus->busn_res.start + pci_hotplug_bus_size - 1;
+	}
 
 	/*
 	 * We've scanned the bus and so we know all about what's on

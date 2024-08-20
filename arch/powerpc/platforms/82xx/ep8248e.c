@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Embedded Planet EP8248E support
  *
@@ -131,11 +134,15 @@ static int ep8248e_mdio_probe(struct platform_device *ofdev)
 	if (!bus)
 		return -ENOMEM;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
 	if (bus->irq == NULL) {
 		ret = -ENOMEM;
 		goto err_free_bus;
 	}
+#endif /* MY_ABC_HERE */
 
 	bus->name = "ep8248e-mdio-bitbang";
 	bus->parent = &ofdev->dev;
@@ -143,11 +150,19 @@ static int ep8248e_mdio_probe(struct platform_device *ofdev)
 
 	ret = of_mdiobus_register(bus, ofdev->dev.of_node);
 	if (ret)
+#if defined(MY_ABC_HERE)
+		goto err_free_bus;
+#else /* MY_ABC_HERE */
 		goto err_free_irq;
+#endif /* MY_ABC_HERE */
 
 	return 0;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 err_free_irq:
 	kfree(bus->irq);
+#endif /* MY_ABC_HERE */
 err_free_bus:
 	free_mdio_bitbang(bus);
 	return ret;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Machine check handler.
  *
@@ -96,6 +99,11 @@ static DECLARE_WAIT_QUEUE_HEAD(mce_chrdev_wait);
 static DEFINE_PER_CPU(struct mce, mces_seen);
 static int			cpu_missing;
 
+#ifdef MY_DEF_HERE
+int (*funcSYNOECCNotification)(unsigned int type, unsigned int syndrome, u64 memAddr) = NULL;
+EXPORT_SYMBOL(funcSYNOECCNotification);
+#endif /* MY_DEF_HERE */
+
 /*
  * MCA banks polled by the period polling timer for corrected events.
  * With Intel CMCI, this only has MCA banks which do not support CMCI (if any).
@@ -130,7 +138,10 @@ void mce_setup(struct mce *m)
 {
 	memset(m, 0, sizeof(struct mce));
 	m->cpu = m->extcpu = smp_processor_id();
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	m->tsc = rdtsc();
+#endif /* MY_DEF_HERE */
 	/* We hope get_seconds stays lockless */
 	m->time = get_seconds();
 	m->cpuvendor = boot_cpu_data.x86_vendor;
@@ -214,11 +225,13 @@ EXPORT_SYMBOL_GPL(mce_inject_log);
 
 static struct notifier_block mce_srao_nb;
 
+static atomic_t num_notifiers;
+
 void mce_register_decode_chain(struct notifier_block *nb)
 {
-	/* Ensure SRAO notifier has the highest priority in the decode chain. */
-	if (nb != &mce_srao_nb && nb->priority == INT_MAX)
-		nb->priority -= 1;
+	atomic_inc(&num_notifiers);
+
+	WARN_ON(nb->priority > MCE_PRIO_LOWEST && nb->priority < MCE_PRIO_EDAC);
 
 	atomic_notifier_chain_register(&x86_mce_decoder_chain, nb);
 }
@@ -226,21 +239,72 @@ EXPORT_SYMBOL_GPL(mce_register_decode_chain);
 
 void mce_unregister_decode_chain(struct notifier_block *nb)
 {
+	atomic_dec(&num_notifiers);
+
 	atomic_notifier_chain_unregister(&x86_mce_decoder_chain, nb);
 }
 EXPORT_SYMBOL_GPL(mce_unregister_decode_chain);
 
-static void print_mce(struct mce *m)
+#ifdef MY_DEF_HERE
+static inline u32 ctl_reg(int bank)
 {
-	int ret = 0;
+	return MSR_IA32_MCx_CTL(bank);
+}
 
-	pr_emerg(HW_ERR "CPU %d: Machine Check Exception: %Lx Bank %d: %016Lx\n",
-	       m->extcpu, m->mcgstatus, m->bank, m->status);
+static inline u32 status_reg(int bank)
+{
+	return MSR_IA32_MCx_STATUS(bank);
+}
+
+static inline u32 addr_reg(int bank)
+{
+	return MSR_IA32_MCx_ADDR(bank);
+}
+
+static inline u32 misc_reg(int bank)
+{
+	return MSR_IA32_MCx_MISC(bank);
+}
+
+static inline u32 smca_ctl_reg(int bank)
+{
+	return MSR_AMD64_SMCA_MCx_CTL(bank);
+}
+
+static inline u32 smca_status_reg(int bank)
+{
+	return MSR_AMD64_SMCA_MCx_STATUS(bank);
+}
+
+static inline u32 smca_addr_reg(int bank)
+{
+	return MSR_AMD64_SMCA_MCx_ADDR(bank);
+}
+
+static inline u32 smca_misc_reg(int bank)
+{
+	return MSR_AMD64_SMCA_MCx_MISC(bank);
+}
+
+struct mca_msr_regs msr_ops = {
+	.ctl	= ctl_reg,
+	.status	= status_reg,
+	.addr	= addr_reg,
+	.misc	= misc_reg
+};
+#endif /* MY_DEF_HERE */
+
+static void __print_mce(struct mce *m)
+{
+	pr_emerg(HW_ERR "CPU %d: Machine Check%s: %Lx Bank %d: %016Lx\n",
+		 m->extcpu,
+		 (m->mcgstatus & MCG_STATUS_MCIP ? " Exception" : ""),
+		 m->mcgstatus, m->bank, m->status);
 
 	if (m->ip) {
 		pr_emerg(HW_ERR "RIP%s %02x:<%016Lx> ",
 			!(m->mcgstatus & MCG_STATUS_EIPV) ? " !INEXACT!" : "",
-				m->cs, m->ip);
+			m->cs, m->ip);
 
 		if (m->cs == __KERNEL_CS)
 			print_symbol("{%s}", m->ip);
@@ -253,6 +317,15 @@ static void print_mce(struct mce *m)
 	if (m->misc)
 		pr_cont("MISC %llx ", m->misc);
 
+#ifdef MY_DEF_HERE
+	if (mce_flags.smca) {
+		if (m->synd)
+			pr_cont("SYND %llx ", m->synd);
+		if (m->ipid)
+			pr_cont("IPID %llx ", m->ipid);
+	}
+#endif /* MY_DEF_HERE */
+
 	pr_cont("\n");
 	/*
 	 * Note this output is parsed by external tools and old fields
@@ -261,6 +334,13 @@ static void print_mce(struct mce *m)
 	pr_emerg(HW_ERR "PROCESSOR %u:%x TIME %llu SOCKET %u APIC %x microcode %x\n",
 		m->cpuvendor, m->cpuid, m->time, m->socketid, m->apicid,
 		m->microcode);
+}
+
+static void print_mce(struct mce *m)
+{
+	int ret = 0;
+
+	__print_mce(m);
 
 	/*
 	 * Print out human-readable details about the MCE error,
@@ -362,12 +442,21 @@ static int msr_to_offset(u32 msr)
 
 	if (msr == mca_cfg.rip_msr)
 		return offsetof(struct mce, ip);
+#ifdef MY_DEF_HERE
+	if (msr == msr_ops.status(bank))
+		return offsetof(struct mce, status);
+	if (msr == msr_ops.addr(bank))
+		return offsetof(struct mce, addr);
+	if (msr == msr_ops.misc(bank))
+		return offsetof(struct mce, misc);
+#else /* MY_DEF_HERE */
 	if (msr == MSR_IA32_MCx_STATUS(bank))
 		return offsetof(struct mce, status);
 	if (msr == MSR_IA32_MCx_ADDR(bank))
 		return offsetof(struct mce, addr);
 	if (msr == MSR_IA32_MCx_MISC(bank))
 		return offsetof(struct mce, misc);
+#endif /* MY_DEF_HERE */
 	if (msr == MSR_IA32_MCG_STATUS)
 		return offsetof(struct mce, mcgstatus);
 	return -1;
@@ -498,7 +587,33 @@ static int srao_decode_notifier(struct notifier_block *nb, unsigned long val,
 }
 static struct notifier_block mce_srao_nb = {
 	.notifier_call	= srao_decode_notifier,
-	.priority = INT_MAX,
+	.priority	= MCE_PRIO_SRAO,
+};
+
+static int mce_default_notifier(struct notifier_block *nb, unsigned long val,
+				void *data)
+{
+	struct mce *m = (struct mce *)data;
+
+	if (!m)
+		return NOTIFY_DONE;
+
+	/*
+	 * Run the default notifier if we have only the SRAO
+	 * notifier and us registered.
+	 */
+	if (atomic_read(&num_notifiers) > 2)
+		return NOTIFY_DONE;
+
+	__print_mce(m);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block mce_default_nb = {
+	.notifier_call	= mce_default_notifier,
+	/* lowest prio, we want it to run last. */
+	.priority	= MCE_PRIO_LOWEST,
 };
 
 /*
@@ -506,11 +621,17 @@ static struct notifier_block mce_srao_nb = {
  */
 static void mce_read_aux(struct mce *m, int i)
 {
+#ifdef MY_DEF_HERE
+	if (m->status & MCI_STATUS_MISCV)
+		m->misc = mce_rdmsrl(msr_ops.misc(i));
+	if (m->status & MCI_STATUS_ADDRV) {
+		m->addr = mce_rdmsrl(msr_ops.addr(i));
+#else /* MY_DEF_HERE */
 	if (m->status & MCI_STATUS_MISCV)
 		m->misc = mce_rdmsrl(MSR_IA32_MCx_MISC(i));
 	if (m->status & MCI_STATUS_ADDRV) {
 		m->addr = mce_rdmsrl(MSR_IA32_MCx_ADDR(i));
-
+#endif /* MY_DEF_HERE */
 		/*
 		 * Mask the reported address by the reported granularity.
 		 */
@@ -519,7 +640,28 @@ static void mce_read_aux(struct mce *m, int i)
 			m->addr >>= shift;
 			m->addr <<= shift;
 		}
+
+#ifdef MY_DEF_HERE
+		/*
+		 * Extract [55:<lsb>] where lsb is the least significant
+		 * *valid* bit of the address bits.
+		 */
+		if (mce_flags.smca) {
+			u8 lsb = (m->addr >> 56) & 0x3f;
+
+			m->addr &= GENMASK_ULL(55, lsb);
+		}
+#endif /* MY_DEF_HERE */
 	}
+
+#ifdef MY_DEF_HERE
+	if (mce_flags.smca) {
+		m->ipid = mce_rdmsrl(MSR_AMD64_SMCA_MCx_IPID(i));
+
+		if (m->status & MCI_STATUS_SYNDV)
+			m->synd = mce_rdmsrl(MSR_AMD64_SMCA_MCx_SYND(i));
+	}
+#endif /* MY_DEF_HERE */
 }
 
 static bool memory_error(struct mce *m)
@@ -576,10 +718,18 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 	struct mce m;
 	int severity;
 	int i;
+#ifdef MY_DEF_HERE
+	u64 mstatus, eccsyndrome;
+#endif /* MY_DEF_HERE */
 
 	this_cpu_inc(mce_poll_count);
 
 	mce_gather_info(&m, NULL);
+
+#ifdef MY_DEF_HERE
+	if (flags & MCP_TIMESTAMP)
+		m.tsc = rdtsc();
+#endif /* MY_DEF_HERE */
 
 	for (i = 0; i < mca_cfg.banks; i++) {
 		if (!mce_banks[i].ctl || !test_bit(i, *b))
@@ -591,7 +741,11 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		m.tsc = 0;
 
 		barrier();
+#ifdef MY_DEF_HERE
+		m.status = mce_rdmsrl(msr_ops.status(i));
+#else /* MY_DEF_HERE */
 		m.status = mce_rdmsrl(MSR_IA32_MCx_STATUS(i));
+#endif /* MY_DEF_HERE */
 		if (!(m.status & MCI_STATUS_VAL))
 			continue;
 
@@ -607,6 +761,16 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 			continue;
 
 		mce_read_aux(&m, i);
+
+#ifdef MY_DEF_HERE
+		mstatus = ((m.status & SYNO_MCI_STATUS_ECC) >> SYNO_MCI_STATUS_UECC_SHIFT);
+		eccsyndrome = ((m.status & SYNO_MCI_STATUS_ECC_SYNDROME) >> SYNO_MCI_STATUS_ECC_SYNDROME_SHIFT);
+		if (funcSYNOECCNotification &&
+			((m.status & SYNO_MCI_STATUS_ECC))) {
+			funcSYNOECCNotification(((unsigned int *)(void *)&mstatus)[0],
+					((unsigned int *)(void *)&eccsyndrome)[0], m.addr);
+		}
+#endif /* MY_DEF_HERE */
 
 		if (!(flags & MCP_TIMESTAMP))
 			m.tsc = 0;
@@ -639,7 +803,11 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		/*
 		 * Clear state for this bank.
 		 */
+#ifdef CONFG_SYNO_AMD_MCE_PORTING
+		mce_wrmsrl(msr_ops.status(i), 0);
+#else /* CONFG_SYNO_AMD_MCE_PORTING */
 		mce_wrmsrl(MSR_IA32_MCx_STATUS(i), 0);
+#endif /* CONFG_SYNO_AMD_MCE_PORTING */
 	}
 
 	/*
@@ -664,7 +832,11 @@ static int mce_no_way_out(struct mce *m, char **msg, unsigned long *validp,
 	char *tmp;
 
 	for (i = 0; i < mca_cfg.banks; i++) {
+#ifdef CONFG_SYNO_AMD_MCE_PORTING
+		m->status = mce_rdmsrl(msr_ops.status(i));
+#else /* CONFG_SYNO_AMD_MCE_PORTING */
 		m->status = mce_rdmsrl(MSR_IA32_MCx_STATUS(i));
+#endif /* CONFG_SYNO_AMD_MCE_PORTING */
 		if (m->status & MCI_STATUS_VAL) {
 			__set_bit(i, validp);
 			if (quirk_no_way_out)
@@ -960,7 +1132,11 @@ static void mce_clear_state(unsigned long *toclear)
 
 	for (i = 0; i < mca_cfg.banks; i++) {
 		if (test_bit(i, toclear))
+#ifdef CONFG_SYNO_AMD_MCE_PORTING
+			mce_wrmsrl(msr_ops.status(i), 0);
+#else /* CONFG_SYNO_AMD_MCE_PORTING */
 			mce_wrmsrl(MSR_IA32_MCx_STATUS(i), 0);
+#endif /* CONFG_SYNO_AMD_MCE_PORTING */
 	}
 }
 
@@ -1030,6 +1206,9 @@ void do_machine_check(struct pt_regs *regs, long error_code)
 		goto out;
 
 	mce_gather_info(&m, regs);
+#ifdef MY_DEF_HERE
+	m.tsc = rdtsc();
+#endif /* MY_DEF_HERE */
 
 	final = this_cpu_ptr(&mces_seen);
 	*final = m;
@@ -1079,7 +1258,11 @@ void do_machine_check(struct pt_regs *regs, long error_code)
 		m.addr = 0;
 		m.bank = i;
 
+#ifdef MY_DEF_HERE
+		m.status = mce_rdmsrl(msr_ops.status(i));
+#else /* MY_DEF_HERE */
 		m.status = mce_rdmsrl(MSR_IA32_MCx_STATUS(i));
+#endif /* MY_DEF_HERE */
 		if ((m.status & MCI_STATUS_VAL) == 0)
 			continue;
 
@@ -1378,13 +1561,12 @@ EXPORT_SYMBOL_GPL(mce_notify_irq);
 static int __mcheck_cpu_mce_banks_init(void)
 {
 	int i;
-	u8 num_banks = mca_cfg.banks;
 
-	mce_banks = kzalloc(num_banks * sizeof(struct mce_bank), GFP_KERNEL);
+	mce_banks = kzalloc(MAX_NR_BANKS * sizeof(struct mce_bank), GFP_KERNEL);
 	if (!mce_banks)
 		return -ENOMEM;
 
-	for (i = 0; i < num_banks; i++) {
+	for (i = 0; i < MAX_NR_BANKS; i++) {
 		struct mce_bank *b = &mce_banks[i];
 
 		b->ctl = -1ULL;
@@ -1398,24 +1580,16 @@ static int __mcheck_cpu_mce_banks_init(void)
  */
 static int __mcheck_cpu_cap_init(void)
 {
-	unsigned b;
 	u64 cap;
+	u8 b;
 
 	rdmsrl(MSR_IA32_MCG_CAP, cap);
 
 	b = cap & MCG_BANKCNT_MASK;
-	if (!mca_cfg.banks)
-		pr_info("CPU supports %d MCE banks\n", b);
-
-	if (b > MAX_NR_BANKS) {
-		pr_warn("Using only %u machine check banks out of %u\n",
-			MAX_NR_BANKS, b);
+	if (WARN_ON_ONCE(b > MAX_NR_BANKS))
 		b = MAX_NR_BANKS;
-	}
 
-	/* Don't support asymmetric configurations today */
-	WARN_ON(mca_cfg.banks != 0 && b != mca_cfg.banks);
-	mca_cfg.banks = b;
+	mca_cfg.banks = max(mca_cfg.banks, b);
 
 	if (!mce_banks) {
 		int err = __mcheck_cpu_mce_banks_init();
@@ -1461,8 +1635,13 @@ static void __mcheck_cpu_init_generic(void)
 
 		if (!b->init)
 			continue;
+#ifdef MY_DEF_HERE
+		wrmsrl(msr_ops.ctl(i), b->ctl);
+		wrmsrl(msr_ops.status(i), 0);
+#else /* MY_DEF_HERE */
 		wrmsrl(MSR_IA32_MCx_CTL(i), b->ctl);
 		wrmsrl(MSR_IA32_MCx_STATUS(i), 0);
+#endif /* MY_DEF_HERE */
 	}
 }
 
@@ -1514,7 +1693,11 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 			 */
 			clear_bit(10, (unsigned long *)&mce_banks[4].ctl);
 		}
+#ifdef MY_DEF_HERE
+		if (c->x86 < 17 && cfg->bootlog < 0) {
+#else /* MY_DEF_HERE */
 		if (c->x86 <= 17 && cfg->bootlog < 0) {
+#endif /* MY_DEF_HERE */
 			/*
 			 * Lots of broken BIOS around that don't clear them
 			 * by default and leave crap in there. Don't log:
@@ -1635,12 +1818,29 @@ static void __mcheck_cpu_init_vendor(struct cpuinfo_x86 *c)
 		break;
 
 	case X86_VENDOR_AMD: {
+#ifdef MY_DEF_HERE 
+		mce_amd_feature_init(c);
+		mce_flags.overflow_recov = !!cpu_has(c, X86_FEATURE_OVERFLOW_RECOV);
+		mce_flags.succor	 = !!cpu_has(c, X86_FEATURE_SUCCOR);
+		mce_flags.smca		 = !!cpu_has(c, X86_FEATURE_SMCA);
+
+		/*
+		 * Install proper ops for Scalable MCA enabled processors
+		 */
+		if (mce_flags.smca) {
+			msr_ops.ctl     = smca_ctl_reg;
+			msr_ops.status  = smca_status_reg;
+			msr_ops.addr    = smca_addr_reg;
+			msr_ops.misc    = smca_misc_reg;
+		}
+#else /* MY_DEF_HERE */
 		u32 ebx = cpuid_ebx(0x80000007);
 
-		mce_amd_feature_init(c);
 		mce_flags.overflow_recov = !!(ebx & BIT(0));
 		mce_flags.succor	 = !!(ebx & BIT(1));
 		mce_flags.smca		 = !!(ebx & BIT(3));
+#endif /* MY_DEF_HERE */
+		mce_amd_feature_init(c);
 
 		break;
 		}
@@ -2068,6 +2268,7 @@ int __init mcheck_init(void)
 {
 	mcheck_intel_therm_init();
 	mce_register_decode_chain(&mce_srao_nb);
+	mce_register_decode_chain(&mce_default_nb);
 	mcheck_vendor_init_severity();
 
 	INIT_WORK(&mce_work, mce_process_work);
@@ -2092,7 +2293,11 @@ static void mce_disable_error_reporting(void)
 		struct mce_bank *b = &mce_banks[i];
 
 		if (b->init)
+#ifdef MY_DEF_HERE
+			wrmsrl(msr_ops.ctl(i), 0);
+#else /* MY_DEF_HERE */
 			wrmsrl(MSR_IA32_MCx_CTL(i), 0);
+#endif /* MY_DEF_HERE */
 	}
 	return;
 }
@@ -2183,7 +2388,10 @@ static struct bus_type mce_subsys = {
 
 DEFINE_PER_CPU(struct device *, mce_device);
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 void (*threshold_cpu_callback)(unsigned long action, unsigned int cpu);
+#endif /* MY_DEF_HERE */
 
 static inline struct mce_bank *attr_to_bank(struct device_attribute *attr)
 {
@@ -2351,6 +2559,12 @@ static int mce_device_create(unsigned int cpu)
 	if (!mce_available(&boot_cpu_data))
 		return -EIO;
 
+#ifdef MY_DEF_HERE
+	dev = per_cpu(mce_device, cpu);
+	if (dev)
+		return 0;
+#endif /* MY_DEF_HERE */
+
 	dev = kzalloc(sizeof *dev, GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
@@ -2437,7 +2651,11 @@ static void mce_reenable_cpu(void *h)
 		struct mce_bank *b = &mce_banks[i];
 
 		if (b->init)
+#ifdef MY_DEF_HERE
+			wrmsrl(msr_ops.ctl(i), b->ctl);
+#else /* MY_DEF_HERE */
 			wrmsrl(MSR_IA32_MCx_CTL(i), b->ctl);
+#endif /* MY_DEF_HERE */
 	}
 }
 
@@ -2451,12 +2669,23 @@ mce_cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
 	switch (action & ~CPU_TASKS_FROZEN) {
 	case CPU_ONLINE:
 		mce_device_create(cpu);
+#ifdef MY_DEF_HERE
+		if (mce_threshold_create_device(cpu)) {
+			mce_device_remove(cpu);
+			return NOTIFY_BAD;
+		}
+#else /* MY_DEF_HERE */
 		if (threshold_cpu_callback)
 			threshold_cpu_callback(action, cpu);
+#endif /* MY_DEF_HERE */
 		break;
 	case CPU_DEAD:
+#ifdef MY_DEF_HERE
+		mce_threshold_remove_device(cpu);
+#else /* MY_DEF_HERE */
 		if (threshold_cpu_callback)
 			threshold_cpu_callback(action, cpu);
+#endif /* MY_DEF_HERE */
 		mce_device_remove(cpu);
 		mce_intel_hcpu_update(cpu);
 
@@ -2636,6 +2865,8 @@ static int __init mcheck_debugfs_init(void) { return -EINVAL; }
 
 static int __init mcheck_late_init(void)
 {
+	pr_info("Using %d MCE banks\n", mca_cfg.banks);
+
 	mcheck_debugfs_init();
 
 	/*

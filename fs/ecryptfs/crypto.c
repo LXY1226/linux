@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /**
  * eCryptfs: Linux filesystem encryption layer
  *
@@ -522,6 +525,9 @@ int ecryptfs_encrypt_page(struct page *page)
 				  PAGE_CACHE_SIZE);
 	kunmap(enc_extent_page);
 	if (rc < 0) {
+#ifdef MY_ABC_HERE
+		if (-EDQUOT != rc && -ENOSPC != rc)
+#endif /* MY_ABC_HERE */
 		ecryptfs_printk(KERN_ERR,
 			"Error attempting to write lower page; rc = [%d]\n",
 			rc);
@@ -534,6 +540,58 @@ out:
 	}
 	return rc;
 }
+
+#ifdef MY_DEF_HERE
+int ecryptfs_encrypt_page_export(struct page *enc_page,
+				   void *crypt_stat_ptr,
+				   struct page *page)
+{
+	int rc = 0;
+	loff_t extent_offset;
+	struct ecryptfs_crypt_stat *crypt_stat = (struct ecryptfs_crypt_stat *) crypt_stat_ptr;
+
+	for (extent_offset = 0;
+	     extent_offset < (PAGE_CACHE_SIZE / crypt_stat->extent_size);
+	     extent_offset++) {
+		rc = crypt_extent(crypt_stat, enc_page, page,
+				  extent_offset, ENCRYPT);
+		if (rc) {
+			printk(KERN_ERR "%s: Error encrypting extent; "
+			       "rc = [%d]\n", __func__, rc);
+			goto out;
+		}
+	}
+
+	rc = 0;
+out:
+	return rc;
+}
+EXPORT_SYMBOL(ecryptfs_encrypt_page_export);
+
+int ecryptfs_encrypt_page_zero_copy(struct file *file, struct page **pages, int num_page)
+{
+	struct inode *ecryptfs_inode;
+	struct ecryptfs_crypt_stat *crypt_stat;
+	loff_t offset;
+	int rc = 0;
+
+	ecryptfs_inode = pages[0]->mapping->host;
+	crypt_stat =
+		&(ecryptfs_inode_to_private(ecryptfs_inode)->crypt_stat);
+	BUG_ON(!(crypt_stat->flags & ECRYPTFS_ENCRYPTED));
+	offset = lower_offset_for_page(crypt_stat, pages[0]);
+	rc = file->f_op->ecryptfs_zero_copy(file, offset, num_page, pages,
+	      (void *)crypt_stat);
+	if (rc) {
+		printk("ecryptfs_zero_copy failed:%d\n", rc);
+		rc = -EINVAL;
+		goto out;
+	}
+	rc = 0;
+out:
+	return rc;
+}
+#endif /* MY_DEF_HERE */
 
 /**
  * ecryptfs_decrypt_page
@@ -559,6 +617,10 @@ int ecryptfs_decrypt_page(struct page *page)
 	unsigned long extent_offset;
 	loff_t lower_offset;
 	int rc = 0;
+#ifdef MY_ABC_HERE
+	int i = 0;
+	char *syno_virt;
+#endif /* MY_ABC_HERE */
 
 	ecryptfs_inode = page->mapping->host;
 	crypt_stat =
@@ -569,6 +631,9 @@ int ecryptfs_decrypt_page(struct page *page)
 	page_virt = kmap(page);
 	rc = ecryptfs_read_lower(page_virt, lower_offset, PAGE_CACHE_SIZE,
 				 ecryptfs_inode);
+#ifdef MY_ABC_HERE
+	if (rc < 0)
+#endif /* MY_ABC_HERE */
 	kunmap(page);
 	if (rc < 0) {
 		ecryptfs_printk(KERN_ERR,
@@ -576,7 +641,20 @@ int ecryptfs_decrypt_page(struct page *page)
 			rc);
 		goto out;
 	}
-
+#ifdef MY_ABC_HERE
+	syno_virt = page_virt;
+	for (i = 0; i < PAGE_CACHE_SIZE; i++, syno_virt++) {
+		if (*syno_virt != '\0') {
+			break;
+		}
+	}
+	if (i == PAGE_CACHE_SIZE) {
+		rc = 0;
+		kunmap(page);
+		goto out;
+	}
+	kunmap(page);
+#endif /* MY_ABC_HERE */
 	for (extent_offset = 0;
 	     extent_offset < (PAGE_CACHE_SIZE / crypt_stat->extent_size);
 	     extent_offset++) {
@@ -1140,6 +1218,10 @@ ecryptfs_write_metadata_to_contents(struct inode *ecryptfs_inode,
 
 	rc = ecryptfs_write_lower(ecryptfs_inode, virt,
 				  0, virt_len);
+#ifdef MY_ABC_HERE
+	if (-EDQUOT == rc || -ENOSPC == rc)
+		return rc;  // skip error msg
+#endif /* MY_ABC_HERE */
 	if (rc < 0)
 		printk(KERN_ERR "%s: Error attempting to write header "
 		       "information to lower file; rc = [%d]\n", __func__, rc);
@@ -1153,9 +1235,25 @@ ecryptfs_write_metadata_to_xattr(struct dentry *ecryptfs_dentry,
 				 char *page_virt, size_t size)
 {
 	int rc;
+#ifdef MY_ABC_HERE
+	struct dentry *lower_dentry;
+	struct inode *lower_inode;
 
+	lower_dentry = ecryptfs_dentry_to_lower(ecryptfs_dentry);
+	lower_inode = d_inode(lower_dentry);
+	if (!lower_inode->i_op->setxattr) {
+		rc = -EOPNOTSUPP;
+		goto out;
+	}
+	inode_lock(lower_inode);
+	rc = lower_inode->i_op->setxattr(lower_dentry, ECRYPTFS_XATTR_NAME,
+					 page_virt, size, 0);
+	inode_unlock(lower_inode);
+out:
+#else
 	rc = ecryptfs_setxattr(ecryptfs_dentry, ECRYPTFS_XATTR_NAME, page_virt,
 			       size, 0);
+#endif /* MY_ABC_HERE */
 	return rc;
 }
 
@@ -1188,6 +1286,10 @@ int ecryptfs_write_metadata(struct dentry *ecryptfs_dentry,
 {
 	struct ecryptfs_crypt_stat *crypt_stat =
 		&ecryptfs_inode_to_private(ecryptfs_inode)->crypt_stat;
+#ifdef MY_ABC_HERE
+	struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
+		&ecryptfs_superblock_to_private(ecryptfs_inode->i_sb)->mount_crypt_stat;
+#endif //MY_ABC_HERE
 	unsigned int order;
 	char *virt;
 	size_t virt_len;
@@ -1223,13 +1325,34 @@ int ecryptfs_write_metadata(struct dentry *ecryptfs_dentry,
 		       __func__, rc);
 		goto out_free;
 	}
+#ifdef MY_ABC_HERE
+	if (mount_crypt_stat->flags & ECRYPTFS_GLOBAL_FAST_LOOKUP_ENABLED) {
+		rc = ecryptfs_write_metadata_to_contents(ecryptfs_inode, virt, virt_len);
+		if (!rc) {
+			rc = ecryptfs_write_metadata_to_xattr(ecryptfs_dentry, virt, ECRYPTFS_SIZE_AND_MARKER_BYTES);
+			if (rc == -EOPNOTSUPP) {
+				printk(KERN_WARNING "%s: user xattr not supported, turn off FAST_LOOKUP", __func__);
+				mount_crypt_stat->flags &= ~ECRYPTFS_GLOBAL_FAST_LOOKUP_ENABLED;
+				rc = 0;
+			}
+		}
+	}
+	else {
+#endif /* MY_ABC_HERE */
 	if (crypt_stat->flags & ECRYPTFS_METADATA_IN_XATTR)
 		rc = ecryptfs_write_metadata_to_xattr(ecryptfs_dentry, virt,
 						      size);
 	else
 		rc = ecryptfs_write_metadata_to_contents(ecryptfs_inode, virt,
 							 virt_len);
+
+#ifdef MY_ABC_HERE
+	}
+#endif /* MY_ABC_HERE */
 	if (rc) {
+#ifdef MY_ABC_HERE
+		if (-EDQUOT != rc && -ENOSPC != rc)
+#endif /* MY_ABC_HERE */
 		printk(KERN_ERR "%s: Error writing metadata out to lower file; "
 		       "rc = [%d]\n", __func__, rc);
 		goto out_free;
@@ -1279,7 +1402,11 @@ static void set_default_header_data(struct ecryptfs_crypt_stat *crypt_stat)
 	crypt_stat->metadata_size = ECRYPTFS_MINIMUM_HEADER_EXTENT_SIZE;
 }
 
+#ifdef MY_ABC_HERE
+static void __ecryptfs_i_size_init(const char *page_virt, struct inode *inode, int is_fast_lookup)
+#else
 void ecryptfs_i_size_init(const char *page_virt, struct inode *inode)
+#endif /* MY_ABC_HERE */
 {
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat;
 	struct ecryptfs_crypt_stat *crypt_stat;
@@ -1295,8 +1422,18 @@ void ecryptfs_i_size_init(const char *page_virt, struct inode *inode)
 	} else
 		file_size = get_unaligned_be64(page_virt);
 	i_size_write(inode, (loff_t)file_size);
+#ifdef MY_ABC_HERE
+	if (!is_fast_lookup)
+#endif /* MY_ABC_HERE */
 	crypt_stat->flags |= ECRYPTFS_I_SIZE_INITIALIZED;
 }
+
+#ifdef MY_ABC_HERE
+void ecryptfs_i_size_init(const char *page_virt, struct inode *inode)
+{
+	__ecryptfs_i_size_init(page_virt, inode, 0);
+}
+#endif /* MY_ABC_HERE */
 
 /**
  * ecryptfs_read_headers_virt
@@ -1398,7 +1535,55 @@ int ecryptfs_read_and_validate_xattr_region(struct dentry *dentry,
 	u8 file_size[ECRYPTFS_SIZE_AND_MARKER_BYTES];
 	u8 *marker = file_size + ECRYPTFS_FILE_SIZE_BYTES;
 	int rc;
+#ifdef MY_ABC_HERE
+	u64 lower_file_size, upper_file_size;
+	loff_t lower_file_size_expect;
+	char *page_virt = NULL;
+	struct ecryptfs_crypt_stat *crypt_stat;
+	struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
+		&ecryptfs_superblock_to_private(inode->i_sb)->mount_crypt_stat;
+	if (mount_crypt_stat->flags & ECRYPTFS_GLOBAL_FAST_LOOKUP_ENABLED) {
+		page_virt = kmem_cache_alloc(ecryptfs_header_cache, GFP_USER);
+		if (!page_virt) {
+			rc = -ENOMEM;
+			printk(KERN_ERR "%s: Unable to allocate page_virt\n",
+			       __func__);
+			goto out;
+		}
 
+		rc = ecryptfs_getxattr_lower(ecryptfs_dentry_to_lower(dentry),
+					     ECRYPTFS_XATTR_NAME, page_virt,
+					     PAGE_CACHE_SIZE);
+		if (rc < ((int)ECRYPTFS_SIZE_AND_MARKER_BYTES)) {
+			rc = rc >= 0 ? -EINVAL : rc;
+			goto out;
+		}
+		rc = ecryptfs_validate_marker(page_virt+ECRYPTFS_FILE_SIZE_BYTES);
+		if (!rc) {
+			/*
+			 * Lower i_size may be inconsistent with i_size in xattr
+			 * since migration to machine without FAST_LOOKUP feature. 
+			 * Fallback to old version if not consistent.
+			 */
+			crypt_stat = &ecryptfs_inode_to_private(inode)->crypt_stat;
+			lower_file_size = i_size_read(ecryptfs_inode_to_lower(inode));
+			upper_file_size = get_unaligned_be64(page_virt);
+			lower_file_size_expect = upper_size_to_lower_size(crypt_stat, upper_file_size);
+			if (lower_file_size == lower_file_size_expect) {
+				__ecryptfs_i_size_init(page_virt, inode, 1);
+			} else {
+				rc = -EINVAL;
+				goto out;
+			}
+		}
+out:
+		if (page_virt) {
+			memset(page_virt, 0, PAGE_CACHE_SIZE);
+			kmem_cache_free(ecryptfs_header_cache, page_virt);
+		}
+		return rc;
+	}
+#endif /* MY_ABC_HERE */
 	rc = ecryptfs_getxattr_lower(ecryptfs_dentry_to_lower(dentry),
 				     ECRYPTFS_XATTR_NAME, file_size,
 				     ECRYPTFS_SIZE_AND_MARKER_BYTES);
@@ -1644,10 +1829,20 @@ struct kmem_cache *ecryptfs_key_tfm_cache;
 static struct list_head key_tfm_list;
 struct mutex key_tfm_list_mutex;
 
+#ifdef MY_ABC_HERE
+extern int (*fecryptfs_decode_and_decrypt_filename)(char **plaintext_name,
+                                        size_t *plaintext_name_size,
+                                        struct super_block *sb,
+                                        const char *name, size_t name_size);
+#endif /* MY_ABC_HERE */
+
 int __init ecryptfs_init_crypto(void)
 {
 	mutex_init(&key_tfm_list_mutex);
 	INIT_LIST_HEAD(&key_tfm_list);
+#ifdef MY_ABC_HERE
+	fecryptfs_decode_and_decrypt_filename = &ecryptfs_decode_and_decrypt_filename;
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 
@@ -1660,6 +1855,9 @@ int ecryptfs_destroy_crypto(void)
 {
 	struct ecryptfs_key_tfm *key_tfm, *key_tfm_tmp;
 
+#ifdef MY_ABC_HERE
+	fecryptfs_decode_and_decrypt_filename = NULL;
+#endif /* MY_ABC_HERE */
 	mutex_lock(&key_tfm_list_mutex);
 	list_for_each_entry_safe(key_tfm, key_tfm_tmp, &key_tfm_list,
 				 key_tfm_list) {

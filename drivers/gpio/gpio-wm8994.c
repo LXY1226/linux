@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * gpiolib support for Wolfson WM8994
  *
@@ -260,7 +263,11 @@ static int wm8994_gpio_probe(struct platform_device *pdev)
 	wm8994_gpio->wm8994 = wm8994;
 	wm8994_gpio->gpio_chip = template_chip;
 	wm8994_gpio->gpio_chip.ngpio = WM8994_GPIO_MAX;
+#if defined(MY_ABC_HERE)
+	wm8994_gpio->gpio_chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	wm8994_gpio->gpio_chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	if (pdata && pdata->gpio_base)
 		wm8994_gpio->gpio_chip.base = pdata->gpio_base;
 	else

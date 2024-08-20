@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Base port operations for 8250/16550-type serial ports
  *
@@ -53,6 +56,12 @@
 #endif
 
 #define BOTH_EMPTY 	(UART_LSR_TEMT | UART_LSR_THRE)
+
+#ifdef MY_ABC_HERE
+extern int (*syno_test_list)(unsigned char, struct tty_struct *);
+extern int (*syno_get_current)(unsigned char, struct tty_struct *);
+extern int (*funcSYNOMicropGetEvent)(struct tty_struct *);
+#endif /* MY_ABC_HERE */
 
 /*
  * Here we define the default xmit fifo size used for each type of UART.
@@ -1325,7 +1334,6 @@ static void serial8250_start_tx(struct uart_port *port)
 	if (!(up->ier & UART_IER_THRI)) {
 		up->ier |= UART_IER_THRI;
 		serial_port_out(port, UART_IER, up->ier);
-
 		if (up->bugs & UART_BUG_TXEN) {
 			unsigned char lsr;
 			lsr = serial_in(up, UART_LSR);
@@ -1461,6 +1469,16 @@ serial8250_rx_chars(struct uart_8250_port *up, unsigned char lsr)
 		}
 		if (uart_handle_sysrq_char(port, ch))
 			goto ignore_char;
+
+#ifdef MY_ABC_HERE
+		if (NULL != syno_test_list && syno_test_list(ch, port->state->port.tty)) {
+			goto ignore_char;
+		} else if (NULL != syno_get_current && syno_get_current(ch, port->state->port.tty)) {
+			goto ignore_char;
+		} else if (NULL != funcSYNOMicropGetEvent) {
+			funcSYNOMicropGetEvent(port->state->port.tty);
+		}
+#endif /* MY_ABC_HERE */
 
 		uart_insert_char(port, lsr, UART_LSR_OE, ch, flag);
 
@@ -1601,6 +1619,11 @@ static int serial8250_default_handle_irq(struct uart_port *port)
 	return ret;
 }
 
+#ifdef MY_DEF_HERE
+int gSynoBuzzerMutePressed = 0;
+EXPORT_SYMBOL(gSynoBuzzerMutePressed);
+#endif /* MY_DEF_HERE */
+
 /*
  * These Exar UARTs have an extra interrupt indicator that could
  * fire for a few unimplemented interrupts.  One of which is a
@@ -1617,10 +1640,26 @@ static int exar_handle_irq(struct uart_port *port)
 
 	if ((port->type == PORT_XR17V35X) ||
 	   (port->type == PORT_XR17D15X)) {
+#ifdef MY_DEF_HERE
+		unsigned long flags;
+		unsigned char mpiolow, mpiohigh;
+		spin_lock_irqsave(&port->lock, flags);
+#endif
 		int0 = serial_port_in(port, 0x80);
 		int1 = serial_port_in(port, 0x81);
 		int2 = serial_port_in(port, 0x82);
 		int3 = serial_port_in(port, 0x83);
+#ifdef MY_DEF_HERE
+		if (int1 & 0x6) {
+			mpiolow = serial_port_in(port, 0x90);
+			mpiohigh = serial_port_in(port, 0x96);
+			if (mpiolow & 0x1) {
+				gSynoBuzzerMutePressed = 1;
+			}
+			ret = 1;
+		}
+		spin_unlock_irqrestore(&port->lock, flags);
+#endif
 	}
 
 	return ret;
@@ -1715,6 +1754,75 @@ static void serial8250_break_ctl(struct uart_port *port, int break_state)
 /*
  *	Wait for transmitter & holding register to empty
  */
+#ifdef MY_DEF_HERE
+static void syno_kt_wait_for_xmitr(struct uart_8250_port *up, int bits)
+{
+	unsigned int status, tmout = 10000;
+	static int iCtsTimeoutCt = 0;
+	static int iTransTimeoutCt = 0;
+	static int iTransCt = 0;
+	struct console *con = NULL;
+
+	if (false == up->blXmitrCheck) {
+		return;
+	}
+	/* Wait up to 10ms for the character(s) to be sent. */
+	iTransCt++;
+	for (;;) {
+		status = serial_in(up, UART_LSR);
+
+		up->lsr_saved_flags |= status & LSR_SAVE_FLAGS;
+
+		if ((status & bits) == bits)
+			break;
+		if (--tmout == 0) {
+			iTransTimeoutCt++;
+			break;
+		}
+		udelay(1);
+	}
+	if (SYNO_TX_CHECK_COUNT <= iTransCt) {
+		if (SYNO_TX_CHECK_THRESHOLD <= iTransTimeoutCt) {
+			for_each_console(con) {
+				if (SYNO_OOB_TTY == con->index) {
+					con->flags &= ~CON_ENABLED;
+					up->blXmitrCheck = false;
+				}
+			}
+		}
+		iTransCt = 0;
+		iTransTimeoutCt = 0;
+	}
+
+	/* Wait up to 1s for flow control if necessary */
+	{
+		for (tmout = 1000000; tmout; tmout--) {
+			unsigned int msr = serial_in(up, UART_MSR);
+			up->msr_saved_flags |= msr & MSR_SAVE_FLAGS;
+			if (msr & UART_MSR_CTS)
+				break;
+			udelay(1);
+			touch_nmi_watchdog();
+		}
+		if (unlikely(0 == tmout)) {
+			iCtsTimeoutCt++;
+		} else {
+			iCtsTimeoutCt = 0;
+		}
+		// stuck more than 10s, disable CTS check
+		if (SYNO_CTS_CHECK_COUNT <= iCtsTimeoutCt) {
+			for_each_console(con) {
+				if (SYNO_OOB_TTY == con->index) {
+					con->flags &= ~CON_ENABLED;
+					up->blXmitrCheck = false;
+				}
+			}
+			iCtsTimeoutCt = 0;
+		}
+	}
+}
+#endif /* MY_DEF_HERE */
+
 static void wait_for_xmitr(struct uart_8250_port *up, int bits)
 {
 	unsigned int status, tmout = 10000;
@@ -2018,6 +2126,16 @@ dont_test_tx_en:
 	serial_port_in(port, UART_MSR);
 	up->lsr_saved_flags = 0;
 	up->msr_saved_flags = 0;
+
+#ifdef MY_DEF_HERE
+#ifdef CONFIG_SERIAL_8250_DMA
+	/* Disable DMA for console UART */
+	if (uart_console(port))
+		up->dma = NULL;
+#else /* CONFIG_SERIAL_8250_DMA */
+	up->dma = NULL;
+#endif /* CONFIG_SERIAL_8250_DMA */
+#endif /* MY_DEF_HERE */
 
 	/*
 	 * Request DMA channels for both RX and TX.
@@ -2662,8 +2780,70 @@ static DEVICE_ATTR(rx_trig_bytes, S_IRUSR | S_IWUSR | S_IRGRP,
 		   serial8250_get_attr_rx_trig_bytes,
 		   serial8250_set_attr_rx_trig_bytes);
 
+#ifdef MY_DEF_HERE
+static ssize_t serial8250_get_attr_console_enable(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct tty_port *port = dev_get_drvdata(dev);
+	struct uart_state *state = container_of(port, struct uart_state, port);
+	struct uart_port *uport = state->uart_port;
+	struct uart_8250_port *up =
+		container_of(uport, struct uart_8250_port, port);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", up->blXmitrCheck);
+}
+
+static ssize_t serial8250_set_attr_console_enable(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct tty_port *port = dev_get_drvdata(dev);
+	struct uart_state *state = container_of(port, struct uart_state, port);
+	struct uart_port *uport = state->uart_port;
+	struct uart_8250_port *up =
+		container_of(uport, struct uart_8250_port, port);
+	unsigned char enable;
+	struct console *con = NULL;
+	unsigned long flags;
+	int ret;
+
+	if (!count)
+		return -EINVAL;
+
+	if (SYNO_OOB_TTY != up->port.line) {
+		return count;
+	}
+
+	ret = kstrtou8(buf, 10, &enable);
+	if (ret < 0)
+		return ret;
+
+	for_each_console(con) {
+		if (SYNO_OOB_TTY == con->index) {
+			spin_lock_irqsave(&uport->lock, flags);
+			if (1 == enable) {
+				con->flags |= CON_ENABLED;
+				up->blXmitrCheck = true;
+			} else if (0 == enable) {
+				con->flags &= ~CON_ENABLED;
+				up->blXmitrCheck = false;
+			}
+			spin_unlock_irqrestore(&uport->lock, flags);
+		}
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(console_enable, S_IRUSR | S_IWUSR | S_IRGRP,
+		   serial8250_get_attr_console_enable,
+		   serial8250_set_attr_console_enable);
+#endif /* MY_DEF_HERE */
+
 static struct attribute *serial8250_dev_attrs[] = {
 	&dev_attr_rx_trig_bytes.attr,
+#ifdef MY_DEF_HERE
+	&dev_attr_console_enable.attr,
+#endif /* MY_DEF_HERE */
 	NULL,
 	};
 
@@ -2813,7 +2993,15 @@ static void serial8250_console_putchar(struct uart_port *port, int ch)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
 
+#ifdef MY_DEF_HERE
+	if (SYNO_OOB_TTY == up->port.line) {
+		syno_kt_wait_for_xmitr(up, UART_LSR_THRE);
+	} else {
+#endif /* MY_DEF_HERE */
 	wait_for_xmitr(up, UART_LSR_THRE);
+#ifdef MY_DEF_HERE
+	}
+#endif /* MY_DEF_HERE */
 	serial_port_out(port, UART_TX, ch);
 }
 
@@ -2920,7 +3108,11 @@ static unsigned int probe_baud(struct uart_port *port)
 
 int serial8250_console_setup(struct uart_port *port, char *options, bool probe)
 {
+#ifdef MY_DEF_HERE
+	int baud = 115200;
+#else
 	int baud = 9600;
+#endif /* MY_DEF_HERE */
 	int bits = 8;
 	int parity = 'n';
 	int flow = 'n';

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * EHCI HCD (Host Controller Driver) PCI Bus Glue.
  *
@@ -41,7 +44,6 @@ static inline bool is_intel_quark_x1000(struct pci_dev *pdev)
 	return pdev->vendor == PCI_VENDOR_ID_INTEL &&
 		pdev->device == PCI_DEVICE_ID_INTEL_QUARK_X1000_SOC;
 }
-
 /*
  * This is the list of PCI IDs for the devices that have EHCI USB class and
  * specific drivers for that. One of the example is a ChipIdea device installed
@@ -52,6 +54,10 @@ static const struct pci_device_id bypass_pci_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0811), },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x0829), },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0xe006), },
+#ifdef MY_DEF_HERE
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x8c26), },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x8c2d), },
+#endif /* MY_DEF_HERE */
 	{}
 };
 

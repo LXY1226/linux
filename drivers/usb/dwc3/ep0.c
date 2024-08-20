@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /**
  * ep0.c - DesignWare USB3 DRD Controller Endpoint 0 Handling
  *
@@ -56,17 +59,25 @@ static const char *dwc3_ep0_state_string(enum dwc3_ep0_state state)
 }
 
 static void dwc3_ep0_prepare_one_trb(struct dwc3 *dwc, u8 epnum,
+#ifdef MY_DEF_HERE
+		dma_addr_t buf_dma, u32 len, u32 type)
+#else /* MY_DEF_HERE */
 		dma_addr_t buf_dma, u32 len, u32 type, bool chain)
+#endif /* MY_DEF_HERE */
 {
 	struct dwc3_trb			*trb;
 	struct dwc3_ep			*dep;
 
 	dep = dwc->eps[epnum];
 
+#ifdef MY_DEF_HERE
+	trb = dwc->ep0_trb;
+#else /* MY_DEF_HERE */
 	trb = &dwc->ep0_trb[dep->free_slot];
 
 	if (chain)
 		dep->free_slot++;
+#endif /* MY_DEF_HERE */
 
 	trb->bpl = lower_32_bits(buf_dma);
 	trb->bph = upper_32_bits(buf_dma);
@@ -74,13 +85,20 @@ static void dwc3_ep0_prepare_one_trb(struct dwc3 *dwc, u8 epnum,
 	trb->ctrl = type;
 
 	trb->ctrl |= (DWC3_TRB_CTRL_HWO
+#ifdef MY_DEF_HERE
+			| DWC3_TRB_CTRL_LST
+			| DWC3_TRB_CTRL_IOC
+#endif /* MY_DEF_HERE */
 			| DWC3_TRB_CTRL_ISP_IMI);
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	if (chain)
 		trb->ctrl |= DWC3_TRB_CTRL_CHN;
 	else
 		trb->ctrl |= (DWC3_TRB_CTRL_IOC
 				| DWC3_TRB_CTRL_LST);
+#endif /* MY_DEF_HERE */
 
 	trace_dwc3_prepare_trb(dep, trb);
 }
@@ -315,7 +333,11 @@ void dwc3_ep0_out_start(struct dwc3 *dwc)
 	int				ret;
 
 	dwc3_ep0_prepare_one_trb(dwc, 0, dwc->ctrl_req_addr, 8,
+#ifdef MY_DEF_HERE
+			DWC3_TRBCTL_CONTROL_SETUP);
+#else /* MY_DEF_HERE */
 			DWC3_TRBCTL_CONTROL_SETUP, false);
+#endif /* MY_DEF_HERE */
 	ret = dwc3_ep0_start_trans(dwc, 0);
 	WARN_ON(ret < 0);
 }
@@ -562,6 +584,9 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 	int ret;
 	u32 reg;
 
+#ifdef MY_DEF_HERE
+	dwc->start_config_issued = false;
+#endif /* MY_DEF_HERE */
 	cfg = le16_to_cpu(ctrl->wValue);
 
 	switch (state) {
@@ -743,6 +768,12 @@ static int dwc3_ep0_std_request(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		dwc3_trace(trace_dwc3_ep0, "USB_REQ_SET_ISOCH_DELAY");
 		ret = dwc3_ep0_set_isoch_delay(dwc, ctrl);
 		break;
+#ifdef MY_DEF_HERE
+	case USB_REQ_SET_INTERFACE:
+		dwc3_trace(trace_dwc3_ep0, "USB_REQ_SET_INTERFACE");
+		dwc->start_config_issued = false;
+		/* Fall through */
+#endif /* MY_DEF_HERE */
 	default:
 		dwc3_trace(trace_dwc3_ep0, "Forwarding to gadget driver");
 		ret = dwc3_ep0_delegate_req(dwc, ctrl);
@@ -795,11 +826,15 @@ static void dwc3_ep0_complete_data(struct dwc3 *dwc,
 	struct usb_request	*ur;
 	struct dwc3_trb		*trb;
 	struct dwc3_ep		*ep0;
+#ifdef MY_DEF_HERE
+	u32			transferred;
+#else /* MY_DEF_HERE */
 	unsigned		transfer_size = 0;
 	unsigned		maxp;
 	unsigned		remaining_ur_length;
 	void			*buf;
 	u32			transferred = 0;
+#endif /* MY_DEF_HERE */
 	u32			status;
 	u32			length;
 	u8			epnum;
@@ -828,14 +863,34 @@ static void dwc3_ep0_complete_data(struct dwc3 *dwc,
 	}
 
 	ur = &r->request;
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	buf = ur->buf;
 	remaining_ur_length = ur->length;
+#endif /* MY_DEF_HERE */
 
 	length = trb->size & DWC3_TRB_SIZE_MASK;
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	maxp = ep0->endpoint.maxpacket;
+#endif /* MY_DEF_HERE */
 
 	if (dwc->ep0_bounced) {
+#ifdef MY_DEF_HERE
+		unsigned transfer_size = ur->length;
+		unsigned maxp = ep0->endpoint.maxpacket;
+
+		transfer_size += (maxp - (transfer_size % maxp));
+
+		/* Maximum of DWC3_EP0_BOUNCE_SIZE can only be received */
+		if (transfer_size > DWC3_EP0_BOUNCE_SIZE)
+			transfer_size = DWC3_EP0_BOUNCE_SIZE;
+
+		transferred = min_t(u32, ur->length,
+				transfer_size - length);
+		memcpy(ur->buf, dwc->ep0_bounce, transferred);
+#else /* MY_DEF_HERE */
 		/*
 		 * Handle the first TRB before handling the bounce buffer if
 		 * the request length is greater than the bounce buffer size
@@ -859,6 +914,7 @@ static void dwc3_ep0_complete_data(struct dwc3 *dwc,
 		transferred = min_t(u32, remaining_ur_length,
 				    transfer_size - length);
 		memcpy(buf, dwc->ep0_bounce, transferred);
+#endif /* MY_DEF_HERE */
 	} else {
 		transferred = ur->length - length;
 	}
@@ -879,7 +935,11 @@ static void dwc3_ep0_complete_data(struct dwc3 *dwc,
 			dwc->ep0_next_event = DWC3_EP0_COMPLETE;
 
 			dwc3_ep0_prepare_one_trb(dwc, epnum, dwc->ctrl_req_addr,
+#ifdef MY_DEF_HERE
+					0, DWC3_TRBCTL_CONTROL_DATA);
+#else /* MY_DEF_HERE */
 					0, DWC3_TRBCTL_CONTROL_DATA, false);
+#endif /* MY_DEF_HERE */
 			ret = dwc3_ep0_start_trans(dwc, epnum);
 			WARN_ON(ret < 0);
 		}
@@ -964,11 +1024,19 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 	if (req->request.length == 0) {
 		dwc3_ep0_prepare_one_trb(dwc, dep->number,
 				dwc->ctrl_req_addr, 0,
+#ifdef MY_DEF_HERE
+				DWC3_TRBCTL_CONTROL_DATA);
+#else /* MY_DEF_HERE */
 				DWC3_TRBCTL_CONTROL_DATA, false);
+#endif /* MY_DEF_HERE */
 		ret = dwc3_ep0_start_trans(dwc, dep->number);
 	} else if (!IS_ALIGNED(req->request.length, dep->endpoint.maxpacket)
 			&& (dep->number == 0)) {
+#ifdef MY_DEF_HERE
+		u32	transfer_size;
+#else /* MY_DEF_HERE */
 		u32	transfer_size = 0;
+#endif /* MY_DEF_HERE */
 		u32	maxpacket;
 
 		ret = usb_gadget_map_request(&dwc->gadget, &req->request,
@@ -980,6 +1048,14 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		maxpacket = dep->endpoint.maxpacket;
 
+#ifdef MY_DEF_HERE
+		transfer_size = roundup(req->request.length, maxpacket);
+
+		if (transfer_size > DWC3_EP0_BOUNCE_SIZE) {
+			dev_WARN(dwc->dev, "bounce buf can't handle req len\n");
+			transfer_size = DWC3_EP0_BOUNCE_SIZE;
+		}
+#else /* MY_DEF_HERE */
 		if (req->request.length > DWC3_EP0_BOUNCE_SIZE) {
 			transfer_size = ALIGN(req->request.length - maxpacket,
 					      maxpacket);
@@ -992,12 +1068,24 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		transfer_size = roundup((req->request.length - transfer_size),
 					maxpacket);
+#endif /* MY_DEF_HERE */
 
 		dwc->ep0_bounced = true;
 
+#ifdef MY_DEF_HERE
+		/*
+		 * REVISIT in case request length is bigger than
+		 * DWC3_EP0_BOUNCE_SIZE we will need two chained
+		 * TRBs to handle the transfer.
+		 */
+#endif /* MY_DEF_HERE */
 		dwc3_ep0_prepare_one_trb(dwc, dep->number,
 				dwc->ep0_bounce_addr, transfer_size,
+#ifdef MY_DEF_HERE
+				DWC3_TRBCTL_CONTROL_DATA);
+#else /* MY_DEF_HERE */
 				DWC3_TRBCTL_CONTROL_DATA, false);
+#endif /* MY_DEF_HERE */
 		ret = dwc3_ep0_start_trans(dwc, dep->number);
 	} else {
 		ret = usb_gadget_map_request(&dwc->gadget, &req->request,
@@ -1008,8 +1096,12 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 		}
 
 		dwc3_ep0_prepare_one_trb(dwc, dep->number, req->request.dma,
+#ifdef MY_DEF_HERE
+				req->request.length, DWC3_TRBCTL_CONTROL_DATA);
+#else /* MY_DEF_HERE */
 				req->request.length, DWC3_TRBCTL_CONTROL_DATA,
 				false);
+#endif /* MY_DEF_HERE */
 		ret = dwc3_ep0_start_trans(dwc, dep->number);
 	}
 
@@ -1025,7 +1117,11 @@ static int dwc3_ep0_start_control_status(struct dwc3_ep *dep)
 		: DWC3_TRBCTL_CONTROL_STATUS2;
 
 	dwc3_ep0_prepare_one_trb(dwc, dep->number,
+#ifdef MY_DEF_HERE
+			dwc->ctrl_req_addr, 0, type);
+#else /* MY_DEF_HERE */
 			dwc->ctrl_req_addr, 0, type, false);
+#endif /* MY_DEF_HERE */
 	return dwc3_ep0_start_trans(dwc, dep->number);
 }
 

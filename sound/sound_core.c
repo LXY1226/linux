@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *	Sound core.  This file is composed of two parts.  sound_class
  *	which is common to both OSS and ALSA and OSS sound core which
@@ -602,6 +605,12 @@ static int soundcore_open(struct inode *inode, struct file *file)
 	if (preclaim_oss && !new_fops) {
 		spin_unlock(&sound_loader_lock);
 
+#ifdef MY_ABC_HERE
+		/*
+		 * If MY_ABC_HERE is opened , skip request
+		 * module Please refer to DSM bug #49398
+		 */
+#else /* MY_ABC_HERE */
 		/*
 		 *  Please, don't change this order or code.
 		 *  For ALSA slot means soundcard and OSS emulation code
@@ -621,6 +630,7 @@ static int soundcore_open(struct inode *inode, struct file *file)
 		 */
 		if (request_module("char-major-%d-%d", SOUND_MAJOR, unit) > 0)
 			request_module("char-major-%d", SOUND_MAJOR);
+#endif /* MY_ABC_HERE */
 
 		spin_lock(&sound_loader_lock);
 		s = __look_for_unit(chain, unit);

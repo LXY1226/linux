@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Combined Ethernet driver for Motorola MPC8xx and MPC82xx.
  *
@@ -166,23 +169,35 @@ static int fs_enet_mdio_probe(struct platform_device *ofdev)
 	clrsetbits_be32(&fec->fecp->fec_mii_speed, 0x7E, fec->mii_speed);
 
 	new_bus->phy_mask = ~0;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	new_bus->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
 	if (!new_bus->irq) {
 		ret = -ENOMEM;
 		goto out_unmap_regs;
 	}
+#endif /* MY_ABC_HERE */
 
 	new_bus->parent = &ofdev->dev;
 	platform_set_drvdata(ofdev, new_bus);
 
 	ret = of_mdiobus_register(new_bus, ofdev->dev.of_node);
 	if (ret)
+#if defined(MY_ABC_HERE)
+		goto out_unmap_regs;
+#else /* MY_ABC_HERE */
 		goto out_free_irqs;
+#endif /* MY_ABC_HERE */
 
 	return 0;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 out_free_irqs:
 	kfree(new_bus->irq);
+#endif /* MY_ABC_HERE */
 out_unmap_regs:
 	iounmap(fec->fecp);
 out_res:
@@ -200,7 +215,11 @@ static int fs_enet_mdio_remove(struct platform_device *ofdev)
 	struct fec_info *fec = bus->priv;
 
 	mdiobus_unregister(bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(bus->irq);
+#endif /* MY_ABC_HERE */
 	iounmap(fec->fecp);
 	kfree(fec);
 	mdiobus_free(bus);

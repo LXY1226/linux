@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/dma-mapping.h>
 #include <linux/dma-debug.h>
 #include <linux/dmar.h>
@@ -43,7 +46,11 @@ int iommu_detected __read_mostly = 0;
  * useful if a user wants to use an IOMMU only for KVM device assignment to
  * guests and not for driver dma translation.
  */
+#ifdef MY_DEF_HERE
+int iommu_pass_through __read_mostly = 1;
+#else /* MY_DEF_HERE */
 int iommu_pass_through __read_mostly;
+#endif /* MY_DEF_HERE */
 
 extern struct iommu_table_entry __iommu_table[], __iommu_table_end[];
 

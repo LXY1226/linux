@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Functions related to segment and merge handling
  */
@@ -51,6 +54,25 @@ static struct bio *blk_bio_discard_split(struct request_queue *q,
 
 	return bio_split(bio, split_sectors, GFP_NOIO, bs);
 }
+
+#ifdef MY_ABC_HERE
+static struct bio *blk_bio_unused_hint_split(struct request_queue *q,
+					    struct bio *bio,
+					    struct bio_set *bs,
+					    unsigned *nsegs)
+{
+	unsigned int max_unused_hint_sectors;
+	sector_t bs_mask = (queue_logical_block_size(q) >> 9) - 1;
+	*nsegs = 1;
+
+	max_unused_hint_sectors = (UINT_MAX >> 9) & ~bs_mask;
+
+	if (bio_sectors(bio) <= max_unused_hint_sectors)
+		return NULL;
+
+	return bio_split(bio, max_unused_hint_sectors, GFP_NOIO, bs);
+}
+#endif /* MY_ABC_HERE */
 
 static struct bio *blk_bio_write_same_split(struct request_queue *q,
 					    struct bio *bio,
@@ -196,6 +218,10 @@ void blk_queue_split(struct request_queue *q, struct bio **bio,
 		split = blk_bio_discard_split(q, *bio, bs, &nsegs);
 	else if ((*bio)->bi_rw & REQ_WRITE_SAME)
 		split = blk_bio_write_same_split(q, *bio, bs, &nsegs);
+#ifdef MY_ABC_HERE
+	else if ((*bio)->bi_rw & REQ_UNUSED_HINT)
+		split = blk_bio_unused_hint_split(q, *bio, bs, &nsegs);
+#endif /* MY_ABC_HERE */
 	else
 		split = blk_bio_segment_split(q, *bio, q->bio_split, &nsegs);
 
@@ -209,6 +235,9 @@ void blk_queue_split(struct request_queue *q, struct bio **bio,
 		split->bi_rw |= REQ_NOMERGE;
 
 		bio_chain(split, *bio);
+#ifdef MY_ABC_HERE
+		bio_set_flag(*bio, BIO_DELAYED);
+#endif /* MY_ABC_HERE */
 		generic_make_request(*bio);
 		*bio = split;
 	}
@@ -234,6 +263,11 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 	 */
 	if (bio->bi_rw & REQ_DISCARD)
 		return 1;
+
+#ifdef MY_ABC_HERE
+	if (bio->bi_rw & REQ_UNUSED_HINT)
+		return 1;
+#endif /* MY_ABC_HERE */
 
 	if (bio->bi_rw & REQ_WRITE_SAME)
 		return 1;
@@ -416,6 +450,14 @@ static int __blk_bios_map_sg(struct request_queue *q, struct bio *bio,
 
 		return 0;
 	}
+
+#ifdef MY_ABC_HERE
+	if (bio->bi_rw & REQ_UNUSED_HINT) {
+		if (bio->bi_vcnt)
+			goto single_segment;
+		return 0;
+	}
+#endif /* MY_ABC_HERE */
 
 	if (bio->bi_rw & REQ_WRITE_SAME) {
 single_segment:

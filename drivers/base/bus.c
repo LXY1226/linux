@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * bus.c - bus driver management
  *
@@ -671,6 +674,29 @@ static void driver_attach_async(void *_drv, async_cookie_t cookie)
 		 drv->bus->name, drv->name, ret);
 }
 
+
+#ifdef MY_DEF_HERE
+int syno_all_usb_uas_enabled = 0;
+EXPORT_SYMBOL(syno_all_usb_uas_enabled);
+
+static ssize_t show_syno_all_usb_uas_enabled(struct bus_type *bus, char *buf)
+{
+	return sprintf(buf, "%d\n", syno_all_usb_uas_enabled);
+}
+
+static ssize_t store_syno_all_usb_uas_enabled(struct bus_type *bus,
+				       const char *buf, size_t count)
+{
+	if (buf[0] == '0')
+		syno_all_usb_uas_enabled = 0;
+	else
+		syno_all_usb_uas_enabled = 1;
+	return count;
+}
+static BUS_ATTR(syno_all_usb_uas_enabled, S_IWUSR | S_IRUGO,
+		show_syno_all_usb_uas_enabled, store_syno_all_usb_uas_enabled);
+#endif /* MY_DEF_HERE */
+
 /**
  * bus_add_driver - Add a driver to the bus.
  * @drv: driver.
@@ -946,9 +972,22 @@ int bus_register(struct bus_type *bus)
 	if (retval)
 		goto bus_groups_fail;
 
+#ifdef MY_DEF_HERE
+	if (!strncmp(bus->name, "usb", 3)) {
+		retval = bus_create_file(bus, &bus_attr_syno_all_usb_uas_enabled);
+		if (retval)
+			goto bus_syno_all_usb_uas_enabled_fail;
+	}
+#endif /* MY_DEF_HERE */
+
 	pr_debug("bus: '%s': registered\n", bus->name);
 	return 0;
 
+#ifdef MY_DEF_HERE
+bus_syno_all_usb_uas_enabled_fail:
+	if (!strncmp(bus->name, "usb", 3))
+		bus_remove_file(bus, &bus_attr_syno_all_usb_uas_enabled);
+#endif /* MY_DEF_HERE */
 bus_groups_fail:
 	remove_probe_files(bus);
 bus_probe_files_fail:

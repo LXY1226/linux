@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2011 STRATO AG
  * written by Arne Jansen <sensille@gmx.net>
@@ -28,7 +31,7 @@
  * }
  * ulist_free(ulist);
  *
- * This assumes the graph nodes are adressable by u64. This stems from the
+ * This assumes the graph nodes are addressable by u64. This stems from the
  * usage for tree enumeration in btrfs, where the logical addresses are
  * 64 bit.
  *
@@ -187,9 +190,18 @@ int ulist_add(struct ulist *ulist, u64 val, u64 aux, gfp_t gfp_mask)
 {
 	return ulist_add_merge(ulist, val, aux, NULL, gfp_mask);
 }
+#ifdef MY_DEF_HERE
+int ulist_add_for_prealloc(struct ulist *ulist, u64 val, u64 aux, gfp_t gfp_mask, struct ulist_node **prealloc_ulist_node)
+{
+	return ulist_add_merge_for_prealloc(ulist, val, aux, NULL, gfp_mask, prealloc_ulist_node);
+}
 
+int ulist_add_merge_for_prealloc(struct ulist *ulist, u64 val, u64 aux,
+		    u64 *old_aux, gfp_t gfp_mask, struct ulist_node **prealloc_ulist_node)
+#else
 int ulist_add_merge(struct ulist *ulist, u64 val, u64 aux,
 		    u64 *old_aux, gfp_t gfp_mask)
+#endif /* MY_DEF_HERE */
 {
 	int ret;
 	struct ulist_node *node;
@@ -200,6 +212,12 @@ int ulist_add_merge(struct ulist *ulist, u64 val, u64 aux,
 			*old_aux = node->aux;
 		return 0;
 	}
+#ifdef MY_DEF_HERE
+	if (prealloc_ulist_node) {
+		node = *prealloc_ulist_node;
+		*prealloc_ulist_node = NULL;
+	} else
+#endif /* MY_DEF_HERE */
 	node = kmalloc(sizeof(*node), gfp_mask);
 	if (!node)
 		return -ENOMEM;
@@ -214,6 +232,13 @@ int ulist_add_merge(struct ulist *ulist, u64 val, u64 aux,
 
 	return 1;
 }
+#ifdef MY_DEF_HERE
+int ulist_add_merge(struct ulist *ulist, u64 val, u64 aux,
+		    u64 *old_aux, gfp_t gfp_mask)
+{
+	return ulist_add_merge_for_prealloc(ulist, val, aux, old_aux, gfp_mask, NULL);
+}
+#endif /* MY_DEF_HERE */
 
 /*
  * ulist_del - delete one node from ulist
@@ -274,3 +299,74 @@ struct ulist_node *ulist_next(struct ulist *ulist, struct ulist_iterator *uiter)
 	node = list_entry(uiter->cur_list, struct ulist_node, list);
 	return node;
 }
+
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE) || \
+    defined(MY_DEF_HERE)
+int ulist_add_lru_adjust(struct ulist *ulist, u64 val, u64 aux, gfp_t gfp_mask)
+{
+	int ret;
+	struct ulist_node *node;
+
+	node = ulist_rbtree_search(ulist, val);
+	if (node) {
+		list_del(&node->list);
+		list_add_tail(&node->list, &ulist->nodes);
+		return 0;
+	}
+	node = kmalloc(sizeof(*node), gfp_mask);
+	if (!node)
+		return -ENOMEM;
+
+	node->val = val;
+	node->aux = aux;
+#ifdef CONFIG_BTRFS_DEBUG
+	node->seqnum = ulist->nnodes;
+#endif
+
+	ret = ulist_rbtree_insert(ulist, node);
+	ASSERT(!ret);
+	list_add_tail(&node->list, &ulist->nodes);
+	ulist->nnodes++;
+
+	return 1;
+}
+
+/*
+ * ulist_remove_first - Remove first node from list (FIFO order)
+ * It just detach the node from list
+ */
+void ulist_remove_first(struct ulist *ulist)
+{
+	struct ulist_node *node;
+
+	if (!ulist->nnodes)
+		return;
+
+	node = list_entry(ulist->nodes.next, struct ulist_node, list);
+	rb_erase(&node->rb_node, &ulist->root);
+	list_del(&node->list);
+	ulist->nnodes--;
+	kfree(node);
+}
+#endif /* MY_DEF_HERE || MY_DEF_HERE || \
+          MY_DEF_HERE */
+
+#if defined(MY_DEF_HERE) || \
+    defined(MY_DEF_HERE)
+struct ulist_node * ulist_search(struct ulist *ulist, u64 val)
+{
+	struct rb_node *n = ulist->root.rb_node;
+	struct ulist_node *u = NULL;
+
+	while (n) {
+		u = rb_entry(n, struct ulist_node, rb_node);
+		if (u->val < val)
+			n = n->rb_right;
+		else if (u->val > val)
+			n = n->rb_left;
+		else
+			return u;
+	}
+	return NULL;
+}
+#endif /* MY_DEF_HERE || MY_DEF_HERE */

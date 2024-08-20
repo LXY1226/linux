@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Block data types and constants.  Directly include this file only to
  * break include dependency loop.
@@ -120,6 +123,9 @@ struct bio {
 #define BIO_QUIET	6	/* Make BIO Quiet */
 #define BIO_CHAIN	7	/* chained bio, ->bi_remaining in effect */
 #define BIO_REFFED	8	/* bio has elevated ->bi_cnt */
+#ifdef MY_ABC_HERE
+#define BIO_TRACE_COMPLETION	10	/* bio_endio() should trace the final completion of this bio */
+#endif /* MY_ABC_HERE */
 
 /*
  * Flags starting here get preserved by bio_reset() - this includes
@@ -127,6 +133,55 @@ struct bio {
  */
 #define BIO_RESET_BITS	13
 #define BIO_OWNS_VEC	13	/* bio_free() should free bvec */
+#ifdef MY_ABC_HERE
+#define BIO_AUTO_REMAP 14	/* record if auto-remap occurred */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+/*
+ * Currently, our RAID1 device won't return error on make_reuest() when RAID1 is crashed
+ * So we add this flag to told md layer that is should eturn error for flashcache * devices
+ */
+#define BIO_MD_RETURN_ERROR 15
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+/*
+ * Tell lower layer to get the redundant version for this block.
+ */
+#define BIO_CORRECTION_RETRY 16
+
+/*
+ * Report to upper layer we have tried all dedundancies for this block.
+ */
+#define BIO_CORRECTION_ERR 17
+
+/*
+ * Tell lower layer that we give up the retry for this block.
+ */
+#define BIO_CORRECTION_ABORT 18
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define BIO_SEND_SELF 19
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+/**
+ * Make the bio be rearranged behind the other bios which are submitted
+ * after it in current ->make_request_fn.
+ *
+ * generic_make_request() will sort bios by following order:
+ * 1. bios to lower level.
+ * 2. bios to same level.
+ * 3. bios with BIO_DELAYED flags.
+ * 4. bios submitted before current->make_request_fn.
+ *
+ * Note that bios with BIO_DELAYED flags will be sorted by
+ * last-in-first-out order.
+ */
+#define BIO_DELAYED 20
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define BIO_SYNO_FULL_STRIPE_MERGE 21 /* This bio should apply full stripe merge */
+#endif /* MY_ABC_HERE */
 
 /*
  * top 4 bits of bio flags indicate the pool this bio came from
@@ -161,11 +216,17 @@ enum rq_flag_bits {
 	__REQ_INTEGRITY,	/* I/O includes block integrity payload */
 	__REQ_FUA,		/* forced unit access */
 	__REQ_FLUSH,		/* request for cache flush */
+#ifdef MY_ABC_HERE
+	__REQ_UNUSED_HINT,	/* unused space hint for RAID */
+#endif /* MY_ABC_HERE */
 
 	/* bio only flags */
 	__REQ_RAHEAD,		/* read ahead, can fail anytime */
 	__REQ_THROTTLED,	/* This bio has already been subjected to
 				 * throttling rules. Don't do it again. */
+#ifdef MY_ABC_HERE
+	__REQ_SYNO_RBD, /* synorbd : this only for bio flag */
+#endif /* MY_ABC_HERE */
 
 	/* request only flags */
 	__REQ_SORTED,		/* elevator knows about this request */
@@ -189,7 +250,14 @@ enum rq_flag_bits {
 	__REQ_HASHED,		/* on IO scheduler merge hash */
 	__REQ_MQ_INFLIGHT,	/* track inflight for MQ */
 	__REQ_NO_TIMEOUT,	/* requests may never expire */
+#ifdef MY_DEF_HERE
+	__REQ_SYNO_COMPELETED_HARDIRQ_DONE, /* finish hard irq runtine after being marked compelete */
+#endif
 	__REQ_NR_BITS,		/* stops here */
+#ifdef MY_ABC_HERE
+	__REQ_SYNO_PATTERN_CHECK, /* pattern debug check flag */
+#endif /* MY_ABC_HERE */
+
 };
 
 #define REQ_WRITE		(1ULL << __REQ_WRITE)
@@ -203,13 +271,41 @@ enum rq_flag_bits {
 #define REQ_WRITE_SAME		(1ULL << __REQ_WRITE_SAME)
 #define REQ_NOIDLE		(1ULL << __REQ_NOIDLE)
 #define REQ_INTEGRITY		(1ULL << __REQ_INTEGRITY)
+#ifdef MY_ABC_HERE
+#define REQ_SYNO_PATTERN_CHECK	(1ULL << __REQ_SYNO_PATTERN_CHECK)
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define REQ_UNUSED_HINT		(1ULL << __REQ_UNUSED_HINT)
+#endif /* MY_ABC_HERE */
 
 #define REQ_FAILFAST_MASK \
 	(REQ_FAILFAST_DEV | REQ_FAILFAST_TRANSPORT | REQ_FAILFAST_DRIVER)
+#ifdef  MY_ABC_HERE
+#ifdef MY_ABC_HERE
+#define REQ_COMMON_MASK \
+        (REQ_WRITE | REQ_FAILFAST_MASK | REQ_SYNC | REQ_META | REQ_PRIO | \
+         REQ_DISCARD | REQ_WRITE_SAME | REQ_NOIDLE | REQ_FLUSH | REQ_FUA | \
+         REQ_SECURE | REQ_INTEGRITY | REQ_UNUSED_HINT | REQ_NOMERGE | REQ_SYNO_PATTERN_CHECK)
+#else /* MY_ABC_HERE */
 #define REQ_COMMON_MASK \
 	(REQ_WRITE | REQ_FAILFAST_MASK | REQ_SYNC | REQ_META | REQ_PRIO | \
 	 REQ_DISCARD | REQ_WRITE_SAME | REQ_NOIDLE | REQ_FLUSH | REQ_FUA | \
-	 REQ_SECURE | REQ_INTEGRITY)
+	 REQ_SECURE | REQ_INTEGRITY | REQ_UNUSED_HINT | REQ_NOMERGE)
+#endif /* MY_ABC_HERE */
+#else /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define REQ_COMMON_MASK \
+	(REQ_WRITE | REQ_FAILFAST_MASK | REQ_SYNC | REQ_META | REQ_PRIO | \
+	 REQ_DISCARD | REQ_WRITE_SAME | REQ_NOIDLE | REQ_FLUSH | REQ_FUA | \
+	 REQ_SECURE | REQ_INTEGRITY | REQ_NOMERGE | REQ_SYNO_PATTERN_CHECK)
+#else /* MY_ABC_HERE */
+#define REQ_COMMON_MASK \
+	(REQ_WRITE | REQ_FAILFAST_MASK | REQ_SYNC | REQ_META | REQ_PRIO | \
+	 REQ_DISCARD | REQ_WRITE_SAME | REQ_NOIDLE | REQ_FLUSH | REQ_FUA | \
+	 REQ_SECURE | REQ_INTEGRITY | REQ_NOMERGE)
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 #define REQ_CLONE_MASK		REQ_COMMON_MASK
 
 #define BIO_NO_ADVANCE_ITER_MASK	(REQ_DISCARD|REQ_WRITE_SAME)
@@ -220,6 +316,9 @@ enum rq_flag_bits {
 
 #define REQ_RAHEAD		(1ULL << __REQ_RAHEAD)
 #define REQ_THROTTLED		(1ULL << __REQ_THROTTLED)
+#ifdef MY_ABC_HERE
+#define REQ_SYNO_RBD		(1ULL << __REQ_SYNO_RBD)
+#endif /* MY_ABC_HERE */
 
 #define REQ_SORTED		(1ULL << __REQ_SORTED)
 #define REQ_SOFTBARRIER		(1ULL << __REQ_SOFTBARRIER)
@@ -243,6 +342,9 @@ enum rq_flag_bits {
 #define REQ_HASHED		(1ULL << __REQ_HASHED)
 #define REQ_MQ_INFLIGHT		(1ULL << __REQ_MQ_INFLIGHT)
 #define REQ_NO_TIMEOUT		(1ULL << __REQ_NO_TIMEOUT)
+#ifdef MY_DEF_HERE
+#define REQ_SYNO_COMPELETED_HARDIRQ_DONE	(1ULL << __REQ_SYNO_COMPELETED_HARDIRQ_DONE)
+#endif
 
 typedef unsigned int blk_qc_t;
 #define BLK_QC_T_NONE	-1U

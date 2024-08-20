@@ -141,27 +141,55 @@ int reset_control_status(struct reset_control *rstc)
 EXPORT_SYMBOL_GPL(reset_control_status);
 
 /**
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+ * of_reset_control_get_by_index - Lookup and obtain a reference to a reset
+ * controller by index.
+#else // CONFIG_SYNO_LSP_RTD1619
  * of_reset_control_get - Lookup and obtain a reference to a reset controller.
+#endif // CONFIG_SYNO_LSP_RTD1619
  * @node: device to be reset by the controller
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+ * @index: index of the reset controller
+#else // CONFIG_SYNO_LSP_RTD1619
  * @id: reset line name
  *
  * Returns a struct reset_control or IS_ERR() condition containing errno.
+#endif // CONFIG_SYNO_LSP_RTD1619
  *
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+ * This is to be used to perform a list of resets for a device or power domain
+ * in whatever order. Returns a struct reset_control or IS_ERR() condition
+ * containing errno.
+#else // CONFIG_SYNO_LSP_RTD1619
  * Use of id names is optional.
+#endif // CONFIG_SYNO_LSP_RTD1619
  */
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+struct reset_control *of_reset_control_get_by_index(struct device_node *node,
+					   int index)
+#else /* CONFIG_SYNO_LSP_RTD1619 */
 struct reset_control *of_reset_control_get(struct device_node *node,
 					   const char *id)
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 {
 	struct reset_control *rstc = ERR_PTR(-EPROBE_DEFER);
 	struct reset_controller_dev *r, *rcdev;
 	struct of_phandle_args args;
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+//do nothing
+#else /* CONFIG_SYNO_LSP_RTD1619 */
 	int index = 0;
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	int rstc_id;
 	int ret;
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+//do nothing
+#else /* CONFIG_SYNO_LSP_RTD1619 */
 	if (id)
 		index = of_property_match_string(node,
 						 "reset-names", id);
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	ret = of_parse_phandle_with_args(node, "resets", "#reset-cells",
 					 index, &args);
 	if (ret)
@@ -202,6 +230,32 @@ struct reset_control *of_reset_control_get(struct device_node *node,
 
 	return rstc;
 }
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+EXPORT_SYMBOL_GPL(of_reset_control_get_by_index);
+
+/**
+ * of_reset_control_get - Lookup and obtain a reference to a reset controller.
+ * @node: device to be reset by the controller
+ * @id: reset line name
+ *
+ * Returns a struct reset_control or IS_ERR() condition containing errno.
+ *
+ * Use of id names is optional.
+ */
+struct reset_control *of_reset_control_get(struct device_node *node,
+					   const char *id)
+{
+	int index = 0;
+
+	if (id) {
+		index = of_property_match_string(node,
+						 "reset-names", id);
+		if (index < 0)
+			return ERR_PTR(-ENOENT);
+	}
+	return of_reset_control_get_by_index(node, index);
+}
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 EXPORT_SYMBOL_GPL(of_reset_control_get);
 
 /**

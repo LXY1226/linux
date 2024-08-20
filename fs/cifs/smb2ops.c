@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  SMB2 version specific operations
  *
@@ -970,10 +973,11 @@ smb2_is_session_expired(char *buf)
 {
 	struct smb2_hdr *hdr = (struct smb2_hdr *)buf;
 
-	if (hdr->Status != STATUS_NETWORK_SESSION_EXPIRED)
+	if (hdr->Status != STATUS_NETWORK_SESSION_EXPIRED &&
+	    hdr->Status != STATUS_USER_SESSION_DELETED)
 		return false;
 
-	cifs_dbg(FYI, "Session expired\n");
+	cifs_dbg(FYI, "Session expired or deleted\n");
 	return true;
 }
 
@@ -1410,13 +1414,21 @@ smb3_set_oplock_level(struct cifsInodeInfo *cinode, __u32 oplock,
 }
 
 static bool
+#ifdef MY_ABC_HERE
+smb2_is_read_op(struct TCP_Server_Info *server, __u32 oplock)
+#else
 smb2_is_read_op(__u32 oplock)
+#endif /* MY_ABC_HERE */
 {
 	return oplock == SMB2_OPLOCK_LEVEL_II;
 }
 
 static bool
+#ifdef MY_ABC_HERE
+smb21_is_read_op(struct TCP_Server_Info *server, __u32 oplock)
+#else
 smb21_is_read_op(__u32 oplock)
+#endif /* MY_ABC_HERE */
 {
 	return (oplock & SMB2_LEASE_READ_CACHING_HE) &&
 	       !(oplock & SMB2_LEASE_WRITE_CACHING_HE);
@@ -1436,7 +1448,11 @@ map_oplock_to_lease(u8 oplock)
 }
 
 static char *
+#ifdef MY_ABC_HERE
+smb2_create_lease_buf(struct TCP_Server_Info *server, u8 *lease_key, u8 oplock)
+#else
 smb2_create_lease_buf(u8 *lease_key, u8 oplock)
+#endif /* MY_ABC_HERE */
 {
 	struct create_lease *buf;
 
@@ -1463,7 +1479,11 @@ smb2_create_lease_buf(u8 *lease_key, u8 oplock)
 }
 
 static char *
+#ifdef MY_ABC_HERE
+smb3_create_lease_buf(struct TCP_Server_Info *server, u8 *lease_key, u8 oplock)
+#else
 smb3_create_lease_buf(u8 *lease_key, u8 oplock)
+#endif /* MY_ABC_HERE */
 {
 	struct create_lease_v2 *buf;
 
@@ -1490,7 +1510,11 @@ smb3_create_lease_buf(u8 *lease_key, u8 oplock)
 }
 
 static __u8
+#ifdef MY_ABC_HERE
+smb2_parse_lease_buf(struct TCP_Server_Info *server, void *buf, unsigned int *epoch)
+#else
 smb2_parse_lease_buf(void *buf, unsigned int *epoch)
+#endif /* MY_ABC_HERE */
 {
 	struct create_lease *lc = (struct create_lease *)buf;
 
@@ -1501,7 +1525,11 @@ smb2_parse_lease_buf(void *buf, unsigned int *epoch)
 }
 
 static __u8
+#ifdef MY_ABC_HERE
+smb3_parse_lease_buf(struct TCP_Server_Info *server, void *buf, unsigned int *epoch)
+#else
 smb3_parse_lease_buf(void *buf, unsigned int *epoch)
+#endif /* MY_ABC_HERE */
 {
 	struct create_lease_v2 *lc = (struct create_lease_v2 *)buf;
 

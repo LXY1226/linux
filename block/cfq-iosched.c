@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  CFQ, or complete fairness queueing, disk scheduler.
  *
@@ -34,6 +37,9 @@ static int cfq_slice_idle = HZ / 125;
 static int cfq_group_idle = HZ / 125;
 static const int cfq_target_latency = HZ * 3/10; /* 300 ms */
 static const int cfq_hist_divisor = 4;
+#ifdef MY_ABC_HERE
+static int cfq_promote_sync = 1;
+#endif /* MY_ABC_HERE */
 
 /*
  * offset from end of service tree
@@ -383,6 +389,9 @@ struct cfq_data {
 	unsigned int cfq_group_idle;
 	unsigned int cfq_latency;
 	unsigned int cfq_target_latency;
+#ifdef MY_ABC_HERE
+	unsigned int cfq_promote_sync;
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Fallback dummy cfqq for extreme OOM conditions
@@ -3414,7 +3423,11 @@ static bool cfq_may_dispatch(struct cfq_data *cfqd, struct cfq_queue *cfqq)
 		 * preempt async queue, limiting the sync queue doesn't make
 		 * sense. This is useful for aiostress test.
 		 */
+#ifdef MY_ABC_HERE
+		if (cfqd->cfq_promote_sync && cfq_cfqq_sync(cfqq) && cfqd->busy_sync_queues == 1)
+#else
 		if (cfq_cfqq_sync(cfqq) && cfqd->busy_sync_queues == 1)
+#endif /* MY_ABC_HERE */
 			promote_sync = true;
 
 		/*
@@ -4591,6 +4604,9 @@ static int cfq_init_queue(struct request_queue *q, struct elevator_type *e)
 	cfqd->cfq_group_idle = cfq_group_idle;
 	cfqd->cfq_latency = 1;
 	cfqd->hw_tag = -1;
+#ifdef MY_ABC_HERE
+	cfqd->cfq_promote_sync = cfq_promote_sync;
+#endif /* MY_ABC_HERE */
 	/*
 	 * we optimistically start assuming sync ops weren't delayed in last
 	 * second, in order to have larger depth for async operations.
@@ -4655,6 +4671,9 @@ SHOW_FUNCTION(cfq_slice_async_show, cfqd->cfq_slice[0], 1);
 SHOW_FUNCTION(cfq_slice_async_rq_show, cfqd->cfq_slice_async_rq, 0);
 SHOW_FUNCTION(cfq_low_latency_show, cfqd->cfq_latency, 0);
 SHOW_FUNCTION(cfq_target_latency_show, cfqd->cfq_target_latency, 1);
+#ifdef MY_ABC_HERE
+SHOW_FUNCTION(cfq_promote_sync_show, cfqd->cfq_promote_sync, 0);
+#endif /* MY_ABC_HERE */
 #undef SHOW_FUNCTION
 
 #define STORE_FUNCTION(__FUNC, __PTR, MIN, MAX, __CONV)			\
@@ -4689,6 +4708,9 @@ STORE_FUNCTION(cfq_slice_async_rq_store, &cfqd->cfq_slice_async_rq, 1,
 		UINT_MAX, 0);
 STORE_FUNCTION(cfq_low_latency_store, &cfqd->cfq_latency, 0, 1, 0);
 STORE_FUNCTION(cfq_target_latency_store, &cfqd->cfq_target_latency, 1, UINT_MAX, 1);
+#ifdef MY_ABC_HERE
+STORE_FUNCTION(cfq_promote_sync_store, &cfqd->cfq_promote_sync, 0, 1, 0);
+#endif /* MY_ABC_HERE */
 #undef STORE_FUNCTION
 
 #define CFQ_ATTR(name) \
@@ -4707,6 +4729,9 @@ static struct elv_fs_entry cfq_attrs[] = {
 	CFQ_ATTR(group_idle),
 	CFQ_ATTR(low_latency),
 	CFQ_ATTR(target_latency),
+#ifdef MY_ABC_HERE
+	CFQ_ATTR(promote_sync),
+#endif /* MY_ABC_HERE */
 	__ATTR_NULL
 };
 

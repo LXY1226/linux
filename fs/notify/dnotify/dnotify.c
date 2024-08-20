@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Directory notifications for Linux.
  *
@@ -93,6 +96,11 @@ static int dnotify_handle_event(struct fsnotify_group *group,
 	struct dnotify_struct **prev;
 	struct fown_struct *fown;
 	__u32 test_mask = mask & ~FS_EVENT_ON_CHILD;
+
+#ifdef MY_ABC_HERE
+	if (data_type == FSNOTIFY_EVENT_SYNO)
+		return 0;
+#endif /* MY_ABC_HERE */
 
 	/* not a dir, dnotify doesn't care */
 	if (!S_ISDIR(inode->i_mode))

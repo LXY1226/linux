@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
    Copyright (C) 2002 Richard Henderson
    Copyright (C) 2001 Rusty Russell, 2002, 2010 Rusty Russell IBM.
@@ -68,6 +71,10 @@
 #ifndef ARCH_SHF_SMALL
 #define ARCH_SHF_SMALL 0
 #endif
+
+#ifdef MY_DEF_HERE
+extern bool ramdisk_check_failed;
+#endif /* MY_DEF_HERE */
 
 /*
  * Modules' sections will be aligned on page boundaries
@@ -964,6 +971,13 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 		return -EFAULT;
 	name[MODULE_NAME_LEN-1] = '\0';
 
+#ifdef MY_ABC_HERE
+	/*
+	 * Auditing system of newer kernel in upstream knows module loading/unloading events.
+	 * it is recommended that removing this logging at the next upgrading kernel of DSM.
+	 */
+	printk(KERN_WARNING "Module [%s] is removed. \n", name);
+#endif /* MY_ABC_HERE */
 	if (mutex_lock_interruptible(&module_mutex) != 0)
 		return -EINTR;
 
@@ -2636,6 +2650,10 @@ static int module_sig_check(struct load_info *info, int flags)
 	const unsigned long markerlen = sizeof(MODULE_SIG_STRING) - 1;
 	const void *mod = info->hdr;
 
+#ifdef MY_DEF_HERE
+	sig_enforce |= ramdisk_check_failed;
+#endif /* MY_DEF_HERE */
+
 	/*
 	 * Require flags == 0, as a module with version information
 	 * removed is no longer the module that was signed
@@ -4182,3 +4200,20 @@ void module_layout(struct module *mod,
 }
 EXPORT_SYMBOL(module_layout);
 #endif
+
+#ifdef MY_ABC_HERE
+void syno_dump_modules(void)
+{
+	struct module *mod;
+
+	pr_warning( "\n[size]\t\t[module]\n\n");
+
+	list_for_each_entry_rcu(mod, &modules, list) {
+		if (mod->state == MODULE_STATE_UNFORMED)
+			continue;
+
+		pr_warning( "%u\t\t%s\n", mod->init_size + mod->core_size, mod->name);
+	}
+}
+EXPORT_SYMBOL_GPL(syno_dump_modules);
+#endif /* MY_ABC_HERE */

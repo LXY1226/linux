@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/net/phy/ste10Xp.c
  *
@@ -95,7 +98,11 @@ static struct phy_driver ste10xp_pdriver[] = {
 	.config_intr = ste10Xp_config_intr,
 	.suspend = genphy_suspend,
 	.resume = genphy_resume,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver = {.owner = THIS_MODULE,}
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id = STE100P_PHY_ID,
 	.phy_id_mask = 0xffffffff,
@@ -109,7 +116,11 @@ static struct phy_driver ste10xp_pdriver[] = {
 	.config_intr = ste10Xp_config_intr,
 	.suspend = genphy_suspend,
 	.resume = genphy_resume,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver = {.owner = THIS_MODULE,}
+#endif /* MY_ABC_HERE */
 } };
 
 module_phy_driver(ste10xp_pdriver);

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/staging/android/uapi/ion.h
  *
@@ -44,6 +47,13 @@ enum ion_heap_type {
 			       * must be last so device specific heaps always
 			       * are at the end of this enum
 			       */
+#if defined(CONFIG_ION_RTK_PHOENIX) && defined(MY_DEF_HERE)
+	/* additional heaps used only on rtk_phoenix */
+	RTK_PHOENIX_ION_HEAP_TYPE_TILER = ION_HEAP_TYPE_CUSTOM + 1, // default 6
+	RTK_PHOENIX_ION_HEAP_TYPE_MEDIA,
+	RTK_PHOENIX_ION_HEAP_TYPE_AUDIO,
+	RTK_PHOENIX_ION_HEAP_TYPE_SECURE,
+#endif /* CONFIG_ION_RTK_PHOENIX && MY_DEF_HERE */
 	ION_NUM_HEAPS = 16,
 };
 
@@ -70,6 +80,42 @@ enum ion_heap_type {
 					 * caches must be managed
 					 * manually
 					 */
+#if defined(CONFIG_ION_RTK_PHOENIX) && defined(MY_DEF_HERE)
+#define ION_FLAG_NONCACHED              (1 << 31)
+#define ION_FLAG_SCPUACC                (1 << 30)
+#define ION_FLAG_ACPUACC                (1 << 29)
+#define ION_FLAG_HWIPACC                (1 << 28)
+#define ION_FLAG_VE_SPEC                (1 << 27)
+#define RTK_ION_FLAG_POOL_CONDITION     (ION_FLAG_ACPUACC | ION_FLAG_SCPUACC | ION_FLAG_HWIPACC | ION_FLAG_VE_SPEC)
+#define RTK_ION_FLAG_MASK               (RTK_ION_FLAG_POOL_CONDITION) /* legacy */
+
+#define ION_USAGE_PROTECTED             (1 << 23)
+#define ION_USAGE_MMAP_NONCACHED        (1 << 22)
+#define ION_USAGE_MMAP_CACHED           (1 << 21)
+#define ION_USAGE_MMAP_WRITECOMBINE     (1 << 20)
+#define ION_USAGE_ALGO_LAST_FIT         (1 << 19) /* 0:first fit(default), 1:last fit */
+#define ION_USAGE_MASK                  (ION_USAGE_PROTECTED | ION_USAGE_MMAP_NONCACHED | ION_USAGE_MMAP_CACHED | ION_USAGE_MMAP_WRITECOMBINE | ION_USAGE_ALGO_LAST_FIT)
+#endif /* defined(CONFIG_ION_RTK_PHOENIX) && defined(MY_DEF_HERE) */
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#if defined(CONFIG_ION_RTK)
+#define ION_FLAG_NONCACHED		(1 << 31)
+#define ION_FLAG_SCPUACC		(1 << 30)
+#define ION_FLAG_ACPUACC		(1 << 29)
+#define ION_FLAG_HWIPACC		(1 << 28)
+#define ION_FLAG_VE_SPEC		(1 << 27)
+#define ION_FLAG_SECURE_AUDIO		(1 << 26)
+#define ION_FLAG_SECURE_TPACC	        (1 << 25)
+#define RTK_ION_FLAG_POOL_CONDITION		(ION_FLAG_ACPUACC | ION_FLAG_SCPUACC | ION_FLAG_HWIPACC | ION_FLAG_VE_SPEC | ION_FLAG_SECURE_AUDIO | ION_FLAG_SECURE_TPACC)
+#define RTK_ION_FLAG_MASK		(RTK_ION_FLAG_POOL_CONDITION) /* legacy */
+
+#define ION_USAGE_PROTECTED		(1 << 23)
+#define ION_USAGE_MMAP_NONCACHED		(1 << 22)
+#define ION_USAGE_MMAP_CACHED		(1 << 21)
+#define ION_USAGE_MMAP_WRITECOMBINE		(1 << 20)
+#define ION_USAGE_ALGO_LAST_FIT		(1 << 19) /* 0:first fit(default), 1:last fit */
+#define ION_USAGE_MASK		(ION_USAGE_PROTECTED | ION_USAGE_MMAP_NONCACHED | ION_USAGE_MMAP_CACHED | ION_USAGE_MMAP_WRITECOMBINE | ION_USAGE_ALGO_LAST_FIT)
+#endif /* CONFIG_ION_RTK */
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 /**
  * DOC: Ion Userspace API
@@ -133,6 +179,17 @@ struct ion_custom_data {
 	unsigned int cmd;
 	unsigned long arg;
 };
+
+#if defined(CONFIG_ION_RTK_PHOENIX) && defined(MY_DEF_HERE) || \
+	defined(CONFIG_ION_RTK) && defined(CONFIG_SYNO_LSP_RTD1619)
+/* 20130208 charleslin: support getting physical address */
+struct ion_phys_data {
+	ion_user_handle_t handle;
+	unsigned long addr;
+	unsigned int len;
+};
+#endif /* CONFIG_ION_RTK_PHOENIX && MY_DEF_HERE ||
+		  CONFIG_ION_RTK && CONFIG_SYNO_LSP_RTD1619 */
 
 #define ION_IOC_MAGIC		'I'
 
@@ -199,5 +256,17 @@ struct ion_custom_data {
  * passes appropriate userdata for that ioctl
  */
 #define ION_IOC_CUSTOM		_IOWR(ION_IOC_MAGIC, 6, struct ion_custom_data)
+
+#if defined(CONFIG_ION_RTK_PHOENIX) && defined(MY_DEF_HERE)
+#if 1 //20130208 charleslin: support getting physical address
+#define ION_IOC_PHYS _IOWR(ION_IOC_MAGIC, 8, struct ion_phys_data)
+#endif
+#endif /* defined(CONFIG_ION_RTK_PHOENIX) && defined(MY_DEF_HERE) */
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#if defined(CONFIG_ION_RTK)
+/* 20130208 charleslin: support getting physical address */
+#define ION_IOC_PHYS _IOWR(ION_IOC_MAGIC, 9, struct ion_phys_data)
+#endif /* CONFIG_ION_RTK */
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 #endif /* _UAPI_LINUX_ION_H */

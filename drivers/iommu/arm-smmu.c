@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * IOMMU API for ARM architected SMMU implementations.
  *
@@ -70,7 +73,8 @@
 		((smmu->options & ARM_SMMU_OPT_SECURE_CFG_ACCESS)	\
 			? 0x400 : 0))
 
-#ifdef CONFIG_64BIT
+#if (defined(MY_ABC_HERE) && defined(CONFIG_MMIO_64BIT)) || \
+	(!defined(MY_ABC_HERE) && defined(CONFIG_64BIT))
 #define smmu_writeq	writeq_relaxed
 #else
 #define smmu_writeq(reg64, addr)				\

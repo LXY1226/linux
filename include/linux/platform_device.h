@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * platform_device.h - generic, centralized driver model
  *
@@ -40,6 +43,11 @@ struct platform_device {
 #define platform_get_device_id(pdev)	((pdev)->id_entry)
 
 #define to_platform_device(x) container_of((x), struct platform_device, dev)
+
+#ifdef MY_DEF_HERE
+/* backporting from linux-5.10.x, for syno_eth_info */
+#define dev_is_platform(dev) ((dev)->bus == &platform_bus_type)
+#endif /* MY_DEF_HERE  */
 
 extern int platform_device_register(struct platform_device *);
 extern void platform_device_unregister(struct platform_device *);

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * GPIO driver for AMD 8111 south bridges
  *
@@ -220,7 +223,11 @@ found:
 		goto out;
 	}
 	gp.pdev = pdev;
+#if defined(MY_ABC_HERE)
+	gp.chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	gp.chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 
 	spin_lock_init(&gp.lock);
 

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   fs/cifs/cifs_unicode.c
  *
@@ -69,6 +72,17 @@ convert_sfu_char(const __u16 src_char, char *target)
 	case UNI_LESSTHAN:
 		*target = '<';
 		break;
+#ifdef MY_ABC_HERE
+	case UNI_DQUOT:
+		*target = '"';
+		break;
+	case UNI_DIVSLASH:
+		*target = '/';
+		break;
+	case UNI_CRGRET:
+		*target = '\r';
+		break;
+#endif /* MY_ABC_HERE */
 	default:
 		return false;
 	}
@@ -107,6 +121,18 @@ convert_sfm_char(const __u16 src_char, char *target)
 	case SFM_PERIOD:
 		*target = '.';
 		break;
+#ifdef MY_ABC_HERE
+	//conflict with SFM_COLON
+	//case UNI_DQUOT:
+	//	*target = '"';
+	//	break;
+	case UNI_DIVSLASH:
+		*target = '/';
+		break;
+	case UNI_CRGRET:
+		*target = '\r';
+		break;
+#endif /* MY_ABC_HERE */
 	default:
 		return false;
 	}
@@ -249,6 +275,31 @@ cifs_from_utf16(char *to, const __le16 *from, int tolen, int fromlen,
 	return outlen;
 }
 
+#ifdef MY_ABC_HERE
+int
+cifs_strtoUTF16_NoSpecialChar(__le16 *to, const char *from, int len,
+	      const struct nls_table *codepage)
+{
+	int charlen;
+	int i;
+	wchar_t wchar_to; /* needed to quiet sparse */
+
+	for (i = 0; len && *from; i++, from += charlen, len -= charlen) {
+		charlen = codepage->char2uni(from, len, &wchar_to);
+		if (charlen < 1) {
+			cifs_dbg(VFS, "strtoUTF16: char2uni of 0x%x returned %d",
+				*from, charlen);
+			/* A question mark */
+			wchar_to = 0x003f;
+			charlen = 1;
+		}
+		put_unaligned_le16(wchar_to, &to[i]);
+	}
+
+	put_unaligned_le16(0, &to[i]);
+	return i;
+}
+#endif /* MY_ABC_HERE */
 /*
  * NAME:	cifs_strtoUTF16()
  *
@@ -263,6 +314,9 @@ cifs_strtoUTF16(__le16 *to, const char *from, int len,
 	int i;
 	wchar_t wchar_to; /* needed to quiet sparse */
 
+#ifdef MY_ABC_HERE
+	/* remove the convert to match special char convert rule */
+#else
 	/* special case for utf8 to handle no plane0 chars */
 	if (!strcmp(codepage->charset, "utf8")) {
 		/*
@@ -283,20 +337,62 @@ cifs_strtoUTF16(__le16 *to, const char *from, int len,
 		 * invalid encoded characters
 		 */
 	}
+#endif /* MY_ABC_HERE */
 
 	for (i = 0; len && *from; i++, from += charlen, len -= charlen) {
+#ifdef MY_ABC_HERE
+		if (0x0d == *from) {    //'\r'
+			to[i] = cpu_to_le16(0xf00d);
+			charlen = 1;
+		} else if (0x2a == *from) {     //'*'
+			to[i] = cpu_to_le16(0xf02a);
+			charlen = 1;
+		} else if (0x2f == *from) {     //'/'
+			to[i] = cpu_to_le16(0xf02f);
+			charlen = 1;
+		} else if (0x3c == *from) {     //'<'
+			to[i] = cpu_to_le16(0xf03c);
+			charlen = 1;
+		} else if (0x3e == *from) {     //'>'
+			to[i] = cpu_to_le16(0xf03e);
+			charlen = 1;
+		} else if (0x3f == *from) {     //'?'
+			to[i] = cpu_to_le16(0xf03f);
+			charlen = 1;
+		} else if (0x7c== *from) {      //'|'
+			to[i] = cpu_to_le16(0xf07c);
+			charlen = 1;
+		} else if (0x3a== *from) {      //':'
+			to[i] = cpu_to_le16(0xf022);
+			charlen = 1;
+		} else if (0x22== *from) {      //'"'
+			to[i] = cpu_to_le16(0xf020);
+			charlen = 1;
+		} else {
+#endif /* MY_ABC_HERE */
 		charlen = codepage->char2uni(from, len, &wchar_to);
 		if (charlen < 1) {
+#ifdef MY_ABC_HERE
+			/* remove debug? */
+#else
 			cifs_dbg(VFS, "strtoUTF16: char2uni of 0x%x returned %d\n",
 				 *from, charlen);
+#endif /* MY_ABC_HERE */
 			/* A question mark */
 			wchar_to = 0x003f;
 			charlen = 1;
 		}
 		put_unaligned_le16(wchar_to, &to[i]);
+#ifdef MY_ABC_HERE
+		}
+#endif /* MY_ABC_HERE */
 	}
 
+#ifdef MY_ABC_HERE
+	/* purge compile warning */
+#else
 success:
+#endif /* MY_ABC_HERE */
 	put_unaligned_le16(0, &to[i]);
 	return i;
 }
@@ -398,6 +494,17 @@ static __le16 convert_to_sfu_char(char src_char)
 	case '|':
 		dest_char = cpu_to_le16(UNI_PIPE);
 		break;
+#ifdef MY_ABC_HERE
+	case '"':
+		dest_char = cpu_to_le16(UNI_DQUOT);
+		break;
+	case '/':
+		dest_char = cpu_to_le16(UNI_DIVSLASH);
+		break;
+	case '\r':
+		dest_char = cpu_to_le16(UNI_CRGRET);
+		break;
+#endif /* MY_ABC_HERE */
 	default:
 		dest_char = 0;
 	}
@@ -443,6 +550,18 @@ static __le16 convert_to_sfm_char(char src_char, bool end_of_string)
 		else
 			dest_char = 0;
 		break;
+#ifdef MY_ABC_HERE
+	//conflict with SFM_COLON
+	//case '"':
+	//	dest_char = cpu_to_le16(UNI_DQUOT);
+	//	break;
+	case '/':
+		dest_char = cpu_to_le16(UNI_DIVSLASH);
+		break;
+	case '\r':
+		dest_char = cpu_to_le16(UNI_CRGRET);
+		break;
+#endif /* MY_ABC_HERE */
 	default:
 		dest_char = 0;
 	}

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright 2014 Freescale Semiconductor, Inc.
  *
@@ -31,7 +34,11 @@ struct clk_gate_exclusive {
 
 static int clk_gate_exclusive_enable(struct clk_hw *hw)
 {
+#if defined(MY_ABC_HERE)
+	struct clk_gate *gate = to_clk_gate(hw);
+#else /* MY_ABC_HERE */
 	struct clk_gate *gate = container_of(hw, struct clk_gate, hw);
+#endif /* MY_ABC_HERE */
 	struct clk_gate_exclusive *exgate = container_of(gate,
 					struct clk_gate_exclusive, gate);
 	u32 val = readl(gate->reg);

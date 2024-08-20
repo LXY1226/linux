@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright © 2009 Nuvoton technology corporation.
  *
@@ -136,7 +139,11 @@ static int nuc900_nand_devready(struct mtd_info *mtd)
 static void nuc900_nand_command_lp(struct mtd_info *mtd, unsigned int command,
 				   int column, int page_addr)
 {
+#if defined(MY_ABC_HERE)
+	register struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	register struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct nuc900_nand *nand;
 
 	nand = container_of(mtd, struct nuc900_nand, mtd);

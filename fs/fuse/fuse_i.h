@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
   FUSE: Filesystem in Userspace
   Copyright (C) 2001-2008  Miklos Szeredi <miklos@szeredi.hu>
@@ -25,7 +28,29 @@
 #include <linux/kref.h>
 
 /** Max number of pages that can be used in a single read request */
+#ifdef MY_ABC_HERE
+#define FUSE_MAX_PAGES_PER_REQ 256
+#else
 #define FUSE_MAX_PAGES_PER_REQ 32
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define SYNO_FUSE_ENTRY_NAME_LEN 255
+#define FUSE_SYNOSTAT_SIZE (SYNO_FUSE_ENTRY_NAME_LEN + 1 + sizeof(struct fuse_synostat))
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define XATTR_SYNO_ARCHIVE_VERSION_GLUSTER "archive_version_gluster"
+#define XATTR_SYNO_ARCHIVE_VERSION_VOLUME_GLUSTER "archive_version_volume_gluster"
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+/* GlusterFS create time xattr format, for 32/64bit packing compatibility */
+struct syno_gf_xattr_crtime {
+	__le64 sec;
+	__le32 nsec;
+} __attribute__ ((__packed__));
+#endif /* MY_ABC_HERE */
 
 /** Bias for fi->writectr, meaning new writepages must not be sent */
 #define FUSE_NOWRITE INT_MIN
@@ -120,6 +145,8 @@ enum {
 	FUSE_I_INIT_RDPLUS,
 	/** An operation changing file size is in progress  */
 	FUSE_I_SIZE_UNSTABLE,
+	/* Bad inode */
+	FUSE_I_BAD,
 };
 
 struct fuse_conn;
@@ -312,6 +339,8 @@ struct fuse_req {
 
 	/** refcount */
 	atomic_t count;
+
+	bool user_pages;
 
 	/** Unique ID for the interrupt request */
 	u64 intr_unique;
@@ -678,6 +707,16 @@ static inline u64 get_node_id(struct inode *inode)
 	return get_fuse_inode(inode)->nodeid;
 }
 
+static inline void fuse_make_bad(struct inode *inode)
+{
+	set_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state);
+}
+
+static inline bool fuse_is_bad(struct inode *inode)
+{
+	return unlikely(test_bit(FUSE_I_BAD, &get_fuse_inode(inode)->state));
+}
+
 /** Device operations */
 extern const struct file_operations fuse_dev_operations;
 
@@ -695,8 +734,14 @@ struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version);
 
+#ifdef MY_ABC_HERE
+int fuse_lookup_name(struct super_block *sb, u64 nodeid, struct qstr *name,
+		     struct fuse_entry_out *outarg, struct inode **inode,
+		     struct fuse_synostat *synostat, int syno_stat_flags);
+#else
 int fuse_lookup_name(struct super_block *sb, u64 nodeid, struct qstr *name,
 		     struct fuse_entry_out *outarg, struct inode **inode);
+#endif /* MY_ABC_HERE */
 
 /**
  * Send FORGET command
@@ -833,6 +878,10 @@ void fuse_request_send(struct fuse_conn *fc, struct fuse_req *req);
  */
 ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args);
 
+#ifdef MY_ABC_HERE
+ssize_t fuse_send_syno_request(struct fuse_conn *fc, struct fuse_args *args);
+#endif /* MY_ABC_HERE */
+
 /**
  * Send a request in the background
  */
@@ -956,5 +1005,13 @@ int fuse_do_setattr(struct inode *inode, struct iattr *attr,
 		    struct file *file);
 
 void fuse_set_initialized(struct fuse_conn *fc);
+
+#ifdef MY_ABC_HERE
+ssize_t fuse_getxattr(struct dentry *entry, const char *name,
+			     void *value, size_t size);
+
+int fuse_setxattr(struct dentry *entry, const char *name,
+			 const void *value, size_t size, int flags);
+#endif /* MY_ABC_HERE */
 
 #endif /* _FS_FUSE_I_H */

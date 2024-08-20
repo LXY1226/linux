@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * linux/sound/soc.h -- ALSA SoC Layer
  *
@@ -20,7 +23,13 @@
 #include <linux/workqueue.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#if defined(MY_ABC_HERE)
+#if defined(MY_DEF_HERE)
 #include <linux/regmap.h>
+#endif /* MY_DEF_HERE */
+#else /* MY_ABC_HERE */
+#include <linux/regmap.h>
+#endif /* MY_ABC_HERE */
 #include <linux/log2.h>
 #include <sound/core.h>
 #include <sound/pcm.h>

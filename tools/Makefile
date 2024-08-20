@@ -18,6 +18,7 @@ help:
 	@echo '  perf       - Linux performance measurement and analysis tool'
 	@echo '  selftests  - various kernel selftests'
 	@echo '  turbostat  - Intel CPU idle stats and freq reporting tool'
+	@echo '  turbostat_backport - Backport from 5.10.55 Intel CPU idle stats and freq reporting tool'
 	@echo '  usb        - USB testing tools'
 	@echo '  virtio     - vhost test module'
 	@echo '  net        - misc networking tools'
@@ -73,6 +74,9 @@ selftests: FORCE
 	$(call descend,testing/$@)
 
 turbostat x86_energy_perf_policy: FORCE
+	$(call descend,power/x86/$@)
+
+turbostat_backport: FORCE
 	$(call descend,power/x86/$@)
 
 tmon: FORCE
@@ -134,6 +138,9 @@ selftests_clean:
 	$(call descend,testing/$(@:_clean=),clean)
 
 turbostat_clean x86_energy_perf_policy_clean:
+	$(call descend,power/x86/$(@:_clean=),clean)
+
+turbostat_backport_clean:
 	$(call descend,power/x86/$(@:_clean=),clean)
 
 tmon_clean:

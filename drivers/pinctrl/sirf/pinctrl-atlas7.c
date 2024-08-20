@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * pinctrl pads, groups, functions for CSR SiRFatlasVII
  *
@@ -6012,7 +6015,11 @@ static int atlas7_gpio_probe(struct platform_device *pdev)
 	chip->label = kstrdup(np->name, GFP_KERNEL);
 	chip->of_node = np;
 	chip->of_gpio_n_cells = 2;
+#if defined(MY_ABC_HERE)
+	chip->parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	chip->dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 
 	/* Add gpio chip to system */
 	ret = gpiochip_add(chip);

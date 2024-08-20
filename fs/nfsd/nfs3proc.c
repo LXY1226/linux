@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Process version 3 NFS requests.
  *
@@ -11,10 +14,18 @@
 #include "cache.h"
 #include "xdr3.h"
 #include "vfs.h"
+#ifdef MY_ABC_HERE
+#include "syno_io_stat.h"
+#endif /* MY_ABC_HERE */
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
 #define RETURN_STATUS(st)	{ resp->status = (st); return (st); }
+
+#ifdef MY_ABC_HERE
+extern u32 nfs_udp_f_rtpref;
+extern u32 nfs_udp_f_wtpref;
+#endif /*MY_ABC_HERE*/
 
 static int	nfs3_ftypes[] = {
 	0,			/* NF3NON */
@@ -547,10 +558,33 @@ nfsd3_proc_fsinfo(struct svc_rqst * rqstp, struct nfsd_fhandle    *argp,
 				SVCFH_fmt(&argp->fh));
 
 	resp->f_rtmax  = max_blocksize;
+#ifdef MY_ABC_HERE
+	if (IPPROTO_UDP == rqstp->rq_prot) {
+		if (CONFIG_SYNO_NFSD_UDP_MIN_PACKET_SIZE <= nfs_udp_f_rtpref && CONFIG_SYNO_NFSD_UDP_MAX_PACKET_SIZE >= nfs_udp_f_rtpref) {
+			resp->f_rtpref = nfs_udp_f_rtpref;
+		} else {
+			resp->f_rtpref = CONFIG_SYNO_NFSD_UDP_DEF_PACKET_SIZE;
+			dprintk("nfsd: FSINFO(3) nfs_udp_f_rtpref value is not correct %d\n", nfs_udp_f_rtpref);
+		}
+		if (CONFIG_SYNO_NFSD_UDP_MIN_PACKET_SIZE <= nfs_udp_f_wtpref && CONFIG_SYNO_NFSD_UDP_MAX_PACKET_SIZE >= nfs_udp_f_wtpref) {
+			resp->f_wtpref = nfs_udp_f_wtpref;
+		} else {
+			resp->f_wtpref = CONFIG_SYNO_NFSD_UDP_DEF_PACKET_SIZE;
+			dprintk("nfsd: FSINFO(3) nfs_udp_f_wtpref value is not correct %d\n", nfs_udp_f_wtpref);
+		}
+	} else {
+		resp->f_rtpref = max_blocksize;
+		resp->f_wtpref = max_blocksize;
+	}
+#else /* MY_ABC_HERE */
 	resp->f_rtpref = max_blocksize;
+#endif /* MY_ABC_HERE */
 	resp->f_rtmult = PAGE_SIZE;
 	resp->f_wtmax  = max_blocksize;
+#ifdef MY_ABC_HERE
+#else
 	resp->f_wtpref = max_blocksize;
+#endif /* MY_ABC_HERE */
 	resp->f_wtmult = PAGE_SIZE;
 	resp->f_dtpref = PAGE_SIZE;
 	resp->f_maxfilesize = ~(u32) 0;
@@ -894,10 +928,38 @@ static struct svc_procedure		nfsd_procedures3[22] = {
 	},
 };
 
+#ifdef MY_ABC_HERE
+static void nfsd_store_latency(u64 rpc_lat, u64 vfs_lat, u32 op)
+{
+	enum syno_nfsd_io_stat_type type;
+	if (op != NFS3PROC_READ && op != NFS3PROC_WRITE)
+		return;
+	type = (op == NFS3PROC_READ) ? SYNO_NFSD_IO_READ : SYNO_NFSD_IO_WRITE;
+	syno_nfsd_store_latency_into_histogram(SYNO_NFSD_USEC_TO_SEC(rpc_lat),
+						SYNO_NFSD_USEC_TO_SEC(vfs_lat),
+						SYNO_NFSD_VERSION_3, type);
+}
+
+static void nfsd_store_error(struct svc_rqst *rqstp)
+{
+	const struct syno_nfsd_dummy_status *st;
+	// rq_resp's size is from `rq_server->sv_xdrsize`, so we check on it.
+	if (!rqstp || !rqstp->rq_resp ||
+	    !rqstp->rq_server || rqstp->rq_server->sv_xdrsize < sizeof(struct syno_nfsd_dummy_status))
+		return;
+	st = (const struct syno_nfsd_dummy_status *) rqstp->rq_resp;
+	syno_nfsd_store_error(be32_to_cpu(st->status), SYNO_NFSD_VERSION_3);
+}
+#endif /* MY_ABC_HERE */
+
 struct svc_version	nfsd_version3 = {
 		.vs_vers	= 3,
 		.vs_nproc	= 22,
 		.vs_proc	= nfsd_procedures3,
 		.vs_dispatch	= nfsd_dispatch,
 		.vs_xdrsize	= NFS3_SVC_XDRSIZE,
+#ifdef MY_ABC_HERE
+		.vs_store_latency_to_histogram 	= nfsd_store_latency,
+		.vs_store_resp_error 		= nfsd_store_error,
+#endif /* MY_ABC_HERE */
 };

@@ -383,3 +383,30 @@
 374	i386	userfaultfd		sys_userfaultfd
 375	i386	membarrier		sys_membarrier
 376	i386	mlock2			sys_mlock2
+377	i386	copy_file_range		sys_copy_file_range
+
+#
+# start - CONFIG_SYNO_SYSTEM_CALL
+# Synology defined system calls are listed here.
+#
+802	i386	syno_utime			sys_syno_utime			compat_sys_syno_utime
+803	i386	syno_archive_bit		sys_syno_archive_bit
+804	i386	syno_recv_file			sys_syno_recv_file
+806	i386	syno_caseless_stat		sys_syno_caseless_stat64	sys32_syno_caseless_stat64
+807	i386	syno_caseless_lstat		sys_syno_caseless_lstat64	sys32_syno_caseless_lstat64
+810	i386	syno_ecrypt_name		sys_syno_ecrypt_name
+811	i386	syno_decrypt_name		sys_syno_decrypt_name
+812	i386	syno_acl_check_perm		sys_syno_acl_check_perm
+813	i386	syno_acl_is_support		sys_syno_acl_is_support
+814	i386	syno_acl_get_perm		sys_syno_acl_get_perm
+815	i386	syno_flush_aggregate		sys_syno_flush_aggregate
+819	i386	syno_stat			sys_syno_stat			sys32_syno_stat64
+820	i386	syno_fstat			sys_syno_fstat			sys32_syno_fstat64
+821	i386	syno_lstat			sys_syno_lstat			sys32_syno_lstat64
+822	i386	syno_notify_init		sys_syno_notify_init
+823	i386	syno_notify_add_watch		sys_syno_notify_add_watch
+824	i386	syno_notify_remove_watch	sys_syno_notify_remove_watch
+827	i386	syno_archive_overwrite		sys_syno_archive_overwrite
+#
+# end - CONFIG_SYNO_SYSTEM_CALL
+#

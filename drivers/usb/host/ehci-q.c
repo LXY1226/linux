@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2001-2004 by David Brownell
  *
@@ -39,6 +42,35 @@
  */
 
 /*-------------------------------------------------------------------------*/
+
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+extern int RTK_ohci_force_suspend(const char *func);
+
+/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+int check_and_restore_async_list(struct ehci_hcd *ehci, const char *func, int line) {
+
+	int retry = 0;
+	if (ehci->fixed_async_list_addr_bug) {
+		for (retry = 0; retry < 5; retry++) {
+			u32 async_next = ehci_readl(ehci, &ehci->regs->async_next);
+			if (async_next == 0) {
+				ehci_err(ehci, "%s:%d #%d async_next is NULL ==> fixed async_next to HEAD=%x\n",
+					func, line, retry, (unsigned int) ehci->async->qh_dma);
+				ehci_writel(ehci, (u32) ehci->async->qh_dma,
+					&ehci->regs->async_next);
+				wmb();
+				mdelay(2);
+			} else {
+				break;
+			}
+		}
+	}
+	return 0;
+}
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 /* PID Codes that are used here, from EHCI specification, Table 3-16. */
 #define PID_CODE_IN    1
@@ -374,12 +406,27 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 			 */
 			if ((token & QTD_STS_HALT) != 0) {
 
+#ifdef MY_ABC_HERE
+				struct usb_device *udev = urb->dev;
+				int more_xact_tries = 0;
+
+				if (unlikely(udev &&
+					(udev->syno_quirks &
+					SYNO_USB_QUIRK_HC_MORE_TRANSACTION_TRIES)))
+					more_xact_tries = 500;
+
+#endif /* MY_ABC_HERE */
+
 				/* retry transaction errors until we
 				 * reach the software xacterr limit
 				 */
 				if ((token & QTD_STS_XACT) &&
 						QTD_CERR(token) == 0 &&
+#ifdef MY_ABC_HERE
+						++qh->xacterrs < (QH_XACTERR_MAX + more_xact_tries) &&
+#else /* MY_ABC_HERE */
 						++qh->xacterrs < QH_XACTERR_MAX &&
+#endif /* MY_ABC_HERE */
 						!urb->unlinked) {
 					ehci_dbg(ehci,
 	"detected XactErr len %zu/%zu retry %d\n",
@@ -398,6 +445,10 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 					wmb();
 					hw->hw_token = cpu_to_hc32(ehci,
 							token);
+#ifdef MY_ABC_HERE
+					if (qh->xacterrs >= QH_XACTERR_MAX)
+						mdelay(1);
+#endif /* MY_ABC_HERE */
 					goto retry_xacterr;
 				}
 				stopped = 1;
@@ -958,6 +1009,13 @@ done:
 
 static void enable_async(struct ehci_hcd *ehci)
 {
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+	check_and_restore_async_list(ehci, __func__, __LINE__);
+#endif //CONFIG_USB_PATCH_ON_RTK
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	if (ehci->async_count++)
 		return;
 
@@ -971,6 +1029,13 @@ static void enable_async(struct ehci_hcd *ehci)
 
 static void disable_async(struct ehci_hcd *ehci)
 {
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+	check_and_restore_async_list(ehci, __func__, __LINE__);
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	if (--ehci->async_count)
 		return;
 
@@ -989,6 +1054,14 @@ static void qh_link_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 	__hc32		dma = QH_NEXT(ehci, qh->qh_dma);
 	struct ehci_qh	*head;
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+	/* When EHCI schedule actived, force suspend OHCI*/
+	check_and_restore_async_list(ehci, __func__, __LINE__);
+#endif //CONFIG_USB_PATCH_ON_RTK
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	/* Don't link a QH if there's a Clear-TT-Buffer pending */
 	if (unlikely(qh->clearing_tt))
 		return;
@@ -1118,6 +1191,15 @@ submit_async (
 
 	epnum = urb->ep->desc.bEndpointAddress;
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+#ifdef CONFIG_USB_OHCI_RTK
+	/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+	RTK_ohci_force_suspend(__func__);
+#endif
+#endif
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 #ifdef EHCI_URB_TRACE
 	{
 		struct ehci_qtd *qtd;
@@ -1281,6 +1363,13 @@ static void single_unlink_async(struct ehci_hcd *ehci, struct ehci_qh *qh)
 	prev->qh_next = qh->qh_next;
 	if (ehci->qh_scan_next == qh)
 		ehci->qh_scan_next = qh->qh_next.qh;
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+	check_and_restore_async_list(ehci, __func__, __LINE__);
+#endif //CONFIG_USB_PATCH_ON_RTK
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 }
 
 static void start_iaa_cycle(struct ehci_hcd *ehci)
@@ -1318,6 +1407,13 @@ static void end_unlink_async(struct ehci_hcd *ehci)
 		ehci_writel(ehci, (u32) ehci->async->qh_dma,
 			    &ehci->regs->async_next);
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_PATCH_ON_RTK
+	/* Add Workaround to fixed EHCI/OHCI Wrapper can't work simultaneously */
+	check_and_restore_async_list(ehci, __func__, __LINE__);
+#endif //CONFIG_USB_PATCH_ON_RTK
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	/* The current IAA cycle has ended */
 	ehci->iaa_in_progress = false;
 

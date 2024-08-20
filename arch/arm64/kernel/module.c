@@ -75,15 +75,52 @@ static u64 do_reloc(enum aarch64_reloc_op reloc_op, void *place, u64 val)
 
 static int reloc_data(enum aarch64_reloc_op op, void *place, u64 val, int len)
 {
-	u64 imm_mask = (1 << len) - 1;
 	s64 sval = do_reloc(op, place, val);
+
+	/*
+	 * The ELF psABI for AArch64 documents the 16-bit and 32-bit place
+	 * relative and absolute relocations as having a range of [-2^15, 2^16)
+	 * or [-2^31, 2^32), respectively. However, in order to be able to
+	 * detect overflows reliably, we have to choose whether we interpret
+	 * such quantities as signed or as unsigned, and stick with it.
+	 * The way we organize our address space requires a signed
+	 * interpretation of 32-bit relative references, so let's use that
+	 * for all R_AARCH64_PRELxx relocations. This means our upper
+	 * bound for overflow detection should be Sxx_MAX rather than Uxx_MAX.
+	 */
 
 	switch (len) {
 	case 16:
 		*(s16 *)place = sval;
+		switch (op) {
+		case RELOC_OP_ABS:
+			if (sval < 0 || sval > U16_MAX)
+				return -ERANGE;
+			break;
+		case RELOC_OP_PREL:
+			if (sval < S16_MIN || sval > S16_MAX)
+				return -ERANGE;
+			break;
+		default:
+			pr_err("Invalid 16-bit data relocation (%d)\n", op);
+			return 0;
+		}
 		break;
 	case 32:
 		*(s32 *)place = sval;
+		switch (op) {
+		case RELOC_OP_ABS:
+			if (sval < 0 || sval > U32_MAX)
+				return -ERANGE;
+			break;
+		case RELOC_OP_PREL:
+			if (sval < S32_MIN || sval > S32_MAX)
+				return -ERANGE;
+			break;
+		default:
+			pr_err("Invalid 32-bit data relocation (%d)\n", op);
+			return 0;
+		}
 		break;
 	case 64:
 		*(s64 *)place = sval;
@@ -92,21 +129,6 @@ static int reloc_data(enum aarch64_reloc_op op, void *place, u64 val, int len)
 		pr_err("Invalid length (%d) for data relocation\n", len);
 		return 0;
 	}
-
-	/*
-	 * Extract the upper value bits (including the sign bit) and
-	 * shift them to bit 0.
-	 */
-	sval = (s64)(sval & ~(imm_mask >> 1)) >> (len - 1);
-
-	/*
-	 * Overflow has occurred if the value is not representable in
-	 * len bits (i.e the bottom len bits are not sign-extended and
-	 * the top bits are not all zero).
-	 */
-	if ((u64)(sval + 1) > 2)
-		return -ERANGE;
-
 	return 0;
 }
 

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2007 Oracle.  All rights reserved.
  * Copyright (C) 2014 Fujitsu.  All rights reserved.
@@ -21,6 +24,7 @@
 #define __BTRFS_ASYNC_THREAD_
 #include <linux/workqueue.h>
 
+struct btrfs_fs_info;
 struct btrfs_workqueue;
 /* Internal use only */
 struct __btrfs_workqueue;
@@ -51,26 +55,55 @@ BTRFS_WORK_HELPER_PROTO(submit_helper);
 BTRFS_WORK_HELPER_PROTO(fixup_helper);
 BTRFS_WORK_HELPER_PROTO(endio_helper);
 BTRFS_WORK_HELPER_PROTO(endio_meta_helper);
+#ifdef MY_DEF_HERE
+BTRFS_WORK_HELPER_PROTO(endio_meta_fix_helper);
+#endif /* MY_DEF_HERE */
 BTRFS_WORK_HELPER_PROTO(endio_meta_write_helper);
 BTRFS_WORK_HELPER_PROTO(endio_raid56_helper);
 BTRFS_WORK_HELPER_PROTO(endio_repair_helper);
 BTRFS_WORK_HELPER_PROTO(rmw_helper);
 BTRFS_WORK_HELPER_PROTO(endio_write_helper);
+#ifdef MY_DEF_HERE
+BTRFS_WORK_HELPER_PROTO(endio_write_sync_helper);
+#endif /* MY_DEF_HERE */
 BTRFS_WORK_HELPER_PROTO(freespace_write_helper);
 BTRFS_WORK_HELPER_PROTO(delayed_meta_helper);
 BTRFS_WORK_HELPER_PROTO(readahead_helper);
+#ifdef MY_DEF_HERE
+BTRFS_WORK_HELPER_PROTO(reada_path_start_helper);
+#endif /* MY_DEF_HERE */
 BTRFS_WORK_HELPER_PROTO(qgroup_rescan_helper);
+#ifdef MY_DEF_HERE
+BTRFS_WORK_HELPER_PROTO(usrquota_rescan_helper);
+#endif /* MY_DEF_HERE */
 BTRFS_WORK_HELPER_PROTO(extent_refs_helper);
 BTRFS_WORK_HELPER_PROTO(scrub_helper);
 BTRFS_WORK_HELPER_PROTO(scrubwrc_helper);
 BTRFS_WORK_HELPER_PROTO(scrubnc_helper);
 BTRFS_WORK_HELPER_PROTO(scrubparity_helper);
+#ifdef MY_DEF_HERE
+BTRFS_WORK_HELPER_PROTO(syno_cow_endio_helper);
+BTRFS_WORK_HELPER_PROTO(syno_nocow_endio_helper);
+BTRFS_WORK_HELPER_PROTO(syno_high_priority_endio_helper);
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+BTRFS_WORK_HELPER_PROTO(syno_bg_cache_helper);
+#endif /* MY_DEF_HERE */
 
-
-struct btrfs_workqueue *btrfs_alloc_workqueue(const char *name,
+struct btrfs_workqueue *btrfs_alloc_workqueue(struct btrfs_fs_info *fs_info,
+					      const char *name,
 					      unsigned int flags,
 					      int limit_active,
 					      int thresh);
+#ifdef MY_ABC_HERE
+struct btrfs_workqueue *btrfs_alloc_workqueue_with_sysfs(
+	struct btrfs_fs_info *fs_info,
+	const char *name,
+	unsigned int flags,
+	int limit_active,
+	int thresh);
+#endif /* MY_ABC_HERE */
+
 void btrfs_init_work(struct btrfs_work *work, btrfs_work_func_t helper,
 		     btrfs_func_t func,
 		     btrfs_func_t ordered_func,
@@ -80,6 +113,8 @@ void btrfs_queue_work(struct btrfs_workqueue *wq,
 void btrfs_destroy_workqueue(struct btrfs_workqueue *wq);
 void btrfs_workqueue_set_max(struct btrfs_workqueue *wq, int max);
 void btrfs_set_work_high_priority(struct btrfs_work *work);
+struct btrfs_fs_info *btrfs_work_owner(struct btrfs_work *work);
+struct btrfs_fs_info *btrfs_workqueue_owner(struct __btrfs_workqueue *wq);
 bool btrfs_workqueue_normal_congested(struct btrfs_workqueue *wq);
 void btrfs_flush_workqueue(struct btrfs_workqueue *wq);
 

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2003 Jana Saout <jana@saout.de>
  * Copyright (C) 2004 Clemens Fruhwirth <clemens@endorphin.org>
@@ -32,6 +35,10 @@
 #include <linux/device-mapper.h>
 
 #define DM_MSG_PREFIX "crypt"
+
+#ifdef MY_ABC_HERE
+extern int gSynoDebugFlag;
+#endif /* MY_ABC_HERE */
 
 /*
  * context holding the current state of a multi-part conversion
@@ -172,6 +179,11 @@ struct crypt_config {
 
 	unsigned int per_bio_data_size;
 
+#ifdef MY_DEF_HERE
+	atomic_t syno_io_count;
+	wait_queue_head_t	syno_wait_for_io_limit;
+#endif /* MY_DEF_HERE */
+
 	unsigned long flags;
 	unsigned int key_size;
 	unsigned int key_parts;      /* independent parts in key buffer */
@@ -180,6 +192,11 @@ struct crypt_config {
 };
 
 #define MIN_IOS        16
+
+#ifdef MY_DEF_HERE
+#define SYNO_IO_LIMIT_MAX	8192
+#define SYNO_IO_LIMIT_THRESHOLD	128
+#endif /* MY_DEF_HERE */
 
 static void clone_init(struct dm_crypt_io *, struct bio *);
 static void kcryptd_queue_crypt(struct dm_crypt_io *io);
@@ -1078,6 +1095,10 @@ static void crypt_dec_pending(struct dm_crypt_io *io)
 		crypt_free_req(cc, io->ctx.req, base_bio);
 
 	base_bio->bi_error = error;
+#ifdef MY_DEF_HERE
+	if (atomic_dec_return(&cc->syno_io_count) <= (SYNO_IO_LIMIT_MAX - SYNO_IO_LIMIT_THRESHOLD))
+		wake_up(&cc->syno_wait_for_io_limit);
+#endif /* MY_DEF_HERE */
 	bio_endio(base_bio);
 }
 
@@ -1891,6 +1912,25 @@ static int crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 	wake_up_process(cc->write_thread);
 
+#ifdef MY_DEF_HERE
+	atomic_set(&cc->syno_io_count, 0);
+	init_waitqueue_head(&cc->syno_wait_for_io_limit);
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_ABC_HERE
+	if (cc->dev->bdev) {
+		struct request_queue *q = bdev_get_queue(cc->dev->bdev);
+		if (blk_queue_unused_hint(q))
+			ti->num_unused_hint_bios = 1;
+		else {
+#ifdef MY_ABC_HERE
+			if (gSynoDebugFlag)
+				DMWARN("dm-crypt: %s doesn't support unused hint", cc->dev->name);
+#endif /* MY_ABC_HERE */
+		}
+	}
+#endif /* MY_ABC_HERE */
+
 	ti->num_flush_bios = 1;
 	ti->discard_zeroes_data_unsupported = true;
 
@@ -1918,6 +1958,15 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 				dm_target_offset(ti, bio->bi_iter.bi_sector);
 		return DM_MAPIO_REMAPPED;
 	}
+#ifdef MY_ABC_HERE
+	if (unlikely(bio->bi_rw & REQ_UNUSED_HINT)) {
+		bio->bi_bdev = cc->dev->bdev;
+		if (bio_sectors(bio))
+			bio->bi_iter.bi_sector = cc->start +
+				dm_target_offset(ti, bio->bi_iter.bi_sector);
+		return DM_MAPIO_REMAPPED;
+	}
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Check if bio is too large, split as needed.
@@ -1925,6 +1974,11 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	if (unlikely(bio->bi_iter.bi_size > (BIO_MAX_PAGES << PAGE_SHIFT)) &&
 	    bio_data_dir(bio) == WRITE)
 		dm_accept_partial_bio(bio, ((BIO_MAX_PAGES << PAGE_SHIFT) >> SECTOR_SHIFT));
+
+#ifdef MY_DEF_HERE
+	wait_event(cc->syno_wait_for_io_limit, atomic_read(&cc->syno_io_count) <= SYNO_IO_LIMIT_MAX);
+	atomic_inc(&cc->syno_io_count);
+#endif /* MY_DEF_HERE */
 
 	io = dm_per_bio_data(bio, cc->per_bio_data_size);
 	crypt_io_init(io, cc, bio, dm_target_offset(ti, bio->bi_iter.bi_sector));

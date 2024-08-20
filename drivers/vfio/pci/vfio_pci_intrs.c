@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * VFIO PCI interrupt handling
  *
@@ -365,9 +368,15 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_device *vdev,
 	vdev->ctx[vector].producer.irq = irq;
 	ret = irq_bypass_register_producer(&vdev->ctx[vector].producer);
 	if (unlikely(ret)) {
+#ifdef MY_ABC_HERE
+	if (printk_ratelimit()) {
+#endif /* MY_ABC_HERE */
 		dev_info(&pdev->dev,
 		"irq bypass producer (token %p) registration fails: %d\n",
 		vdev->ctx[vector].producer.token, ret);
+#ifdef MY_ABC_HERE
+	}
+#endif /* MY_ABC_HERE */
 
 		vdev->ctx[vector].producer.token = NULL;
 	}

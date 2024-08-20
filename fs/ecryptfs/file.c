@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /**
  * eCryptfs: Linux filesystem encryption layer
  *
@@ -31,6 +34,9 @@
 #include <linux/security.h>
 #include <linux/compat.h>
 #include <linux/fs_stack.h>
+#ifdef MY_DEF_HERE
+#include <linux/btrfs.h>
+#endif /* MY_DEF_HERE */
 #include "ecryptfs_kernel.h"
 
 /**
@@ -155,6 +161,13 @@ static int read_or_initialize_metadata(struct dentry *dentry)
 		rc = 0;
 		goto out;
 	}
+
+#ifdef MY_ABC_HERE
+	if (rc == -EINVAL && ecryptfs_inode_to_lower(inode)->i_blocks == 0) {
+		i_size_write(inode, 0);
+		do_truncate(ecryptfs_dentry_to_lower(dentry), 0, 0, NULL);
+	}
+#endif /* MY_ABC_HERE */
 
 	if (!(mount_crypt_stat->flags & ECRYPTFS_XATTR_METADATA_ENABLED) &&
 	    !i_size_read(ecryptfs_inode_to_lower(inode))) {
@@ -346,6 +359,42 @@ static int ecryptfs_fasync(int fd, struct file *file, int flag)
 	return rc;
 }
 
+#ifdef MY_ABC_HERE
+static long ecryptfs_fallocate(struct file *file, int mode,
+			    loff_t offset, loff_t len)
+{
+	int rc = 0;
+	struct inode *inode = file_inode(file);
+	struct file *lower_file = ecryptfs_file_to_lower(file);
+	u64 alloc_end = offset + len;
+	struct ecryptfs_crypt_stat *crypt_stat;
+	loff_t lower_header_size;
+
+	if (mode || !lower_file->f_op->fallocate)
+		return -EOPNOTSUPP;
+
+	inode_lock(inode);
+	if (alloc_end > i_size_read(inode)) {
+		rc = ecryptfs_truncate(file->f_path.dentry, alloc_end);
+		if (rc) {
+			printk(KERN_ERR "%s: Error on attempt to "
+			       "truncate to (higher) offset [%lld];"
+			       " rc = [%d]\n", __func__,
+			       alloc_end, rc);
+			goto out;
+		}
+	}
+
+	crypt_stat = &ecryptfs_inode_to_private(inode)->crypt_stat;
+	lower_header_size = ecryptfs_lower_header_size(crypt_stat);
+	rc = lower_file->f_op->fallocate(lower_file, mode, lower_header_size + offset, len);
+out:
+	fsstack_copy_attr_all(inode, file_inode(lower_file));
+	inode_unlock(inode);
+	return rc;
+}
+#endif /* MY_ABC_HERE */
+
 static long
 ecryptfs_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -361,6 +410,32 @@ ecryptfs_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case FS_IOC_SETFLAGS:
 	case FS_IOC_GETVERSION:
 	case FS_IOC_SETVERSION:
+#ifdef MY_DEF_HERE
+	/*
+	 * In our sdk, we'll iterate every share by concatenate share name after
+	 * volume name. In ecryption share case, /volume1/ecrypt rather than
+	 * /volume1/@ecrypt will be passed. Therefore, we need to allow
+	 * BTRFS_IOC_DEFRAG to pass to lower btrfs.
+	 */
+	case BTRFS_IOC_DEFRAG:
+#ifdef MY_DEF_HERE
+	case BTRFS_IOC_SUBVOL_GETINFO:
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	case BTRFS_IOC_USRQUOTA_QUERY:
+	case BTRFS_IOC_USRQUOTA_CTL:
+	case BTRFS_IOC_USRQUOTA_LIMIT:
+	case BTRFS_IOC_USRQUOTA_RESCAN:
+	case BTRFS_IOC_USRQUOTA_RESCAN_STATUS:
+	case BTRFS_IOC_USRQUOTA_RESCAN_WAIT:
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	case BTRFS_IOC_QGROUP_QUERY:
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	case BTRFS_IOC_COMPR_CTL:
+#endif /* MY_DEF_HERE */
+#endif /* MY_DEF_HERE */
 		rc = lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
 		fsstack_copy_attr_all(file_inode(file), file_inode(lower_file));
 
@@ -423,4 +498,7 @@ const struct file_operations ecryptfs_main_fops = {
 	.fsync = ecryptfs_fsync,
 	.fasync = ecryptfs_fasync,
 	.splice_read = generic_file_splice_read,
+#ifdef MY_ABC_HERE
+	.fallocate  = ecryptfs_fallocate,
+#endif /* MY_ABC_HERE */
 };

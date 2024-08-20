@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * gpiolib support for Wolfson WM831x PMICs
  *
@@ -258,7 +261,11 @@ static int wm831x_gpio_probe(struct platform_device *pdev)
 	wm831x_gpio->wm831x = wm831x;
 	wm831x_gpio->gpio_chip = template_chip;
 	wm831x_gpio->gpio_chip.ngpio = wm831x->num_gpio;
+#if defined(MY_ABC_HERE)
+	wm831x_gpio->gpio_chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	wm831x_gpio->gpio_chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	if (pdata && pdata->gpio_base)
 		wm831x_gpio->gpio_chip.base = pdata->gpio_base;
 	else

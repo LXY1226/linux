@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2010-2011 Canonical Ltd <jeremy.kerr@canonical.com>
  * Copyright (C) 2011-2012 Mike Turquette, Linaro Ltd <mturquette@linaro.org>
@@ -26,7 +29,11 @@
  * parent - fixed parent.  No clk_set_parent support
  */
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_fixed_rate(_hw) container_of(_hw, struct clk_fixed_rate, hw)
+#endif /* MY_ABC_HERE */
 
 static unsigned long clk_fixed_rate_recalc_rate(struct clk_hw *hw,
 		unsigned long parent_rate)
@@ -105,6 +112,21 @@ struct clk *clk_register_fixed_rate(struct device *dev, const char *name,
 						     flags, fixed_rate, 0);
 }
 EXPORT_SYMBOL_GPL(clk_register_fixed_rate);
+
+#if defined(MY_ABC_HERE)
+void clk_unregister_fixed_rate(struct clk *clk)
+{
+	struct clk_hw *hw;
+
+	hw = __clk_get_hw(clk);
+	if (!hw)
+		return;
+
+	clk_unregister(clk);
+	kfree(to_clk_fixed_rate(hw));
+}
+EXPORT_SYMBOL_GPL(clk_unregister_fixed_rate);
+#endif /* MY_ABC_HERE */
 
 #ifdef CONFIG_OF
 /**

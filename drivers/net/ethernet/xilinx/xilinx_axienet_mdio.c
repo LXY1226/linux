@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * MDIO bus driver for the Xilinx Axi Ethernet device
  *
@@ -212,7 +215,11 @@ issue:
 	bus->read = axienet_mdio_read;
 	bus->write = axienet_mdio_write;
 	bus->parent = lp->dev;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->irq = lp->mdio_irqs; /* preallocated IRQ table */
+#endif /* MY_ABC_HERE */
 	lp->mii_bus = bus;
 
 	ret = of_mdiobus_register(bus, np1);
@@ -233,7 +240,11 @@ issue:
 void axienet_mdio_teardown(struct axienet_local *lp)
 {
 	mdiobus_unregister(lp->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(lp->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 	mdiobus_free(lp->mii_bus);
 	lp->mii_bus = NULL;
 }

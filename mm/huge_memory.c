@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Copyright (C) 2009  Red Hat, Inc.
  *
@@ -116,7 +119,11 @@ static void set_recommended_min_free_kbytes(void)
 	for_each_populated_zone(zone)
 		nr_zones++;
 
+#if defined(MY_ABC_HERE) && !defined(MY_ABC_HERE)
+	/* Make sure at least 2 hugepages are free for MIGRATE_RESERVE */
+#else /* MY_ABC_HERE && !MY_ABC_HERE */
 	/* Ensure 2 pageblocks are free to assist fragmentation avoidance */
+#endif /* MY_ABC_HERE && !MY_ABC_HERE */
 	recommended_min = pageblock_nr_pages * nr_zones * 2;
 
 	/*

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2003-2006, Cluster File Systems, Inc, info@clusterfs.com
  * Written by Alex Tomas <alex@clusterfs.com>
@@ -485,6 +488,8 @@ static void mb_free_blocks_double(struct inode *inode, struct ext4_buddy *e4b,
 					      "freeing block already freed "
 					      "(bit %u)",
 					      first + i);
+			ext4_mark_group_bitmap_corrupted(sb, e4b->bd_group,
+					EXT4_GROUP_INFO_BBITMAP_CORRUPT);
 		}
 		mb_clear_bit(first + i, e4b->bd_info->bb_bitmap);
 	}
@@ -762,20 +767,18 @@ void ext4_mb_generate_buddy(struct super_block *sb,
 		 * corrupt and update bb_free using bitmap value
 		 */
 		grp->bb_free = free;
-		if (!EXT4_MB_GRP_BBITMAP_CORRUPT(grp))
-			percpu_counter_sub(&sbi->s_freeclusters_counter,
-					   grp->bb_free);
-		set_bit(EXT4_GROUP_INFO_BBITMAP_CORRUPT_BIT, &grp->bb_state);
+		ext4_mark_group_bitmap_corrupted(sb, group,
+					EXT4_GROUP_INFO_BBITMAP_CORRUPT);
 	}
 	mb_set_largest_free_order(sb, grp);
 
 	clear_bit(EXT4_GROUP_INFO_NEED_INIT_BIT, &(grp->bb_state));
 
 	period = get_cycles() - period;
-	spin_lock(&EXT4_SB(sb)->s_bal_lock);
-	EXT4_SB(sb)->s_mb_buddies_generated++;
-	EXT4_SB(sb)->s_mb_generation_time += period;
-	spin_unlock(&EXT4_SB(sb)->s_bal_lock);
+	spin_lock(&sbi->s_bal_lock);
+	sbi->s_mb_buddies_generated++;
+	sbi->s_mb_generation_time += period;
+	spin_unlock(&sbi->s_bal_lock);
 }
 
 static void mb_regenerate_buddy(struct ext4_buddy *e4b)
@@ -1462,19 +1465,15 @@ static void mb_free_blocks(struct inode *inode, struct ext4_buddy *e4b,
 		ext4_fsblk_t blocknr;
 
 		blocknr = ext4_group_first_block_no(sb, e4b->bd_group);
-		blocknr += EXT4_C2B(EXT4_SB(sb), block);
+		blocknr += EXT4_C2B(sbi, block);
 		ext4_grp_locked_error(sb, e4b->bd_group,
 				      inode ? inode->i_ino : 0,
 				      blocknr,
 				      "freeing already freed block "
 				      "(bit %u); block bitmap corrupt.",
 				      block);
-		if (!EXT4_MB_GRP_BBITMAP_CORRUPT(e4b->bd_info))
-			percpu_counter_sub(&sbi->s_freeclusters_counter,
-					   e4b->bd_info->bb_free);
-		/* Mark the block group as corrupt. */
-		set_bit(EXT4_GROUP_INFO_BBITMAP_CORRUPT_BIT,
-			&e4b->bd_info->bb_state);
+		ext4_mark_group_bitmap_corrupted(sb, e4b->bd_group,
+				EXT4_GROUP_INFO_BBITMAP_CORRUPT);
 		mb_regenerate_buddy(e4b);
 		goto done;
 	}
@@ -1962,6 +1961,8 @@ void ext4_mb_complex_scan_group(struct ext4_allocation_context *ac,
 					"%d free clusters as per "
 					"group info. But bitmap says 0",
 					free);
+			ext4_mark_group_bitmap_corrupted(sb, e4b->bd_group,
+					EXT4_GROUP_INFO_BBITMAP_CORRUPT);
 			break;
 		}
 
@@ -1973,6 +1974,8 @@ void ext4_mb_complex_scan_group(struct ext4_allocation_context *ac,
 					"%d free clusters as per "
 					"group info. But got %d blocks",
 					free, ex.fe_len);
+			ext4_mark_group_bitmap_corrupted(sb, e4b->bd_group,
+					EXT4_GROUP_INFO_BBITMAP_CORRUPT);
 			/*
 			 * The number of free blocks differs. This mostly
 			 * indicate that the bitmap is corrupt. So exit
@@ -2806,6 +2809,19 @@ static inline int ext4_issue_discard(struct super_block *sb,
 			(unsigned long long) discard_block, count);
 	return sb_issue_discard(sb, discard_block, count, GFP_NOFS, 0);
 }
+
+#ifdef MY_ABC_HERE
+static inline int ext4_hint_unused(struct super_block *sb,
+		ext4_group_t block_group, ext4_grpblk_t cluster, int count)
+{
+	ext4_fsblk_t hint_block;
+
+	hint_block = (EXT4_C2B(EXT4_SB(sb), cluster) +
+			 ext4_group_first_block_no(sb, block_group));
+	count = EXT4_C2B(EXT4_SB(sb), count);
+	return sb_hint_unused(sb, hint_block, count, GFP_NOFS);
+}
+#endif /* MY_ABC_HERE */
 
 /*
  * This function is called by the jbd2 layer once the commit has finished,
@@ -4822,9 +4838,9 @@ do_more:
 	if (in_range(ext4_block_bitmap(sb, gdp), block, count) ||
 	    in_range(ext4_inode_bitmap(sb, gdp), block, count) ||
 	    in_range(block, ext4_inode_table(sb, gdp),
-		     EXT4_SB(sb)->s_itb_per_group) ||
+		     sbi->s_itb_per_group) ||
 	    in_range(block + count - 1, ext4_inode_table(sb, gdp),
-		     EXT4_SB(sb)->s_itb_per_group)) {
+		     sbi->s_itb_per_group)) {
 
 		ext4_error(sb, "Freeing blocks in system zone - "
 			   "Block = %llu, count = %lu", block, count);
@@ -4999,6 +5015,9 @@ int ext4_group_add_blocks(handle_t *handle, struct super_block *sb,
 	    in_range(block, ext4_inode_table(sb, desc), sbi->s_itb_per_group) ||
 	    in_range(block + count - 1, ext4_inode_table(sb, desc),
 		     sbi->s_itb_per_group)) {
+#ifdef MY_ABC_HERE
+		if (printk_ratelimit())
+#endif /* MY_ABC_HERE */
 		ext4_error(sb, "Adding blocks in system zones - "
 			   "Block = %llu, count = %lu",
 			   block, count);
@@ -5089,8 +5108,13 @@ error_return:
  * one will allocate those blocks, mark it as used in buddy bitmap. This must
  * be called with under the group lock.
  */
+#ifdef MY_ABC_HERE
+static int ext4_trim_extent(struct super_block *sb, int start, int count,
+			     ext4_group_t group, struct ext4_buddy *e4b, enum trim_act act)
+#else
 static int ext4_trim_extent(struct super_block *sb, int start, int count,
 			     ext4_group_t group, struct ext4_buddy *e4b)
+#endif /* MY_ABC_HERE */
 __releases(bitlock)
 __acquires(bitlock)
 {
@@ -5111,7 +5135,16 @@ __acquires(bitlock)
 	 */
 	mb_mark_used(e4b, &ex);
 	ext4_unlock_group(sb, group);
+
+#ifdef MY_ABC_HERE
+	if (act == TRIM_SEND_HINT)
+		ret = ext4_hint_unused(sb, group, start, count);
+	else
+		ret = ext4_issue_discard(sb, group, start, count);
+#else /* MY_ABC_HERE */
 	ret = ext4_issue_discard(sb, group, start, count);
+#endif /* MY_ABC_HERE */
+
 	ext4_lock_group(sb, group);
 	mb_free_blocks(NULL, e4b, start, ex.fe_len);
 	return ret;
@@ -5135,10 +5168,17 @@ __acquires(bitlock)
  * bitmap. Then issue a TRIM command on this extent and free the extent in
  * the group buddy bitmap. This is done until whole group is scanned.
  */
+#ifdef MY_ABC_HERE
+static ext4_grpblk_t
+ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
+		   ext4_grpblk_t start, ext4_grpblk_t max,
+		   ext4_grpblk_t minblocks, enum trim_act act)
+#else
 static ext4_grpblk_t
 ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 		   ext4_grpblk_t start, ext4_grpblk_t max,
 		   ext4_grpblk_t minblocks)
+#endif /* MY_ABC_HERE */
 {
 	void *bitmap;
 	ext4_grpblk_t next, count = 0, free_count = 0;
@@ -5157,6 +5197,13 @@ ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 
 	ext4_lock_group(sb, group);
 	if (EXT4_MB_GRP_WAS_TRIMMED(e4b.bd_info) &&
+#ifdef MY_ABC_HERE
+		/*
+		 * ext4 skipped trim block group if it has already trimmed.
+		 * We don't want to skip while doing hint scanning.
+		 */
+		act != TRIM_SEND_HINT &&
+#endif /* MY_ABC_HERE */
 	    minblocks >= atomic_read(&EXT4_SB(sb)->s_last_trim_minblks))
 		goto out;
 
@@ -5170,8 +5217,13 @@ ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 		next = mb_find_next_bit(bitmap, max + 1, start);
 
 		if ((next - start) >= minblocks) {
+#ifdef MY_ABC_HERE
+			ret = ext4_trim_extent(sb, start,
+					       next - start, group, &e4b, act);
+#else
 			ret = ext4_trim_extent(sb, start,
 					       next - start, group, &e4b);
+#endif /* MY_ABC_HERE */
 			if (ret && ret != -EOPNOTSUPP)
 				break;
 			ret = 0;
@@ -5197,6 +5249,11 @@ ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 
 	if (!ret) {
 		ret = count;
+#ifdef MY_ABC_HERE
+		/* Do not set as trimmed because we just sended hints */
+		if (act == TRIM_SEND_HINT)
+			goto out;
+#endif /* MY_ABC_HERE */
 		EXT4_MB_GRP_SET_TRIMMED(e4b.bd_info);
 	}
 out:
@@ -5221,7 +5278,12 @@ out:
  * start to start+len. For each such a group ext4_trim_all_free function
  * is invoked to trim all free space.
  */
+#ifdef MY_ABC_HERE
+int ext4_trim_fs(struct super_block *sb, struct fstrim_range *range,
+				 enum trim_act act)
+#else
 int ext4_trim_fs(struct super_block *sb, struct fstrim_range *range)
+#endif /* MY_ABC_HERE */
 {
 	struct request_queue *q = bdev_get_queue(sb->s_bdev);
 	struct ext4_group_info *grp;
@@ -5284,8 +5346,13 @@ int ext4_trim_fs(struct super_block *sb, struct fstrim_range *range)
 			end = last_cluster;
 
 		if (grp->bb_free >= minlen) {
+#ifdef MY_ABC_HERE
+			cnt = ext4_trim_all_free(sb, group, first_cluster,
+						end, minlen, act);
+#else
 			cnt = ext4_trim_all_free(sb, group, first_cluster,
 						end, minlen);
+#endif /* MY_ABC_HERE */
 			if (cnt < 0) {
 				ret = cnt;
 				break;
@@ -5299,6 +5366,12 @@ int ext4_trim_fs(struct super_block *sb, struct fstrim_range *range)
 		 */
 		first_cluster = 0;
 	}
+
+#ifdef MY_ABC_HERE
+	/* Do not set s_last_trim_minblks */
+	if (act == TRIM_SEND_HINT)
+		goto out;
+#endif /* MY_ABC_HERE */
 
 	if (!ret)
 		atomic_set(&EXT4_SB(sb)->s_last_trim_minblks, minlen);

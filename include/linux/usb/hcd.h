@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2001-2002 by David Brownell
  *
@@ -203,6 +206,20 @@ struct usb_hcd {
 #define	HC_IS_RUNNING(state) ((state) & __ACTIVE)
 #define	HC_IS_SUSPENDED(state) ((state) & __SUSPEND)
 
+#if defined(CONFIG_USB_ETRON_HUB)
+	u8		chip_id;
+#define HCD_CHIP_ID_UNKNOWN 0x00
+#define HCD_CHIP_ID_ETRON_EJ168 0x10
+#define HCD_CHIP_ID_ETRON_EJ188 0x20
+#endif /* CONFIG_USB_ETRON_HUB */
+
+#if defined (MY_ABC_HERE)
+	/* A38X only support 1 port per HC */
+	int vbus_gpio_pin;
+	/* Support power control */
+	int power_control_support;
+#endif /* MY_ABC_HERE */
+
 	/* more shared queuing code would be good; it should support
 	 * smarter scheduling, handle transaction translators, etc;
 	 * input size of periodic table to an interrupt scheduler.
@@ -397,6 +414,11 @@ struct hc_driver {
 	/* Call for power on/off the port if necessary */
 	int	(*port_power)(struct usb_hcd *hcd, int portnum, bool enable);
 
+#if defined(CONFIG_USB_ETRON_HUB)
+	int	(*update_uas_device)(struct usb_hcd *, struct usb_device *, int);
+	void	(*stop_endpoint)(struct usb_hcd *, struct usb_device *,
+				struct usb_host_endpoint *);
+#endif /* CONFIG_USB_ETRON_HUB */
 };
 
 static inline int hcd_giveback_urb_in_bh(struct usb_hcd *hcd)
@@ -444,6 +466,10 @@ extern struct usb_hcd *usb_create_shared_hcd(const struct hc_driver *driver,
 extern struct usb_hcd *usb_get_hcd(struct usb_hcd *hcd);
 extern void usb_put_hcd(struct usb_hcd *hcd);
 extern int usb_hcd_is_primary_hcd(struct usb_hcd *hcd);
+#if defined(MY_ABC_HERE)
+extern int usb_add_hcd_with_phy_name(struct usb_hcd *hcd,
+		unsigned int irqnum, unsigned long irqflags, const char *phy_name);
+#endif /* MY_ABC_HERE */
 extern int usb_add_hcd(struct usb_hcd *hcd,
 		unsigned int irqnum, unsigned long irqflags);
 extern void usb_remove_hcd(struct usb_hcd *hcd);

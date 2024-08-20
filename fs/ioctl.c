@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/ioctl.c
  *
@@ -15,6 +18,9 @@
 #include <linux/writeback.h>
 #include <linux/buffer_head.h>
 #include <linux/falloc.h>
+#ifdef MY_ABC_HERE
+#include <linux/mount.h>
+#endif /* MY_ABC_HERE */
 
 #include <asm/ioctls.h>
 
@@ -215,6 +221,52 @@ static int ioctl_fiemap(struct file *filp, unsigned long arg)
 	return error;
 }
 
+#ifdef MY_DEF_HERE
+static long ioctl_file_clone(struct file *dst_file, unsigned long srcfd,
+			     u64 off, u64 olen, u64 destoff, int check_compr)
+#else
+static long ioctl_file_clone(struct file *dst_file, unsigned long srcfd,
+			     u64 off, u64 olen, u64 destoff)
+#endif /* MY_DEF_HERE */
+{
+	struct fd src_file = fdget(srcfd);
+	int ret;
+
+	if (!src_file.file)
+		return -EBADF;
+	ret = -EXDEV;
+	if (src_file.file->f_path.mnt != dst_file->f_path.mnt)
+		goto fdput;
+#ifdef MY_DEF_HERE
+	ret = do_clone_file_range(src_file.file, off, dst_file, destoff, olen, check_compr);
+#else
+	ret = do_clone_file_range(src_file.file, off, dst_file, destoff, olen);
+#endif /* MY_DEF_HERE */
+fdput:
+	fdput(src_file);
+	return ret;
+}
+
+static long ioctl_file_clone_range(struct file *file, void __user *argp)
+{
+	struct file_clone_range args;
+#ifdef MY_DEF_HERE
+	int check_compr = 1;
+#endif /* MY_DEF_HERE */
+
+	if (copy_from_user(&args, argp, sizeof(args)))
+		return -EFAULT;
+#ifdef MY_DEF_HERE
+	if (!args.src_offset && !args.src_length && !args.dest_offset)
+		check_compr = 0;
+	return ioctl_file_clone(file, args.src_fd, args.src_offset,
+				args.src_length, args.dest_offset, check_compr);
+#else
+	return ioctl_file_clone(file, args.src_fd, args.src_offset,
+				args.src_length, args.dest_offset);
+#endif /* MY_DEF_HERE */
+}
+
 #ifdef CONFIG_BLOCK
 
 static inline sector_t logical_to_blk(struct inode *inode, loff_t offset)
@@ -411,9 +463,9 @@ int generic_block_fiemap(struct inode *inode,
 			 u64 len, get_block_t *get_block)
 {
 	int ret;
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	ret = __generic_block_fiemap(inode, fieinfo, start, len, get_block);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return ret;
 }
 EXPORT_SYMBOL(generic_block_fiemap);
@@ -493,6 +545,196 @@ static int ioctl_fionbio(struct file *filp, int __user *argp)
 	return error;
 }
 
+#ifdef MY_ABC_HERE
+static int archive_check_capable(struct inode *inode)
+{
+	if((!S_ISDIR(inode->i_mode)) && (!S_ISREG(inode->i_mode)))
+		return -EPERM;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (!inode->i_sb->s_op->syno_set_sb_archive_ver)
+		return -EINVAL;
+
+	if (!inode->i_sb->s_op->syno_get_sb_archive_ver)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int ioctl_get_version(struct inode *inode, unsigned int *version)
+{
+	int error;
+	struct super_block *sb = inode->i_sb;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+
+	error = sb->s_op->syno_get_sb_archive_ver(sb, version);
+	return error;
+}
+
+static int ioctl_set_version(struct file *filp, unsigned int version)
+{
+	int error;
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	struct super_block *sb = inode->i_sb;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+
+	if ((UINT_MAX - 1) <= version) {
+		return -EPERM;
+	}
+
+	error = mnt_want_write_file(filp);
+	if (error)
+		return error;
+
+	mutex_lock(&sb->s_archive_mutex);
+	error = sb->s_op->syno_set_sb_archive_ver(sb, version);
+	mutex_unlock(&sb->s_archive_mutex);
+	mnt_drop_write_file(filp);
+	return error;
+}
+
+static int ioctl_inc_version(struct file *filp)
+{
+	unsigned int ver;
+	int error;
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	struct super_block *sb = inode->i_sb;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+	error = mnt_want_write_file(filp);
+	if (error)
+		return error;
+
+	mutex_lock(&sb->s_archive_mutex);
+	error = sb->s_op->syno_get_sb_archive_ver(sb, &ver);
+	if (error)
+		goto unlock;
+
+	// archive ver of inode = archive ver of sb + 1
+	if ((UINT_MAX - 1) <= (ver + 1)) {
+		error = -EPERM;
+		goto unlock;
+	}
+	error = sb->s_op->syno_set_sb_archive_ver(sb, ver + 1);
+unlock:
+	mutex_unlock(&sb->s_archive_mutex);
+	mnt_drop_write_file(filp);
+	return error;
+}
+
+static int ioctl_set_file_version(struct file *filp, unsigned int version)
+{
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	int error;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+
+	if (!inode->i_op->syno_set_archive_ver)
+		return -EINVAL;
+
+	error = mnt_want_write_file(filp);
+	if (error)
+		return error;
+
+	error = inode->i_op->syno_set_archive_ver(filp->f_path.dentry, version);
+	mnt_drop_write_file(filp);
+	return error;
+}
+#ifdef MY_ABC_HERE
+static int ioctl_get_bad_version(struct inode *inode, unsigned int *version)
+{
+	int error;
+	struct super_block *sb = inode->i_sb;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+
+	if (!sb->s_op->syno_get_sb_archive_ver1)
+		return -EINVAL;
+
+	error = inode->i_sb->s_op->syno_get_sb_archive_ver1(sb, version);
+	return error;
+}
+
+static int ioctl_clear_bad_version(struct file *filp)
+{
+	int error;
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	struct super_block *sb = inode->i_sb;
+	unsigned int ver, ver1;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+
+	if (!sb->s_op->syno_get_sb_archive_ver1)
+		return -EINVAL;
+	if (!sb->s_op->syno_set_sb_archive_ver1)
+		return -EINVAL;
+
+	error = mnt_want_write_file(filp);
+	if (error)
+		return error;
+
+	mutex_lock(&sb->s_archive_mutex);
+	error = sb->s_op->syno_get_sb_archive_ver(sb, &ver);
+	if (error)
+		goto unlock;
+
+	error = sb->s_op->syno_get_sb_archive_ver1(sb, &ver1);
+	if (error)
+		goto unlock;
+
+	error = sb->s_op->syno_set_sb_archive_ver(sb, max(ver, ver1) + 1);
+	if (error)
+		goto unlock;
+
+	error = sb->s_op->syno_set_sb_archive_ver1(sb, 0);
+unlock:
+	mutex_unlock(&sb->s_archive_mutex);
+	mnt_drop_write_file(filp);
+	return error;
+}
+
+static int ioctl_set_bad_version(struct file *filp, unsigned int version)
+{
+	int error;
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	struct super_block *sb = inode->i_sb;
+
+	error = archive_check_capable(inode);
+	if (error)
+		return error;
+
+	if (!sb->s_op->syno_set_sb_archive_ver1)
+		return -EINVAL;
+
+	error = mnt_want_write_file(filp);
+	if (error)
+		return error;
+
+	mutex_lock(&sb->s_archive_mutex);
+	error = sb->s_op->syno_set_sb_archive_ver1(sb, version);
+	mutex_unlock(&sb->s_archive_mutex);
+	mnt_drop_write_file(filp);
+	return error;
+}
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+
 static int ioctl_fioasync(unsigned int fd, struct file *filp,
 			  int __user *argp)
 {
@@ -545,6 +787,127 @@ static int ioctl_fsthaw(struct file *filp)
 	return thaw_super(sb);
 }
 
+#ifdef MY_ABC_HERE
+static int syno_rbd_meta_file_mapping(struct inode *inode, size_t size,
+				      struct syno_rbd_meta_ioctl_args __user *user)
+{
+	int ret;
+	struct syno_rbd_meta_ioctl_args *args;
+
+	if (!inode->i_op->syno_rbd_meta_file_mapping)
+		return -EOPNOTSUPP;
+
+	args = memdup_user(user, size);
+	if (IS_ERR(args))
+		return PTR_ERR(args);
+
+	ret = inode->i_op->syno_rbd_meta_file_mapping(inode, args);
+	if (ret)
+		goto out;
+
+	if (copy_to_user(user, args, size)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	ret = 0;
+out:
+	kfree(args);
+	return ret;
+}
+
+static int syno_rbd_meta_file_mapping_count(struct inode *inode,
+				      struct syno_rbd_meta_ioctl_args __user * argp)
+{
+	int ret;
+	struct syno_rbd_meta_ioctl_args args;
+
+	if (copy_from_user(&args, argp, sizeof(args)))
+		return -EFAULT;
+
+	if (!inode->i_op->syno_rbd_meta_file_mapping)
+		return -EOPNOTSUPP;
+
+	ret = inode->i_op->syno_rbd_meta_file_mapping(inode, &args);
+	if (ret)
+		goto out;
+
+	if (copy_to_user(argp, &args, sizeof(args))) {
+		ret = -EFAULT;
+		goto out;
+	}
+	ret = 0;
+out:
+	return ret;
+}
+
+static int ioctl_syno_rbd_meta(struct file *filp, unsigned int __user *argp)
+{
+	struct syno_rbd_meta_ioctl_args stack;
+	struct inode *inode = file_inode(filp);
+	struct super_block *sb = inode->i_sb;
+
+	if (copy_from_user(&stack,
+			(struct syno_rbd_meta_ioctl_args __user *) argp,
+			sizeof(stack)))
+		return -EFAULT;
+
+	switch(stack.act) {
+	case SYNO_RBD_META_ACTIVATE:
+		if (inode->i_op->syno_rbd_meta_file_activate)
+			return inode->i_op->syno_rbd_meta_file_activate(inode);
+		return -EOPNOTSUPP;
+	case SYNO_RBD_META_DEACTIVATE:
+		if (inode->i_op->syno_rbd_meta_file_deactivate)
+			return inode->i_op->syno_rbd_meta_file_deactivate(inode);
+		return -EOPNOTSUPP;
+	case SYNO_RBD_META_SET_FIRST_OFFSET:
+		if (sb->s_op->syno_rbd_set_first_mapping_table_offset)
+			return sb->s_op->syno_rbd_set_first_mapping_table_offset(
+					sb, stack.first_offset);
+		return -EOPNOTSUPP;
+	case SYNO_RBD_META_MAPPING:
+		return syno_rbd_meta_file_mapping(inode, stack.size,
+			(struct syno_rbd_meta_ioctl_args __user *) argp);
+	case SYNO_RBD_META_MAPPING_COUNT:
+		return syno_rbd_meta_file_mapping_count(inode,
+			(struct syno_rbd_meta_ioctl_args __user *) argp);
+	case SYNO_RBD_META_CLEANUP_ALL:
+		if (sb->s_op->syno_rbd_meta_file_cleanup_all)
+			return sb->s_op->syno_rbd_meta_file_cleanup_all(inode);
+		return -EOPNOTSUPP;
+	default:
+		break;
+	}
+	return -EINVAL;
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+static int ioctl_syno_space_usage(struct file *filp, void __user *argp)
+{
+	int ret;
+	struct syno_space_usage_info info;
+
+	if (copy_from_user(&info, argp, sizeof(info))) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	ret = vfs_syno_space_usage(filp, &info);
+	if (ret)
+		goto out;
+
+	if (copy_to_user(argp, &info, sizeof(info))) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	ret = 0;
+out:
+	return ret;
+}
+#endif /* MY_ABC_HERE */
+
 /*
  * When you add any new common ioctls to the switches above and below
  * please update compat_sys_ioctl() too.
@@ -558,6 +921,9 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 	int error = 0;
 	int __user *argp = (int __user *)arg;
 	struct inode *inode = file_inode(filp);
+#ifdef MY_ABC_HERE
+	unsigned int ver = 0;
+#endif /* MY_ABC_HERE */
 
 	switch (cmd) {
 	case FIOCLEX:
@@ -600,6 +966,63 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 	case FIGETBSZ:
 		return put_user(inode->i_sb->s_blocksize, argp);
 
+#ifdef MY_ABC_HERE
+	case FIGETVERSION:
+		error = ioctl_get_version(inode, &ver);
+		if (!error) {
+			error = put_user(ver, (unsigned int __user *)arg) ? -EFAULT : 0;
+		}
+		break;
+	case FISETVERSION:
+		if ((error = get_user(ver, (unsigned int __user *)arg)) != 0)
+			break;
+		error = ioctl_set_version(filp, ver);
+		break;
+	case FIINCVERSION:
+		error = ioctl_inc_version(filp);
+		break;
+	case FISETFILEVERSION:
+		if ((error = get_user(ver, (unsigned int __user *)arg)) != 0)
+			break;
+		error = ioctl_set_file_version(filp, ver);
+		break;
+#ifdef MY_ABC_HERE
+	case FIGETBADVERSION:
+		error = ioctl_get_bad_version(inode, &ver);
+		if (!error) {
+			error = put_user(ver, (unsigned int __user *)arg) ? -EFAULT : 0;
+		}
+		break;
+	case FICLEARBADVERSION:
+		error = ioctl_clear_bad_version(filp);
+		break;
+	case FISETBADVERSION:
+		if ((error = get_user(ver, (unsigned int __user *)arg)) != 0)
+			break;
+		error = ioctl_set_bad_version(filp, ver);
+		break;
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+
+	case FICLONE:
+#ifdef MY_DEF_HERE
+		return ioctl_file_clone(filp, arg, 0, 0, 0, 1);
+#else
+		return ioctl_file_clone(filp, arg, 0, 0, 0);
+#endif /* MY_DEF_HERE */
+
+	case FICLONERANGE:
+		return ioctl_file_clone_range(filp, argp);
+#ifdef MY_ABC_HERE
+	case FICTRRBDMETA:
+		return ioctl_syno_rbd_meta(filp, argp);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+	case FISPACEUSAGE:
+		return ioctl_syno_space_usage(filp, argp);
+#endif /* MY_ABC_HERE */
+
 	default:
 		if (S_ISREG(inode->i_mode))
 			error = file_ioctl(filp, cmd, arg);
@@ -613,7 +1036,15 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {
 	int error;
+#ifdef MY_ABC_HERE
+	struct fd f;
+	if (cmd == FS_IOC_GETFLAGS || cmd == FS_IOC_SETFLAGS)
+		f = fdget_raw(fd);
+	else
+		f = fdget(fd);
+#else
 	struct fd f = fdget(fd);
+#endif /* MY_ABC_HERE */
 
 	if (!f.file)
 		return -EBADF;

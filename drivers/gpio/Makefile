@@ -67,6 +67,12 @@ obj-$(CONFIG_GPIO_MPC5200)	+= gpio-mpc5200.o
 obj-$(CONFIG_GPIO_MPC8XXX)	+= gpio-mpc8xxx.o
 obj-$(CONFIG_GPIO_MSIC)		+= gpio-msic.o
 obj-$(CONFIG_GPIO_MVEBU)        += gpio-mvebu.o
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_16_12), y)
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_17_10), y)
+else # CONFIG_SYNO_LSP_ARMADA_17_10
+obj-$(CONFIG_GPIO_MVEBU_A3700)	+= gpio-armada-3700.o
+endif # CONFIG_SYNO_LSP_ARMADA_17_10  
+endif #CONFIG_SYNO_LSP_ARMADA_16_12
 obj-$(CONFIG_GPIO_MXC)		+= gpio-mxc.o
 obj-$(CONFIG_GPIO_MXS)		+= gpio-mxs.o
 obj-$(CONFIG_GPIO_OCTEON)	+= gpio-octeon.o
@@ -79,6 +85,7 @@ obj-$(CONFIG_GPIO_PXA)		+= gpio-pxa.o
 obj-$(CONFIG_GPIO_RC5T583)	+= gpio-rc5t583.o
 obj-$(CONFIG_GPIO_RDC321X)	+= gpio-rdc321x.o
 obj-$(CONFIG_GPIO_RCAR)		+= gpio-rcar.o
+obj-$(CONFIG_GPIO_RTD129X)	+= gpio-rtd129x.o
 obj-$(CONFIG_GPIO_SAMSUNG)	+= gpio-samsung.o
 obj-$(CONFIG_ARCH_SA1100)	+= gpio-sa1100.o
 obj-$(CONFIG_GPIO_SCH)		+= gpio-sch.o
@@ -119,3 +126,7 @@ obj-$(CONFIG_GPIO_XTENSA)	+= gpio-xtensa.o
 obj-$(CONFIG_GPIO_ZEVIO)	+= gpio-zevio.o
 obj-$(CONFIG_GPIO_ZYNQ)		+= gpio-zynq.o
 obj-$(CONFIG_GPIO_ZX)		+= gpio-zx.o
+ifeq ($(CONFIG_SYNO_LSP_RTD1619),y)
+obj-$(CONFIG_GPIO_RTD16xx)	+= gpio-rtd16xx.o gpio-rtd16xx-suspend.o
+obj-$(CONFIG_GPIO_RTD13xx)	+= gpio-rtd16xx.o gpio-rtd16xx-suspend.o
+endif # CONFIG_SYNO_LSP_RTD1619

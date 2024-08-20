@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Syscall interface to knfsd.
  *
@@ -15,6 +18,7 @@
 #include <linux/sunrpc/gss_krb5_enctypes.h>
 #include <linux/sunrpc/rpc_pipe_fs.h>
 #include <linux/module.h>
+#include <linux/fsnotify.h>
 
 #include "idmap.h"
 #include "nfsd.h"
@@ -22,6 +26,11 @@
 #include "state.h"
 #include "netns.h"
 #include "pnfs.h"
+
+#ifdef MY_ABC_HERE
+#include <linux/kthread.h>
+#include "syno_io_stat.h"
+#endif /* MY_ABC_HERE */
 
 /*
  *	We have a single directory with several nodes in it.
@@ -52,6 +61,30 @@ enum {
 	NFSD_RecoveryDir,
 	NFSD_V4EndGrace,
 #endif
+#ifdef MY_ABC_HERE
+	NFSD_UDP_Size,
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+	NFSD_UNIX_PRI,
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+	NFSD_SYNO_FILE_STATS,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	NFSD_SYNO_IO_STATS,
+	NFSD_SYNO_CLIENT_CTL,
+	NFSD_SYNO_CLIENT_EXPIRE_TIME,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	NFSD_SYNO_TOTAL_CONNECTION_STAT,
+	NFSD_SYNO_TOTAL_CONNECTION_RESET,
+	NFSD_SYNO_MAX_CONNECTION,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	NFSD_SYNO_LATENCY_HISTOGRAM,
+	NFSD_SYNO_TOTAL_ERROR,
+#endif /* MY_ABC_HERE */
+	NFSD_MaxReserved
 };
 
 /*
@@ -72,6 +105,25 @@ static ssize_t write_gracetime(struct file *file, char *buf, size_t size);
 static ssize_t write_recoverydir(struct file *file, char *buf, size_t size);
 static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size);
 #endif
+#ifdef MY_ABC_HERE
+static ssize_t write_udp_size(struct file *file, char *buf, size_t size);
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+static ssize_t write_unix_enable(struct file *file, char *buf, size_t size);
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+static ssize_t write_syno_file_stats(struct file *file, char *buf, size_t size);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+static ssize_t control_syno_nfsd_client(struct file *file, char *buf,
+					size_t size);
+static ssize_t set_syno_nfsd_client_expire_time(struct file *file, char *buf,
+						size_t size);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+static ssize_t reset_syno_total_connection(struct file *file, char *buf, size_t size);
+static ssize_t syno_max_connection(struct file *file, char *buf, size_t size);
+#endif /* MY_ABC_HERE */
 
 static ssize_t (*write_op[])(struct file *, char *, size_t) = {
 	[NFSD_Fh] = write_filehandle,
@@ -89,6 +141,23 @@ static ssize_t (*write_op[])(struct file *, char *, size_t) = {
 	[NFSD_RecoveryDir] = write_recoverydir,
 	[NFSD_V4EndGrace] = write_v4_end_grace,
 #endif
+#ifdef MY_ABC_HERE
+	[NFSD_UDP_Size] = write_udp_size,
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+	[NFSD_UNIX_PRI] = write_unix_enable,
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+	[NFSD_SYNO_FILE_STATS] = write_syno_file_stats,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	[NFSD_SYNO_CLIENT_CTL] = control_syno_nfsd_client,
+	[NFSD_SYNO_CLIENT_EXPIRE_TIME] = set_syno_nfsd_client_expire_time,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	[NFSD_SYNO_TOTAL_CONNECTION_RESET] = reset_syno_total_connection,
+	[NFSD_SYNO_MAX_CONNECTION] = syno_max_connection,
+#endif /* MY_ABC_HERE */
 };
 
 static ssize_t nfsctl_transaction_write(struct file *file, const char __user *buf, size_t size, loff_t *pos)
@@ -227,6 +296,38 @@ static struct file_operations reply_cache_stats_operations = {
 	.release	= single_release,
 };
 
+#ifdef MY_ABC_HERE
+static const struct file_operations syno_io_stat_ops = {
+	.open		= syno_nfsd_io_total_stat_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+static const struct file_operations syno_total_connection_stat_ops = {
+	.open		= syno_nfsd_total_connection_stat_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+static const struct file_operations syno_latency_histogram_ops = {
+	.open		= syno_nfsd_latency_histogram_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static const struct file_operations syno_total_error_ops = {
+	.open		= syno_nfsd_total_error_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+#endif /* MY_ABC_HERE */
 /*----------------------------------------------------------------------------*/
 /*
  * payload - write methods
@@ -538,6 +639,430 @@ out_free:
 	mutex_unlock(&nfsd_mutex);
 	return rv;
 }
+
+#ifdef MY_ABC_HERE
+u32 nfs_udp_f_rtpref;
+u32 nfs_udp_f_wtpref;
+
+static ssize_t write_udp_size(struct file *file, char *buf, size_t size)
+{
+	int err = 0;
+	u32 preferReadSize = CONFIG_SYNO_NFSD_UDP_DEF_PACKET_SIZE;
+	u32 preferWriteSize = CONFIG_SYNO_NFSD_UDP_DEF_PACKET_SIZE;
+
+	if (0 == size) {
+		goto End;
+	}
+
+	// use sscanf to get read and write size
+	if (2 != sscanf(buf, "%u %u", &preferReadSize, &preferWriteSize)) {
+		err = -EINVAL;
+		goto End;
+	}
+
+	// make sure the packet size is on the range we want
+	if (CONFIG_SYNO_NFSD_UDP_MIN_PACKET_SIZE > preferReadSize || CONFIG_SYNO_NFSD_UDP_MAX_PACKET_SIZE < preferReadSize ||
+		CONFIG_SYNO_NFSD_UDP_MIN_PACKET_SIZE > preferWriteSize || CONFIG_SYNO_NFSD_UDP_MAX_PACKET_SIZE < preferWriteSize) {
+		err = -EINVAL;
+		goto End;
+	}
+
+	nfs_udp_f_rtpref = preferReadSize;
+	nfs_udp_f_wtpref = preferWriteSize;
+
+End:
+	if (err) {
+		return err;
+	} else {
+		return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "rsize=%d,wsize=%d\n", nfs_udp_f_rtpref, nfs_udp_f_wtpref);
+	}
+}
+#endif /*MY_ABC_HERE*/
+
+#ifdef MY_ABC_HERE
+u32 bl_unix_pri_enable;
+
+static ssize_t write_unix_enable(struct file *file, char *buf, size_t size)
+{
+	int err = 0;
+	u32 bl_tmp_unix_pri_enable;
+
+	if (0 == size) {
+		goto End;
+	}
+
+	// use sscanf to get if unix privilege enable
+	if (1 != sscanf(buf, "%u", &bl_tmp_unix_pri_enable)) {
+		err = -EINVAL;
+		printk("NFSD error wrong format of unix_pri_enable in /proc");
+		goto End;
+	}
+
+	// check if value valid
+	if (0 != bl_tmp_unix_pri_enable && 1 != bl_tmp_unix_pri_enable) {
+		err = -EINVAL;
+		printk("NFSD error wrong value of unix_pri_enable in /proc %u", bl_unix_pri_enable);
+		goto End;
+	}
+
+	bl_unix_pri_enable = bl_tmp_unix_pri_enable;
+End:
+	if (err) {
+		return err;
+	} else {
+		return scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%u\n", bl_unix_pri_enable);
+	}
+}
+#endif /*MY_ABC_HERE*/
+
+#ifdef MY_ABC_HERE
+struct syno_file_stats *syno_file_stats;
+
+/**
+ * strcpy in lower case
+ */
+static inline char *strcpy_lower_case(char *dst, char *src)
+{
+	char *tmp = dst;
+
+	while ((*dst++ = tolower(*src++)) != '\0')
+		/* nothing */;
+	return tmp;
+}
+
+static int show_syno_file_stats(char *buf, size_t len,
+                                struct syno_file_stats *stats)
+{
+	int i;
+	int ret;
+	char *buf_tail = buf;
+	size_t size = SIMPLE_TRANSACTION_LIMIT;
+
+	if (!stats || stats->nr_keys == 0) {
+		ret = 0;
+		goto out;
+	}
+
+	ret = scnprintf(buf_tail, size, "freq=%d, opt=%d, nr_keys=%d\n",
+				 stats->freq, stats->opt, stats->nr_keys);
+
+	if (ret <= 0)
+		goto out;
+	buf_tail += ret;
+	size -= ret;
+
+	/* key:cnter */
+	for (i = 0; i < stats->nr_keys; i++) {
+		ret = scnprintf(buf_tail, size, "%s:%llu\n", stats->keys[i], stats->cnters[i]);
+		if (ret <= 0)
+			goto out;
+		buf_tail += ret;
+		size -= ret;
+	}
+
+	ret = (buf_tail - buf);
+out:
+	return ret;
+}
+
+static void free_syno_file_stats(struct syno_file_stats *stats)
+{
+	int i;
+
+	if (!stats)
+		return;
+
+	for (i = 0; i < stats->nr_keys; i++) {
+		if (!stats->keys || !stats->keys[i])
+			break;
+		kfree(stats->keys[i]);
+	}
+
+	kfree(stats->keys);
+	kfree(stats->cnters);
+	kfree(stats);
+}
+
+static void __update_syno_file_stats(struct syno_file_stats *stats,
+                                     struct dentry *dentry)
+{
+	int i;
+	size_t dlen;
+	char *buf = NULL;
+	struct name_snapshot d_name_snap;
+	const char *target = NULL;
+	ktime_t now = ktime_get();
+
+	if (!stats || !dentry)
+		return;
+	if (ktime_before(now, stats->next_update_time))
+		return;
+
+	take_dentry_name_snapshot(&d_name_snap, dentry);
+	dlen = strlen(d_name_snap.name);
+	if (dlen == 0)
+		goto out_update_time;
+	if (dlen == 1 && d_name_snap.name[0] == '/')
+		goto out_update_time; /* skip if dentry is '/' (root or disconnected) */
+
+	if (stats->opt & NFSD_SYNO_FILE_STATS_OPTION_CASE_INSENSITIVE) {
+		buf = (char *) kmalloc(dlen + 1, GFP_KERNEL);
+		if (!buf)
+			goto out_update_time; /* update next time, don't retry */
+		target = (const char *) strcpy_lower_case(buf, (char *) d_name_snap.name);
+	} else {
+		target = d_name_snap.name;
+	}
+
+	for (i = 0; i < stats->nr_keys; i++)
+		if (strstr(target, stats->keys[i]))
+			stats->cnters[i]++;
+
+out_update_time:
+	stats->next_update_time = ktime_add_ms(now, (s64)stats->freq*1000);
+	release_dentry_name_snapshot(&d_name_snap);
+	kfree(buf);
+}
+
+void update_syno_file_stats(struct dentry *dentry)
+{
+	if (!mutex_trylock(&nfsd_mutex))
+		return;
+	__update_syno_file_stats(syno_file_stats, dentry);
+	mutex_unlock(&nfsd_mutex);
+}
+
+static int parse_syno_file_stats(char *buf, size_t len,
+                                 struct syno_file_stats *stats)
+{
+	int ret, nr, word_len;
+	char *word;
+	char *mesg = buf;
+
+	ret = get_int(&mesg, &stats->freq);
+	if (ret)
+		goto out;
+
+	if (stats->freq == 0) {
+		ret = 0; // if we get freq == 0, clean syno_file_stats outside
+		goto out;
+	}
+
+	if (stats->freq < 10) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = get_int(&mesg, &stats->opt);
+	if (ret)
+		goto out;
+
+	if (syno_file_stats_has_unknown_option(stats->opt)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = get_int(&mesg, &stats->nr_keys);
+	if (ret)
+		goto out;
+
+	if (stats->nr_keys <= 0 ||
+		stats->nr_keys > NFSD_SYNO_FILE_STATS_KEY_MAX) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	stats->cnters = (u64 *) kzalloc(sizeof(u64)*stats->nr_keys, GFP_KERNEL);
+	if (!stats->cnters) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	stats->keys = (char **) kzalloc(sizeof(char *)*stats->nr_keys, GFP_KERNEL);
+	if (!stats->keys) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	nr = 0;
+	word = buf;
+	while ((word_len = qword_get(&mesg, word, len)) > 0) {
+		stats->keys[nr] = (char *) kmalloc(word_len + 1, GFP_KERNEL);
+		if (!stats->keys[nr]) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		if (stats->opt & NFSD_SYNO_FILE_STATS_OPTION_CASE_INSENSITIVE)
+			strcpy_lower_case(stats->keys[nr], word);
+		else
+			strcpy(stats->keys[nr], word);
+		nr++;
+	}
+	if (nr != stats->nr_keys) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = 0;
+out:
+	return ret;
+}
+
+static ssize_t __write_syno_file_stats(struct file *file, char *buf, size_t size)
+{
+	int ret;
+	struct syno_file_stats *tmp_stats = NULL;
+
+	if (size <= 0)
+		goto out_show;
+
+	if (buf[size - 1] != '\n') {
+		ret = -EINVAL;
+		goto out;
+	}
+	buf[size - 1] = 0;
+
+	tmp_stats = (struct syno_file_stats *)
+                kzalloc(sizeof(struct syno_file_stats), GFP_KERNEL);
+	if (!tmp_stats) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = parse_syno_file_stats(buf, size, tmp_stats);
+	if (ret)
+		goto out;
+
+	if (syno_file_stats)
+		free_syno_file_stats(syno_file_stats);
+
+	if (tmp_stats->freq == 0) {
+		syno_file_stats = NULL;
+	} else {
+		syno_file_stats = tmp_stats;
+		tmp_stats = NULL;
+	}
+
+out_show:
+	ret = show_syno_file_stats(buf, size, syno_file_stats);
+out:
+	if (tmp_stats)
+		free_syno_file_stats(tmp_stats);
+	return ret;
+}
+
+static ssize_t write_syno_file_stats(struct file *file, char *buf, size_t size)
+{
+	ssize_t ret;
+
+	mutex_lock(&nfsd_mutex);
+	ret = __write_syno_file_stats(file, buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return ret;
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+static struct task_struct *g_syno_nfsd_client_manager_kthread = NULL;
+
+struct nfsd_net *syno_nfsd_net_get(void)
+{
+	struct net *net = current->nsproxy->net_ns;
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	return nn;
+}
+
+static ssize_t control_syno_nfsd_client(struct file *file, char *buf,
+					size_t size)
+{
+	ssize_t ret;
+	mutex_lock(&nfsd_mutex);
+	ret = syno_nfsd_client_ctl(buf, size);
+	mutex_unlock(&nfsd_mutex);
+	return ret;
+}
+
+static int syno_nfsd_client_manager_kthread(void *arg)
+{
+	do {
+		const int delay = syno_nfsd_client_expire_time_get() * HZ;
+		syno_nfsd_client_cleaner();
+		schedule_timeout_interruptible(delay);
+	} while(!kthread_should_stop());
+	return 0;
+}
+
+static ssize_t set_syno_nfsd_client_expire_time(struct file *file, char *buf,
+						size_t size)
+{
+	ssize_t ret;
+	int time_s;
+
+	mutex_lock(&nfsd_mutex);
+	if (size <= 0)
+		goto out_show;
+	if (1 != sscanf(buf, "%d", &time_s)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (time_s <= 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+	syno_nfsd_client_expire_time_set(time_s);
+	if (g_syno_nfsd_client_manager_kthread)
+		wake_up_process(g_syno_nfsd_client_manager_kthread);
+
+out_show:
+	ret = scnprintf(buf, size, "%d\n", syno_nfsd_client_expire_time_get());
+out:
+	mutex_unlock(&nfsd_mutex);
+	return ret;
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+static ssize_t syno_max_connection(struct file *file, char *buf, size_t size)
+{
+	ssize_t ret;
+	int op;
+
+	mutex_lock(&nfsd_mutex);
+	if (size <= 0)
+		goto out_show;
+	if (1 != sscanf(buf, "%d", &op)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (op == 0)
+		syno_nfsd_max_connection_init();
+
+out_show:
+	ret = scnprintf(buf, SIMPLE_TRANSACTION_LIMIT, "%d\n", syno_nfsd_max_connection());
+out:
+	mutex_unlock(&nfsd_mutex);
+	return ret;
+}
+
+static ssize_t reset_syno_total_connection(struct file *file, char *buf, size_t size)
+{
+	ssize_t ret;
+	int op;
+
+	mutex_lock(&nfsd_mutex);
+	if (size <= 0 || 1 != sscanf(buf, "%d", &op)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (op == 1)
+		syno_nfsd_total_connection_reset();
+
+	ret = 0;
+out:
+	mutex_unlock(&nfsd_mutex);
+	return ret;
+}
+#endif /* MY_ABC_HERE */
 
 static ssize_t __write_versions(struct file *file, char *buf, size_t size)
 {
@@ -1128,10 +1653,209 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 /*
  *	populating the filesystem.
  */
+/* Basically copying rpc_get_inode. */
+#ifdef MY_ABC_HERE
+#elif /* MY_ABC_HERE */
+static
+#endif /* MY_ABC_HERE */
+struct inode *nfsd_get_inode(struct super_block *sb, umode_t mode)
+{
+	struct inode *inode = new_inode(sb);
+	if (!inode)
+		return NULL;
+	/* Following advice from simple_fill_super documentation: */
+	inode->i_ino = iunique(sb, NFSD_MaxReserved);
+	inode->i_mode = mode;
+	inode->i_atime = inode->i_mtime = inode->i_ctime = current_fs_time(sb);
+	switch (mode & S_IFMT) {
+	case S_IFDIR:
+		inode->i_fop = &simple_dir_operations;
+		inode->i_op = &simple_dir_inode_operations;
+		inc_nlink(inode);
+	default:
+		break;
+	}
+	return inode;
+}
+
+static int __nfsd_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode, struct nfsdfs_client *ncl)
+{
+	struct inode *inode;
+
+	inode = nfsd_get_inode(dir->i_sb, mode);
+	if (!inode)
+		return -ENOMEM;
+	if (ncl) {
+		inode->i_private = ncl;
+		kref_get(&ncl->cl_ref);
+	}
+	d_add(dentry, inode);
+	inc_nlink(dir);
+	fsnotify_mkdir(dir, dentry);
+	return 0;
+}
+
+static struct dentry *nfsd_mkdir(struct dentry *parent, struct nfsdfs_client *ncl, char *name)
+{
+	struct inode *dir = parent->d_inode;
+	struct dentry *dentry;
+	int ret = -ENOMEM;
+
+	inode_lock(dir);
+	dentry = d_alloc_name(parent, name);
+	if (!dentry)
+		goto out_err;
+	ret = __nfsd_mkdir(d_inode(parent), dentry, S_IFDIR | 0600, ncl);
+	if (ret)
+		goto out_err;
+out:
+	inode_unlock(dir);
+	return dentry;
+out_err:
+	dput(dentry);
+	dentry = ERR_PTR(ret);
+	goto out;
+}
+
+static void clear_ncl(struct inode *inode)
+{
+	struct nfsdfs_client *ncl = inode->i_private;
+
+	inode->i_private = NULL;
+	synchronize_rcu();
+	kref_put(&ncl->cl_ref, ncl->cl_release);
+}
+
+
+struct nfsdfs_client *__get_nfsdfs_client(struct inode *inode)
+{
+	struct nfsdfs_client *nc = inode->i_private;
+
+	if (nc)
+		kref_get(&nc->cl_ref);
+	return nc;
+}
+
+struct nfsdfs_client *get_nfsdfs_client(struct inode *inode)
+{
+	struct nfsdfs_client *nc;
+
+	rcu_read_lock();
+	nc = __get_nfsdfs_client(inode);
+	rcu_read_unlock();
+	return nc;
+}
+/* from __rpc_unlink */
+static void nfsdfs_remove_file(struct inode *dir, struct dentry *dentry)
+{
+	int ret;
+
+	clear_ncl(d_inode(dentry));
+	dget(dentry);
+	ret = simple_unlink(dir, dentry);
+	d_delete(dentry);
+	dput(dentry);
+	WARN_ON_ONCE(ret);
+}
+
+static void nfsdfs_remove_files(struct dentry *root)
+{
+	struct dentry *dentry, *tmp;
+
+	list_for_each_entry_safe(dentry, tmp, &root->d_subdirs, d_child) {
+		if (!simple_positive(dentry)) {
+			WARN_ON_ONCE(1); /* I think this can't happen? */
+			continue;
+		}
+		nfsdfs_remove_file(d_inode(root), dentry);
+	}
+}
+
+/* XXX: cut'n'paste from simple_fill_super; figure out if we could share
+ * code instead. */
+static  int nfsdfs_create_files(struct dentry *root,
+					const struct tree_descr *files)
+{
+	struct inode *dir = d_inode(root);
+	struct inode *inode;
+	struct dentry *dentry;
+	int i;
+
+	inode_lock(dir);
+	for (i = 0; files->name && files->name[0]; i++, files++) {
+		if (!files->name)
+			continue;
+		dentry = d_alloc_name(root, files->name);
+		if (!dentry)
+			goto out;
+		inode = nfsd_get_inode(d_inode(root)->i_sb,
+					S_IFREG | files->mode);
+		if (!inode) {
+			dput(dentry);
+			goto out;
+		}
+		inode->i_fop = files->ops;
+		inode->i_private = __get_nfsdfs_client(dir);
+		d_add(dentry, inode);
+		fsnotify_create(dir, dentry);
+	}
+	inode_unlock(dir);
+	return 0;
+out:
+	nfsdfs_remove_files(root);
+	inode_unlock(dir);
+	return -ENOMEM;
+}
+
+/* on success, returns positive number unique to that client. */
+struct dentry *nfsd_client_mkdir(struct nfsd_net *nn,
+		struct nfsdfs_client *ncl, u32 id,
+		const struct tree_descr *files)
+{
+	struct dentry *dentry;
+	char name[11];
+	int ret;
+
+	sprintf(name, "%u", id);
+
+	dentry = nfsd_mkdir(nn->nfsd_client_dir, ncl, name);
+	if (IS_ERR(dentry)) /* XXX: tossing errors? */
+		return NULL;
+	ret = nfsdfs_create_files(dentry, files);
+	if (ret) {
+		nfsd_client_rmdir(dentry);
+		return NULL;
+	}
+	return dentry;
+}
+
+/* Taken from __rpc_rmdir: */
+void nfsd_client_rmdir(struct dentry *dentry)
+{
+	struct inode *dir = d_inode(dentry->d_parent);
+	struct inode *inode = d_inode(dentry);
+	int ret;
+
+	inode_lock(dir);
+	nfsdfs_remove_files(dentry);
+	clear_ncl(inode);
+	dget(dentry);
+	ret = simple_rmdir(dir, dentry);
+	WARN_ON_ONCE(ret);
+	d_delete(dentry);
+	dput(dentry);
+	inode_unlock(dir);
+}
 
 static int nfsd_fill_super(struct super_block * sb, void * data, int silent)
 {
-	static struct tree_descr nfsd_files[] = {
+	struct nfsd_net *nn = net_generic(current->nsproxy->net_ns,
+							nfsd_net_id);
+	struct dentry *dentry;
+	struct net *net = data;
+	int ret;
+
+	static const struct tree_descr nfsd_files[] = {
 		[NFSD_List] = {"exports", &exports_nfsd_operations, S_IRUGO},
 		[NFSD_Export_features] = {"export_features",
 					&export_features_operations, S_IRUGO},
@@ -1157,14 +1881,46 @@ static int nfsd_fill_super(struct super_block * sb, void * data, int silent)
 		[NFSD_RecoveryDir] = {"nfsv4recoverydir", &transaction_ops, S_IWUSR|S_IRUSR},
 		[NFSD_V4EndGrace] = {"v4_end_grace", &transaction_ops, S_IWUSR|S_IRUGO},
 #endif
+#ifdef MY_ABC_HERE
+		[NFSD_UDP_Size] = {"udppacketsize", &transaction_ops, S_IWUSR|S_IRUGO},
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		[NFSD_UNIX_PRI] = {"unix_privilege_enable", &transaction_ops, S_IWUSR|S_IRUGO},
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+		[NFSD_SYNO_FILE_STATS] = {"syno_file_stats", &transaction_ops, S_IWUSR|S_IRUGO},
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		[NFSD_SYNO_IO_STATS] = {"syno_io_stat", &syno_io_stat_ops, S_IRUGO},
+		[NFSD_SYNO_CLIENT_CTL] = {"syno_client_ctl", &transaction_ops, S_IWUSR},
+		[NFSD_SYNO_CLIENT_EXPIRE_TIME] = {"syno_client_expire_time", &transaction_ops, S_IWUSR|S_IRUGO},
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		[NFSD_SYNO_TOTAL_CONNECTION_STAT] = {"syno_total_connection_stat",
+				&syno_total_connection_stat_ops, S_IRUGO},
+		[NFSD_SYNO_TOTAL_CONNECTION_RESET] = {"syno_total_connection_reset", &transaction_ops, S_IWUSR},
+		[NFSD_SYNO_MAX_CONNECTION] = {"syno_max_connection", &transaction_ops, S_IWUSR|S_IRUGO},
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		[NFSD_SYNO_LATENCY_HISTOGRAM] = {"syno_latency_histogram", &syno_latency_histogram_ops, S_IRUGO},
+		[NFSD_SYNO_TOTAL_ERROR] = {"syno_total_error", &syno_total_error_ops, S_IRUGO},
+#endif /* MY_ABC_HERE */
 		/* last one */ {""}
 	};
-	struct net *net = data;
-	int ret;
 
 	ret = simple_fill_super(sb, 0x6e667364, nfsd_files);
 	if (ret)
 		return ret;
+	dentry = nfsd_mkdir(sb->s_root, NULL, "clients");
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+	nn->nfsd_client_dir = dentry;
+#ifdef MY_ABC_HERE
+	dentry = nfsd_mkdir(sb->s_root, NULL, "syno_clients");
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+	nn->nfsd_syno_client_dir = dentry;
+#endif /* MY_ABC_HERE */
 	sb->s_fs_info = get_net(net);
 	return 0;
 }
@@ -1229,6 +1985,9 @@ static __net_init int nfsd_init_net(struct net *net)
 		goto out_idmap_error;
 	nn->nfsd4_lease = 90;	/* default lease time */
 	nn->nfsd4_grace = 90;
+	nn->clientid_base = prandom_u32();
+	nn->clientid_counter = nn->clientid_base + 1;
+
 	return 0;
 
 out_idmap_error:
@@ -1255,12 +2014,39 @@ static int __init init_nfsd(void)
 	int retval;
 	printk(KERN_INFO "Installing knfsd (copyright (C) 1996 okir@monad.swb.de).\n");
 
-	retval = register_pernet_subsys(&nfsd_net_ops);
-	if (retval < 0)
-		return retval;
+#ifdef MY_ABC_HERE
+	/*initial default udp packet size*/
+	nfs_udp_f_rtpref = CONFIG_SYNO_NFSD_UDP_DEF_PACKET_SIZE;
+	nfs_udp_f_wtpref = CONFIG_SYNO_NFSD_UDP_DEF_PACKET_SIZE;
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+	bl_unix_pri_enable = 1;
+#endif /*MY_ABC_HERE*/
+#ifdef MY_ABC_HERE
+	syno_file_stats = NULL;
+#endif /* MY_ABC_HERE */
+
 	retval = register_cld_notifier();
 	if (retval)
-		goto out_unregister_pernet;
+		return retval;
+#ifdef MY_ABC_HERE
+	syno_nfsd_connection_init();
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	syno_nfsd_io_total_stat_init();
+
+	g_syno_nfsd_client_manager_kthread =
+		kthread_run(syno_nfsd_client_manager_kthread, NULL,
+			    "syno_nfsd_client_manager");
+	if (IS_ERR(g_syno_nfsd_client_manager_kthread)) {
+		retval = PTR_ERR(g_syno_nfsd_client_manager_kthread);
+		g_syno_nfsd_client_manager_kthread = NULL;
+		goto out_unregister_notifier;
+	}
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	syno_nfsd_udc_stat_init();
+#endif /* MY_ABC_HERE */
 	retval = nfsd4_init_slabs();
 	if (retval)
 		goto out_unregister_notifier;
@@ -1280,9 +2066,14 @@ static int __init init_nfsd(void)
 		goto out_free_lockd;
 	retval = register_filesystem(&nfsd_fs_type);
 	if (retval)
+		goto out_free_exports;
+	retval = register_pernet_subsys(&nfsd_net_ops);
+	if (retval < 0)
 		goto out_free_all;
 	return 0;
 out_free_all:
+	unregister_pernet_subsys(&nfsd_net_ops);
+out_free_exports:
 	remove_proc_entry("fs/nfs/exports", NULL);
 	remove_proc_entry("fs/nfs", NULL);
 out_free_lockd:
@@ -1297,13 +2088,30 @@ out_free_slabs:
 	nfsd4_free_slabs();
 out_unregister_notifier:
 	unregister_cld_notifier();
-out_unregister_pernet:
-	unregister_pernet_subsys(&nfsd_net_ops);
+#ifdef MY_ABC_HERE
+	if (g_syno_nfsd_client_manager_kthread)
+		kthread_stop(g_syno_nfsd_client_manager_kthread);
+	g_syno_nfsd_client_manager_kthread = NULL;
+#endif /* MY_ABC_HERE */
 	return retval;
 }
 
 static void __exit exit_nfsd(void)
 {
+#ifdef MY_ABC_HERE
+	free_syno_file_stats(syno_file_stats);
+	syno_file_stats = NULL;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	if (g_syno_nfsd_client_manager_kthread)
+		kthread_stop(g_syno_nfsd_client_manager_kthread);
+	g_syno_nfsd_client_manager_kthread = NULL;
+	syno_nfsd_io_total_stat_destroy();
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	syno_nfsd_connection_destroy();
+#endif /* MY_ABC_HERE */
+	unregister_pernet_subsys(&nfsd_net_ops);
 	nfsd_reply_cache_shutdown();
 	remove_proc_entry("fs/nfs/exports", NULL);
 	remove_proc_entry("fs/nfs", NULL);
@@ -1314,7 +2122,6 @@ static void __exit exit_nfsd(void)
 	nfsd_fault_inject_cleanup();
 	unregister_filesystem(&nfsd_fs_type);
 	unregister_cld_notifier();
-	unregister_pernet_subsys(&nfsd_net_ops);
 }
 
 MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");

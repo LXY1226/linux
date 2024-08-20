@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2007 Oracle.  All rights reserved.
  *
@@ -58,7 +61,7 @@ struct btrfs_ordered_sum {
 
 #define BTRFS_ORDERED_COMPRESSED 3 /* writing a zlib compressed extent */
 
-#define BTRFS_ORDERED_PREALLOC 4 /* set when writing to prealloced extent */
+#define BTRFS_ORDERED_PREALLOC 4 /* set when writing to preallocated extent */
 
 #define BTRFS_ORDERED_DIRECT 5 /* set when we're doing DIO with this extent */
 
@@ -67,14 +70,20 @@ struct btrfs_ordered_sum {
 #define BTRFS_ORDERED_UPDATED_ISIZE 7 /* indicates whether this ordered extent
 				       * has done its due diligence in updating
 				       * the isize. */
-#define BTRFS_ORDERED_LOGGED_CSUM 8 /* We've logged the csums on this ordered
-				       ordered extent */
-#define BTRFS_ORDERED_TRUNCATED 9 /* Set when we have to truncate an extent */
+#define BTRFS_ORDERED_TRUNCATED 8 /* Set when we have to truncate an extent */
 
-#define BTRFS_ORDERED_LOGGED 10 /* Set when we've waited on this ordered extent
-				 * in the logging code. */
-#define BTRFS_ORDERED_PENDING 11 /* We are waiting for this ordered extent to
-				  * complete in the current transaction. */
+#ifdef MY_DEF_HERE
+#define BTRFS_ORDERED_SYNC 12
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+#define BTRFS_ORDERED_WORK_INITIALIZED 13
+#define BTRFS_ORDERED_HIGH_PRIORITY 14
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+#define BTRFS_ORDERED_INLINE_DEDUPE 15
+#endif /* MY_DEF_HERE */
+
 struct btrfs_ordered_extent {
 	/* logical offset in the file */
 	u64 file_offset;
@@ -110,6 +119,9 @@ struct btrfs_ordered_extent {
 	/* compression algorithm */
 	int compress_type;
 
+	/* Qgroup reserved space */
+	int qgroup_rsv;
+
 	/* reference count */
 	atomic_t refs;
 
@@ -139,6 +151,9 @@ struct btrfs_ordered_extent {
 	struct completion completion;
 	struct btrfs_work flush_work;
 	struct list_head work_list;
+#ifdef MY_DEF_HERE
+	int high_priority;
+#endif /* MY_DEF_HERE */
 };
 
 /*
@@ -170,8 +185,13 @@ int btrfs_dec_test_first_ordered_pending(struct inode *inode,
 				   struct btrfs_ordered_extent **cached,
 				   u64 *file_offset, u64 io_size,
 				   int uptodate);
+#ifdef MY_DEF_HERE
+int btrfs_add_ordered_extent(struct inode *inode, u64 file_offset,
+			     u64 start, u64 len, u64 disk_len, int type, int write_sync);
+#else
 int btrfs_add_ordered_extent(struct inode *inode, u64 file_offset,
 			     u64 start, u64 len, u64 disk_len, int type);
+#endif /* MY_DEF_HERE */
 int btrfs_add_ordered_extent_dio(struct inode *inode, u64 file_offset,
 				 u64 start, u64 len, u64 disk_len, int type);
 int btrfs_add_ordered_extent_compress(struct inode *inode, u64 file_offset,
@@ -190,25 +210,14 @@ btrfs_lookup_first_ordered_extent(struct inode * inode, u64 file_offset);
 struct btrfs_ordered_extent *btrfs_lookup_ordered_range(struct inode *inode,
 							u64 file_offset,
 							u64 len);
-bool btrfs_have_ordered_extents_in_range(struct inode *inode,
-					 u64 file_offset,
-					 u64 len);
 int btrfs_ordered_update_i_size(struct inode *inode, u64 offset,
 				struct btrfs_ordered_extent *ordered);
 int btrfs_find_ordered_sum(struct inode *inode, u64 offset, u64 disk_bytenr,
 			   u32 *sum, int len);
-int btrfs_wait_ordered_extents(struct btrfs_root *root, int nr);
-void btrfs_wait_ordered_roots(struct btrfs_fs_info *fs_info, int nr);
-void btrfs_get_logged_extents(struct inode *inode,
-			      struct list_head *logged_list,
-			      const loff_t start,
-			      const loff_t end);
-void btrfs_put_logged_extents(struct list_head *logged_list);
-void btrfs_submit_logged_extents(struct list_head *logged_list,
-				 struct btrfs_root *log);
-void btrfs_wait_logged_extents(struct btrfs_trans_handle *trans,
-			       struct btrfs_root *log, u64 transid);
-void btrfs_free_logged_extents(struct btrfs_root *log, u64 transid);
+int btrfs_wait_ordered_extents(struct btrfs_root *root, int nr,
+			       const u64 range_start, const u64 range_len);
+void btrfs_wait_ordered_roots(struct btrfs_fs_info *fs_info, int nr,
+			      const u64 range_start, const u64 range_len);
 int __init ordered_data_init(void);
 void ordered_data_exit(void);
 #endif

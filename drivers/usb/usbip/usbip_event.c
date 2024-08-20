@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2003-2008 Takahiro Hirofuchi
  *
@@ -120,8 +123,14 @@ int usbip_event_happened(struct usbip_device *ud)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ud->lock, flags);
+#ifdef MY_ABC_HERE
+	if (0 != ud->event && USBIP_EH_RESET != ud->event) {
+		happened = 1;
+	}
+#else /* MY_ABC_HERE */
 	if (ud->event != 0)
 		happened = 1;
+#endif /* MY_ABC_HERE */
 	spin_unlock_irqrestore(&ud->lock, flags);
 
 	return happened;

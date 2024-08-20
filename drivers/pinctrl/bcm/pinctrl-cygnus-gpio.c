@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2014-2015 Broadcom Corporation
  *
@@ -720,7 +723,11 @@ static int cygnus_gpio_probe(struct platform_device *pdev)
 	gc->ngpio = ngpios;
 	chip->num_banks = (ngpios + NGPIOS_PER_BANK - 1) / NGPIOS_PER_BANK;
 	gc->label = dev_name(dev);
+#if defined(MY_ABC_HERE)
+	gc->parent = dev;
+#else /* MY_ABC_HERE */
 	gc->dev = dev;
+#endif /* MY_ABC_HERE */
 	gc->of_node = dev->of_node;
 	gc->request = cygnus_gpio_request;
 	gc->free = cygnus_gpio_free;

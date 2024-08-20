@@ -313,8 +313,7 @@ int iov_iter_fault_in_readable(struct iov_iter *i, size_t bytes)
 
 	if (iter_is_iovec(i)) {
 		iterate_iovec(i, bytes, v, iov, skip, ({
-			err = fault_in_multipages_readable(v.iov_base,
-					v.iov_len);
+			err = fault_in_pages_readable(v.iov_base, v.iov_len);
 			if (unlikely(err))
 			return err;
 		0;}))
@@ -349,7 +348,7 @@ static void memcpy_from_page(char *to, struct page *page, size_t offset, size_t 
 	kunmap_atomic(from);
 }
 
-static void memcpy_to_page(struct page *page, size_t offset, char *from, size_t len)
+static void memcpy_to_page(struct page *page, size_t offset, const char *from, size_t len)
 {
 	char *to = kmap_atomic(page);
 	memcpy(to + offset, from, len);
@@ -363,9 +362,9 @@ static void memzero_page(struct page *page, size_t offset, size_t len)
 	kunmap_atomic(addr);
 }
 
-size_t copy_to_iter(void *addr, size_t bytes, struct iov_iter *i)
+size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 {
-	char *from = addr;
+	const char *from = addr;
 	if (unlikely(bytes > i->count))
 		bytes = i->count;
 
@@ -549,6 +548,25 @@ unsigned long iov_iter_alignment(const struct iov_iter *i)
 }
 EXPORT_SYMBOL(iov_iter_alignment);
 
+unsigned long iov_iter_gap_alignment(const struct iov_iter *i)
+{
+        unsigned long res = 0;
+	size_t size = i->count;
+	if (!size)
+		return 0;
+
+	iterate_all_kinds(i, size, v,
+		(res |= (!res ? 0 : (unsigned long)v.iov_base) |
+			(size != v.iov_len ? size : 0), 0),
+		(res |= (!res ? 0 : (unsigned long)v.bv_offset) |
+			(size != v.bv_len ? size : 0)),
+		(res |= (!res ? 0 : (unsigned long)v.iov_base) |
+			(size != v.iov_len ? size : 0))
+		);
+		return res;
+}
+EXPORT_SYMBOL(iov_iter_gap_alignment);
+
 ssize_t iov_iter_get_pages(struct iov_iter *i,
 		   struct page **pages, size_t maxsize, unsigned maxpages,
 		   size_t *start)
@@ -684,10 +702,10 @@ size_t csum_and_copy_from_iter(void *addr, size_t bytes, __wsum *csum,
 }
 EXPORT_SYMBOL(csum_and_copy_from_iter);
 
-size_t csum_and_copy_to_iter(void *addr, size_t bytes, __wsum *csum,
+size_t csum_and_copy_to_iter(const void *addr, size_t bytes, __wsum *csum,
 			     struct iov_iter *i)
 {
-	char *from = addr;
+	const char *from = addr;
 	__wsum sum, next;
 	size_t off = 0;
 	if (unlikely(bytes > i->count))

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2013 - 2014 Texas Instruments Incorporated - http://www.ti.com
  *
@@ -31,7 +34,11 @@
  * parent - fixed parent.  No clk_set_parent support
  */
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_gpio(_hw) container_of(_hw, struct clk_gpio, hw)
+#endif /* MY_ABC_HERE */
 
 static int clk_gpio_gate_enable(struct clk_hw *hw)
 {

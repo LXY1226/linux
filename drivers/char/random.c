@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * random.c -- A strong random number generator
  *
@@ -260,6 +263,7 @@
 #include <linux/irq.h>
 #include <linux/syscalls.h>
 #include <linux/completion.h>
+#include <linux/uuid.h>
 
 #include <asm/processor.h>
 #include <asm/uaccess.h>
@@ -1638,26 +1642,6 @@ SYSCALL_DEFINE3(getrandom, char __user *, buf, size_t, count,
 	return urandom_read(NULL, buf, count, NULL);
 }
 
-/***************************************************************
- * Random UUID interface
- *
- * Used here for a Boot ID, but can be useful for other kernel
- * drivers.
- ***************************************************************/
-
-/*
- * Generate random UUID
- */
-void generate_random_uuid(unsigned char uuid_out[16])
-{
-	get_random_bytes(uuid_out, 16);
-	/* Set UUID version to 4 --- truly random generation */
-	uuid_out[6] = (uuid_out[6] & 0x0F) | 0x40;
-	/* Set the UUID variant to DCE */
-	uuid_out[8] = (uuid_out[8] & 0x3F) | 0x80;
-}
-EXPORT_SYMBOL(generate_random_uuid);
-
 /********************************************************************
  *
  * Sysctl interface
@@ -1725,6 +1709,72 @@ static int proc_do_entropy(struct ctl_table *table, int write,
 
 	return proc_dointvec(&fake_table, write, buffer, lenp, ppos);
 }
+
+#ifdef MY_ABC_HERE
+/*
+ * Each time the timer fires, we expect that we got an unpredictable
+ * jump in the cycle counter. Even if the timer is running on another
+ * CPU, the timer activity will be touching the stack of the CPU that is
+ * generating entropy..
+ *
+ * Note that we don't re-arm the timer in the timer itself - we are
+ * happy to be scheduled away, since that just makes the load more
+ * complex, but we do not want the timer to keep ticking unless the
+ * entropy loop is running.
+ *
+ * So the re-arming always happens in the entropy loop itself.
+ */
+static void entropy_timer(unsigned long arg)
+{
+       credit_entropy_bits(&nonblocking_pool, 1);
+}
+
+/*
+ * If we have an actual cycle counter, see if we can
+ * generate enough entropy with timing noise
+ */
+static void try_to_generate_entropy(void)
+{
+       struct {
+               unsigned long now;
+               struct timer_list timer;
+       } stack;
+
+       stack.now = random_get_entropy();
+
+       /* Slow counter - or none. Don't even bother */
+       if (stack.now == random_get_entropy())
+               return;
+
+       setup_timer_on_stack(&stack.timer, entropy_timer, 0);
+
+       while (0 == nonblocking_pool.initialized) {
+               if (!timer_pending(&stack.timer))
+                       mod_timer(&stack.timer, jiffies+1);
+               mix_pool_bytes(&nonblocking_pool, &stack.now, sizeof(stack.now));
+               schedule();
+               stack.now = random_get_entropy();
+       }
+
+       del_timer_sync(&stack.timer);
+       destroy_timer_on_stack(&stack.timer);
+       mix_pool_bytes(&nonblocking_pool, &stack.now, sizeof(stack.now));
+}
+
+int syno_gen_entropy = 0;
+static int proc_syno_gen_entropy(struct ctl_table *table, int write,
+			   void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table fake_table;
+
+	if (write && 0 == nonblocking_pool.initialized) {
+		try_to_generate_entropy();
+	}
+	fake_table.data = &syno_gen_entropy;
+	fake_table.maxlen = sizeof(syno_gen_entropy);
+	return proc_dostring(&fake_table, write, buffer, lenp, ppos);
+}
+#endif /* MY_ABC_HERE */
 
 static int sysctl_poolsize = INPUT_POOL_WORDS * 32;
 extern struct ctl_table random_table[];
@@ -1797,6 +1847,15 @@ struct ctl_table random_table[] = {
 		.proc_handler	= proc_doulongvec_minmax,
 	},
 #endif
+#ifdef MY_ABC_HERE
+	{
+		.procname	= "syno_gen_entropy",
+		.data		= &syno_gen_entropy,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_syno_gen_entropy,
+	},
+#endif /* MY_ABC_HERE */
 	{ }
 };
 #endif 	/* CONFIG_SYSCTL */

@@ -38,6 +38,11 @@ static inline struct reset_control *devm_reset_control_get_optional(
 struct reset_control *of_reset_control_get(struct device_node *node,
 					   const char *id);
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+struct reset_control *of_reset_control_get_by_index(
+					struct device_node *node, int index);
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 #else
 
 static inline int reset_control_reset(struct reset_control *rstc)
@@ -106,6 +111,14 @@ static inline struct reset_control *of_reset_control_get(
 	return ERR_PTR(-ENOSYS);
 }
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+static inline struct reset_control *of_reset_control_get_by_index(
+				struct device_node *node, int index)
+{
+	return ERR_PTR(-ENOTSUPP);
+}
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 #endif /* CONFIG_RESET_CONTROLLER */
 
 #endif

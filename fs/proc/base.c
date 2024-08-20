@@ -1971,7 +1971,11 @@ static int proc_map_files_get_link(struct dentry *dentry, struct path *path)
 	down_read(&mm->mmap_sem);
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (vma && vma->vm_file) {
+#ifdef CONFIG_AUFS_FHSM
+		*path = vma_pr_or_file(vma)->f_path;
+#else
 		*path = vma->vm_file->f_path;
+#endif /* CONFIG_AUFS_FHSM */
 		path_get(path);
 		rc = 0;
 	}

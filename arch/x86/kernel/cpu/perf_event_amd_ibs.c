@@ -591,17 +591,28 @@ static int perf_ibs_handle_irq(struct perf_ibs *perf_ibs, struct pt_regs *iregs)
 	}
 
 	if (event->attr.sample_type & PERF_SAMPLE_RAW) {
-		raw.size = sizeof(u32) + ibs_data.size;
-		raw.data = ibs_data.data;
+		raw = (struct perf_raw_record){
+			.frag = {
+				.size = sizeof(u32) + ibs_data.size,
+				.data = ibs_data.data,
+			},
+		};
 		data.raw = &raw;
 	}
 
 	throttle = perf_event_overflow(event, &data, &regs);
 out:
-	if (throttle)
-		perf_ibs_disable_event(perf_ibs, hwc, *config);
-	else
-		perf_ibs_enable_event(perf_ibs, hwc, period >> 4);
+	if (throttle) {
+		perf_ibs_stop(event, 0);
+	} else {
+		period >>= 4;
+
+		if ((ibs_caps & IBS_CAPS_RDWROPCNT) &&
+			(*config & IBS_OP_CNT_CTL))
+				period |= *config & IBS_OP_CUR_CNT_RAND;
+
+		perf_ibs_enable_event(perf_ibs, hwc, period);
+	}
 
 	perf_event_update_userpage(event);
 

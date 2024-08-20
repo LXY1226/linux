@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Internal header file for device mapper
  *
@@ -20,6 +23,19 @@
 #include <linux/kobject.h>
 
 #include "dm-stats.h"
+
+#ifdef MY_DEF_HERE
+/*
+ * Target add uevent env for mulitpath device
+ */
+
+#define SZ_SYNO_MPATH_TARGET_ADD_TYPE "MPATH_TARGET_ADD_TYPE"
+
+#define SZ_SYNO_MPATH_TARGET_ADD_TYPE_INIT SZ_SYNO_MPATH_TARGET_ADD_TYPE"=init"
+#define SZ_SYNO_MPATH_TARGET_ADD_TYPE_APPE SZ_SYNO_MPATH_TARGET_ADD_TYPE"=append"
+
+#endif /* MY_DEF_HERE */
+
 
 /*
  * Suspend feature flags
@@ -48,6 +64,17 @@ struct dm_dev_internal {
 	atomic_t count;
 	struct dm_dev *dm_dev;
 };
+
+#ifdef MY_DEF_HERE
+typedef enum {
+	SYNO_RENAME_DM_AS_NONE = 0,
+	SYNO_RENAME_DM_AS_SAS,
+} SYNO_RENAME_DM_AS_TPYE;
+
+// Refer to mutlitpath-tools before modification
+#define SYNO_DM_RENAME_SAS_PREFIX "sas_mpath"
+
+#endif /* MY_DEF_HERE */
 
 struct dm_table;
 struct dm_md_mempools;
@@ -85,6 +112,9 @@ unsigned dm_get_md_type(struct mapped_device *md);
 struct target_type *dm_get_immutable_target_type(struct mapped_device *md);
 
 int dm_setup_md_queue(struct mapped_device *md);
+#ifdef MY_DEF_HERE
+int syno_dm_table_first_target_data_devices_count(struct dm_table *table);
+#endif /* MY_DEF_HERE */
 
 /*
  * To check the return value from dm_table_find_target().
@@ -211,6 +241,14 @@ void dm_internal_suspend(struct mapped_device *md);
 void dm_internal_resume(struct mapped_device *md);
 
 bool dm_use_blk_mq(struct mapped_device *md);
+
+#ifdef MY_DEF_HERE
+int SynoDmCheckByGendisk(struct gendisk *disk);
+#endif
+
+#ifdef MY_DEF_HERE
+bool SynoIsDmMultipathDevice(struct mapped_device *md);
+#endif
 
 int dm_io_init(void);
 void dm_io_exit(void);

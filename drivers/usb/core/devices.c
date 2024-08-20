@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * devices.c
  * (C) Copyright 1999 Randy Dunlap.
@@ -58,6 +61,9 @@
 #include <linux/usb/hcd.h>
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+#include <linux/synobios.h>
+#endif /* MY_DEF_HERE || MY_DEF_HERE */
 
 #include "usb.h"
 
@@ -161,6 +167,14 @@ static const struct class_info clas_info[] = {
 };
 
 /*****************************************************************/
+
+#ifdef MY_ABC_HERE
+#define SDCOPY_PORT_LOCATION 98
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define USBCOPY_PORT_LOCATION 99
+#endif /* MY_ABC_HERE */
 
 void usbfs_conn_disc_event(void)
 {
@@ -483,6 +497,99 @@ static char *usb_dump_string(char *start, char *end,
 
 #endif /* PROC_EXTRA */
 
+#ifdef MY_ABC_HERE
+int blIsUSBDeviceAtFrontPort(struct usb_device *usbdev)
+{
+	char buf[256];
+
+	if(usbdev && usbdev->bus) {
+		memset(buf, 0, sizeof(buf));
+		sprintf(buf, "%s-%s", usbdev->bus->bus_name, usbdev->devpath);
+#if defined(MY_DEF_HERE)
+		if(!strcmp(buf,"0000:00:14.0-2")) {
+			return 1;
+		}
+#endif /* MY_DEF_HERE */
+#if defined(MY_DEF_HERE)
+		if(!strcmp(buf,"0000:00:15.0-3")) {
+			return 1;
+		}
+#endif /* MY_DEF_HERE */
+#if defined(MY_DEF_HERE)
+		if(!strcmp(buf,"0000:00:15.0-1")) {
+			return 1;
+		}
+#endif /* MY_DEF_HERE */
+#if defined(CONFIG_SYNO_X86)
+#if defined(CONFIG_ARCH_GEN3)
+		if(!strcmp(buf,"0000:01:0d.0-1")) {
+			return 1;
+		}
+#endif /* defined(CONFIG_ARCH_GEN3) */
+#endif /* defined(CONFIG_SYNO_X86) */
+#if defined(MY_DEF_HERE)
+		if(!strcmp(buf,"0000:00:1d.7-3") || !strcmp(buf,"0000:00:1d.1-1")) {
+			return 1;
+		}
+#endif /*MY_DEF_HERE*/
+#if defined(MY_DEF_HERE) && defined(CONFIG_ARMADA_XP)
+		if(!strcmp(buf, "ehci_marvell.1-1") ||
+		   !strcmp(buf, "ehci_marvell.0-1")) {
+			return 1;
+		}
+#endif /* defined(MY_DEF_HERE) && defined(CONFIG_ARMADA_XP) */
+#if defined(MY_DEF_HERE)
+		if(syno_is_hw_version(HW_DS218)) {
+			if(!strcmp(buf, "xhci-hcd.5.auto-1")) {
+				return 1;
+			}
+		}
+#endif /* MY_DEF_HERE */
+#if defined(MY_DEF_HERE)
+		if(syno_is_hw_version(HW_DS220)) {
+			if(!strcmp(buf, "xhci-hcd.7.auto-1")) {
+				return 1;
+			}
+		}
+#endif /* MY_DEF_HERE */
+	}
+	return 0;
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+int blIsCardReader(struct usb_device *usbdev)
+{
+	char buf[256];
+
+	if(usbdev && usbdev->bus) {
+		memset(buf, 0, sizeof(buf));
+		sprintf(buf, "%s-%s", usbdev->bus->bus_name, usbdev->devpath);
+
+#if defined(CONFIG_SYNO_X86)
+#if defined(CONFIG_ARCH_GEN3)
+		if (syno_is_hw_version(HW_DS214play)) {
+			if(!strcmp(buf,"0000:01:0d.1-1")) {
+			return 1;
+			}
+		}
+#endif /* defined(CONFIG_SYNO_X86) */
+#endif /* defined(CONFIG_ARCH_GEN3) */
+
+#if defined(MY_DEF_HERE)
+		if (syno_is_hw_version(HW_US3v10)) {
+			if (!strcmp(buf, "0000:00:00.0-1")) {
+				return 1;
+			}
+		}
+#endif /* defined(MY_DEF_HERE) */
+
+	}
+	return 0;
+}
+EXPORT_SYMBOL(blIsCardReader);
+#endif /* MY_ABC_HERE */
+
 /*****************************************************************/
 
 /* This is a recursive function. Parameters:
@@ -504,6 +611,9 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 	unsigned int length;
 	ssize_t total_written = 0;
 	struct usb_device *childdev = NULL;
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+	int port = 0;
+#endif /* defined(MY_ABC_HERE) || defined(MY_ABC_HERE) */
 
 	/* don't bother with anything else if we're not writing any data */
 	if (*nbytes <= 0)
@@ -539,10 +649,33 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 	default:
 		speed = "??";
 	}
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+#if defined(MY_ABC_HERE)
+	if(blIsUSBDeviceAtFrontPort(usbdev)) {
+		port = USBCOPY_PORT_LOCATION;
+	}
+#endif /* defined(MY_ABC_HERE) */
+#if defined(MY_ABC_HERE)
+	if(blIsCardReader(usbdev)) {
+		port = SDCOPY_PORT_LOCATION;
+	}
+#endif /* defined(MY_ABC_HERE) */
+
+	if (port) {
+		data_end = pages_start + sprintf(pages_start, format_topo,
+				bus->busnum, level, parent_devnum,
+				port, count, usbdev->devnum,
+				speed, usbdev->maxchild);
+	} else {
+#endif /* defined(MY_ABC_HERE) || defined(MY_ABC_HERE) */
 	data_end = pages_start + sprintf(pages_start, format_topo,
 			bus->busnum, level, parent_devnum,
 			index, count, usbdev->devnum,
 			speed, usbdev->maxchild);
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+	}
+#endif /* defined(MY_ABC_HERE) || defined(MY_ABC_HERE) */
+
 	/*
 	 * level = topology-tier level;
 	 * parent_devnum = parent device number;
@@ -601,9 +734,19 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 	/* Now look at all of this device's children. */
 	usb_hub_for_each_child(usbdev, chix, childdev) {
 		usb_lock_device(childdev);
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+		if (port) {
+			ret = usb_device_dump(buffer, nbytes, skip_bytes, file_offset,
+					childdev, bus, level + 1, port, ++cnt);
+		} else {
+#endif /* defined(MY_ABC_HERE) || defined(MY_ABC_HERE) */
 		ret = usb_device_dump(buffer, nbytes, skip_bytes,
 				      file_offset, childdev, bus,
 				      level + 1, chix - 1, ++cnt);
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+		}
+#endif /* defined(MY_ABC_HERE) || defined(MY_ABC_HERE) */
+
 		usb_unlock_device(childdev);
 		if (ret == -EFAULT)
 			return total_written;

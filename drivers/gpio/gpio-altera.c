@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2013 Altera Corporation
  * Based on gpio-mpc8xxx.c
@@ -286,7 +289,11 @@ static int altera_gpio_probe(struct platform_device *pdev)
 	altera_gc->mmchip.gc.get		= altera_gpio_get;
 	altera_gc->mmchip.gc.set		= altera_gpio_set;
 	altera_gc->mmchip.gc.owner		= THIS_MODULE;
+#if defined(MY_ABC_HERE)
+	altera_gc->mmchip.gc.parent		= &pdev->dev;
+#else /* MY_ABC_HERE */
 	altera_gc->mmchip.gc.dev		= &pdev->dev;
+#endif /* MY_ABC_HERE */
 
 	ret = of_mm_gpiochip_add(node, &altera_gc->mmchip);
 	if (ret) {

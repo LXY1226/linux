@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Hodge-podge collection of knfsd-related stuff.
  * I will sort this out later.
@@ -20,6 +23,7 @@
 
 #include <uapi/linux/nfsd/debug.h>
 
+#include "netns.h"
 #include "stats.h"
 #include "export.h"
 
@@ -58,6 +62,28 @@ struct readdir_cd {
 	__be32			err;	/* 0, nfserr, or nfserr_eof */
 };
 
+#ifdef MY_ABC_HERE
+#define NFSD_SYNO_FILE_STATS_KEY_MAX 128
+
+#define NFSD_SYNO_FILE_STATS_OPTION_CASE_INSENSITIVE 0x0001
+#define NFSD_SYNO_FILE_STATS_OPTION_SUPP (NFSD_SYNO_FILE_STATS_OPTION_CASE_INSENSITIVE)
+
+static inline bool syno_file_stats_has_unknown_option(int opt)
+{
+	return ((opt & (~NFSD_SYNO_FILE_STATS_OPTION_SUPP)) != 0);
+}
+
+struct syno_file_stats {
+	int freq; /* sec */
+	int opt;
+	int nr_keys;
+	char **keys;
+	u64 *cnters;
+	ktime_t next_update_time;
+};
+
+void update_syno_file_stats(struct dentry *dentry);
+#endif /* MY_ABC_HERE */
 
 extern struct svc_program	nfsd_program;
 extern struct svc_version	nfsd_version2, nfsd_version3,
@@ -83,6 +109,16 @@ int		nfsd_pool_stats_open(struct inode *, struct file *);
 int		nfsd_pool_stats_release(struct inode *, struct file *);
 
 void		nfsd_destroy(struct net *net);
+
+struct nfsdfs_client {
+	struct kref cl_ref;
+	void (*cl_release)(struct kref *kref);
+};
+
+struct nfsdfs_client *get_nfsdfs_client(struct inode *);
+struct dentry *nfsd_client_mkdir(struct nfsd_net *nn,
+		struct nfsdfs_client *ncl, u32 id, const struct tree_descr *);
+void nfsd_client_rmdir(struct dentry *dentry);
 
 #if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 #ifdef CONFIG_NFSD_V2_ACL
@@ -418,5 +454,9 @@ static inline int nfsd4_is_junction(struct dentry *dentry)
 #define unregister_cld_notifier() do { } while(0)
 
 #endif /* CONFIG_NFSD_V4 */
+
+#ifdef MY_ABC_HERE
+struct inode *nfsd_get_inode(struct super_block *sb, umode_t mode);
+#endif /* MY_ABC_HERE */
 
 #endif /* LINUX_NFSD_NFSD_H */

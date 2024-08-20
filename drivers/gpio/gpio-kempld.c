@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Kontron PLD GPIO driver
  *
@@ -166,7 +169,11 @@ static int kempld_gpio_probe(struct platform_device *pdev)
 	chip = &gpio->chip;
 	chip->label = "gpio-kempld";
 	chip->owner = THIS_MODULE;
+#if defined(MY_ABC_HERE)
+	chip->parent = dev;
+#else /* MY_ABC_HERE */
 	chip->dev = dev;
+#endif /* MY_ABC_HERE */
 	chip->can_sleep = true;
 	if (pdata && pdata->gpio_base)
 		chip->base = pdata->gpio_base;

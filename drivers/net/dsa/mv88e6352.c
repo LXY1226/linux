@@ -1,3 +1,7 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
+#if !defined(MY_ABC_HERE)
 /*
  * net/dsa/mv88e6352.c - Marvell 88e6352 switch chip support
  *
@@ -342,3 +346,4 @@ MODULE_ALIAS("platform:mv88e6176");
 MODULE_ALIAS("platform:mv88e6320");
 MODULE_ALIAS("platform:mv88e6321");
 MODULE_ALIAS("platform:mv88e6352");
+#endif /* MY_ABC_HERE */

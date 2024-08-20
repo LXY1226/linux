@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * (C) 1999-2001 Paul `Rusty' Russell
  * (C) 2002-2006 Netfilter Core Team <coreteam@netfilter.org>
@@ -376,6 +379,33 @@ struct nf_conn_nat *nf_ct_nat_ext_add(struct nf_conn *ct)
 }
 EXPORT_SYMBOL_GPL(nf_ct_nat_ext_add);
 
+#ifdef MY_ABC_HERE
+/* bridge netfilter uses cloned skbs when forwarding to multiple bridge ports.
+ * when userspace queueing is involved, we might try to set up NAT bindings
+ * on the same conntrack simultaneoulsy.  Can happen e.g. when broadcast has
+ * to be forwarded by the bridge but is also passed up the stack.
+ *
+ * Thus, when bridge netfilter is enabled, we need to serialize and silently
+ * accept the packet in the collision case.
+ */
+static inline bool nf_nat_bridge_lock(struct nf_conn *ct, enum nf_nat_manip_type maniptype)
+{
+	spin_lock_bh(&ct->lock);
+
+	if (unlikely(nf_nat_initialized(ct, maniptype))) {
+		pr_debug("race with cloned skb? Not adding NAT extension\n");
+		spin_unlock_bh(&ct->lock);
+		return false;
+	}
+	return true;
+}
+
+static inline void nf_nat_bridge_unlock(struct nf_conn *ct)
+{
+	spin_unlock_bh(&ct->lock);
+}
+#endif /* MY_ABC_HERE */
+
 unsigned int
 nf_nat_setup_info(struct nf_conn *ct,
 		  const struct nf_nat_range *range,
@@ -385,14 +415,33 @@ nf_nat_setup_info(struct nf_conn *ct,
 	struct nf_conntrack_tuple curr_tuple, new_tuple;
 	struct nf_conn_nat *nat;
 
+#ifdef MY_ABC_HERE
+	NF_CT_ASSERT(maniptype == NF_NAT_MANIP_SRC ||
+			maniptype == NF_NAT_MANIP_DST);
+
+	if (!nf_nat_bridge_lock(ct, maniptype))
+		return NF_ACCEPT;
+#endif /* MY_ABC_HERE */
+
 	/* nat helper or nfctnetlink also setup binding */
 	nat = nf_ct_nat_ext_add(ct);
 	if (nat == NULL)
+#ifdef MY_ABC_HERE
+	{
+		nf_nat_bridge_unlock(ct);
+#endif /* MY_ABC_HERE */
 		return NF_ACCEPT;
+#ifdef MY_ABC_HERE
+	}
+#endif /* MY_ABC_HERE */
 
+#ifdef MY_ABC_HERE
+#else
 	NF_CT_ASSERT(maniptype == NF_NAT_MANIP_SRC ||
 		     maniptype == NF_NAT_MANIP_DST);
-	BUG_ON(nf_nat_initialized(ct, maniptype));
+#endif /* MY_ABC_HERE */
+	if (WARN_ON(nf_nat_initialized(ct, maniptype)))
+		return NF_DROP;
 
 	/* What we've got will look like inverse of reply. Normally
 	 * this is what is in the conntrack, except for prior
@@ -441,6 +490,9 @@ nf_nat_setup_info(struct nf_conn *ct,
 	else
 		ct->status |= IPS_SRC_NAT_DONE;
 
+#ifdef MY_ABC_HERE
+       nf_nat_bridge_unlock(ct);
+#endif /* MY_ABC_HERE */
 	return NF_ACCEPT;
 }
 EXPORT_SYMBOL(nf_nat_setup_info);

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/include/linux/hfsplus_fs.h
  *
@@ -314,6 +317,9 @@ static inline unsigned short hfsplus_min_io_size(struct super_block *sb)
 #define hfs_bmap_alloc hfsplus_bmap_alloc
 #define hfs_bmap_free hfsplus_bmap_free
 #define hfs_bnode_read hfsplus_bnode_read
+#ifdef MY_ABC_HERE
+#define hfs_bnode_read_u32 hfsplus_bnode_read_u32
+#endif /* MY_ABC_HERE */
 #define hfs_bnode_read_u16 hfsplus_bnode_read_u16
 #define hfs_bnode_read_u8 hfsplus_bnode_read_u8
 #define hfs_bnode_read_key hfsplus_bnode_read_key
@@ -368,8 +374,16 @@ typedef int (*search_strategy_t)(struct hfs_bnode *,
  */
 
 /* attributes.c */
+#ifdef MY_ABC_HERE
+int hfsplus_create_attr_tree_cache(void);
+#else
 int __init hfsplus_create_attr_tree_cache(void);
+#endif /* MY_ABC_HERE */
 void hfsplus_destroy_attr_tree_cache(void);
+#ifdef MY_ABC_HERE
+int hfsplus_recreate_attr_tree_cache(size_t);
+size_t hfsplus_get_attr_tree_cache_size(void);
+#endif /* MY_ABC_HERE */
 int hfsplus_attr_bin_cmp_key(const hfsplus_btree_key *k1,
 			     const hfsplus_btree_key *k2);
 int hfsplus_attr_build_key(struct super_block *sb, hfsplus_btree_key *key,
@@ -401,6 +415,9 @@ void hfs_bmap_free(struct hfs_bnode *node);
 
 /* bnode.c */
 void hfs_bnode_read(struct hfs_bnode *node, void *buf, int off, int len);
+#ifdef MY_ABC_HERE
+u32 hfs_bnode_read_u32(struct hfs_bnode *, int);
+#endif /* MY_ABC_HERE */
 u16 hfs_bnode_read_u16(struct hfs_bnode *node, int off);
 u8 hfs_bnode_read_u8(struct hfs_bnode *node, int off);
 void hfs_bnode_read_key(struct hfs_bnode *node, void *key, int off);
@@ -445,8 +462,13 @@ int hfsplus_cat_case_cmp_key(const hfsplus_btree_key *k1,
 			     const hfsplus_btree_key *k2);
 int hfsplus_cat_bin_cmp_key(const hfsplus_btree_key *k1,
 			    const hfsplus_btree_key *k2);
+#ifdef MY_ABC_HERE
+int hfsplus_cat_build_key(struct super_block *sb, hfsplus_btree_key *key,
+			   u32 parent, struct qstr *str, int nfc);
+#else
 int hfsplus_cat_build_key(struct super_block *sb, hfsplus_btree_key *key,
 			   u32 parent, struct qstr *str);
+#endif /* MY_ABC_HERE */
 void hfsplus_cat_build_key_with_cnid(struct super_block *sb,
 				     hfsplus_btree_key *key, u32 parent);
 void hfsplus_cat_set_perms(struct inode *inode, struct hfsplus_perm *perms);
@@ -518,8 +540,19 @@ int hfsplus_strcmp(const struct hfsplus_unistr *s1,
 		   const struct hfsplus_unistr *s2);
 int hfsplus_uni2asc(struct super_block *sb, const struct hfsplus_unistr *ustr,
 		    char *astr, int *len_p);
+#ifdef MY_ABC_HERE
+int hfsplus_asc2uni(struct super_block *sb, struct hfsplus_unistr *ustr,
+		    int max_unistr_len, const char *astr, int len, int nfc);
+#else
 int hfsplus_asc2uni(struct super_block *sb, struct hfsplus_unistr *ustr,
 		    int max_unistr_len, const char *astr, int len);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+int hfsplus_attr_uni2asc(struct super_block *,
+		const struct hfsplus_unistr *, char *, int *);
+int hfsplus_attr_asc2uni(struct super_block *,
+		struct hfsplus_unistr *, int, const char *, int);
+#endif /* MY_ABC_HERE */
 int hfsplus_hash_dentry(const struct dentry *dentry, struct qstr *str);
 int hfsplus_compare_dentry(const struct dentry *parent,
 			   const struct dentry *dentry, unsigned int len,

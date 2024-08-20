@@ -106,6 +106,7 @@ struct cpuinfo_x86 {
 	__u8			x86_coreid_bits;
 
 	__u8			x86_cache_bits;
+	__u8			cu_id;
 	/* Max extended CPUID function supported: */
 	__u32			extended_cpuid_level;
 	/* Maximum supported CPUID level, -1=no CPUID: */
@@ -132,8 +133,6 @@ struct cpuinfo_x86 {
 	u16			phys_proc_id;
 	/* Core id: */
 	u16			cpu_core_id;
-	/* Compute unit id */
-	u8			compute_unit_id;
 	/* Index into per_cpu list: */
 	u16			cpu_index;
 	u32			microcode;
@@ -624,10 +623,9 @@ static inline void sync_core(void)
 }
 
 extern void select_idle_routine(const struct cpuinfo_x86 *c);
-extern void init_amd_e400_c1e_mask(void);
+extern void amd_e400_c1e_apic_setup(void);
 
 extern unsigned long		boot_option_idle_override;
-extern bool			amd_e400_c1e_detected;
 
 enum idle_boot_override {IDLE_NO_OVERRIDE=0, IDLE_HALT, IDLE_NOMWAIT,
 			 IDLE_POLL};

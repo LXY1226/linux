@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2012 Taobao.
  * Written by Tao Ma <boyu.mt@taobao.com>
@@ -1627,11 +1630,20 @@ out:
 	return ret;
 }
 
+#ifdef MY_ABC_HERE
+struct buffer_head *ext4_find_inline_entry(struct inode *dir,
+					struct ext4_filename *fname,
+					const struct qstr *d_name,
+					struct ext4_dir_entry_2 **res_dir,
+					int *has_inline_data,
+					int caseless)
+#else
 struct buffer_head *ext4_find_inline_entry(struct inode *dir,
 					struct ext4_filename *fname,
 					const struct qstr *d_name,
 					struct ext4_dir_entry_2 **res_dir,
 					int *has_inline_data)
+#endif /* MY_ABC_HERE */
 {
 	int ret;
 	struct ext4_iloc iloc;
@@ -1650,8 +1662,13 @@ struct buffer_head *ext4_find_inline_entry(struct inode *dir,
 	inline_start = (void *)ext4_raw_inode(&iloc)->i_block +
 						EXT4_INLINE_DOTDOT_SIZE;
 	inline_size = EXT4_MIN_INLINE_DATA_SIZE - EXT4_INLINE_DOTDOT_SIZE;
+#ifdef MY_ABC_HERE
 	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
-			      dir, fname, d_name, 0, res_dir);
+				  dir, fname, d_name, 0, res_dir, caseless);
+#else
+	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
+				  dir, fname, d_name, 0, res_dir);
+#endif /* MY_ABC_HERE */
 	if (ret == 1)
 		goto out_find;
 	if (ret < 0)
@@ -1663,8 +1680,13 @@ struct buffer_head *ext4_find_inline_entry(struct inode *dir,
 	inline_start = ext4_get_inline_xattr_pos(dir, &iloc);
 	inline_size = ext4_get_inline_size(dir) - EXT4_MIN_INLINE_DATA_SIZE;
 
+#ifdef MY_ABC_HERE
 	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
-			      dir, fname, d_name, 0, res_dir);
+				  dir, fname, d_name, 0, res_dir, caseless);
+#else
+	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
+				  dir, fname, d_name, 0, res_dir);
+#endif /* MY_ABC_HERE */
 	if (ret == 1)
 		goto out_find;
 

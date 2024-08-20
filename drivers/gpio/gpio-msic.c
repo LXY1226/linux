@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Intel Medfield MSIC GPIO driver>
  * Copyright (c) 2011, Intel Corporation.
@@ -293,7 +296,11 @@ static int platform_msic_gpio_probe(struct platform_device *pdev)
 	mg->chip.base = pdata->gpio_base;
 	mg->chip.ngpio = MSIC_NUM_GPIO;
 	mg->chip.can_sleep = true;
+#if defined(MY_ABC_HERE)
+	mg->chip.parent = dev;
+#else /* MY_ABC_HERE */
 	mg->chip.dev = dev;
+#endif /* MY_ABC_HERE */
 
 	mutex_init(&mg->buslock);
 

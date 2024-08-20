@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) ST-Ericsson SA 2010
  *
@@ -356,7 +359,11 @@ static int stmpe_gpio_probe(struct platform_device *pdev)
 	stmpe_gpio->stmpe = stmpe;
 	stmpe_gpio->chip = template_chip;
 	stmpe_gpio->chip.ngpio = stmpe->num_gpios;
+#if defined(MY_ABC_HERE)
+	stmpe_gpio->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	stmpe_gpio->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	stmpe_gpio->chip.of_node = np;
 	stmpe_gpio->chip.base = -1;
 

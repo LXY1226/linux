@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
    md.h : kernel internal structure of the Linux MD driver
           Copyright (C) 1996-98 Ingo Molnar, Gadi Oxman
@@ -25,6 +28,24 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include "md-cluster.h"
+#ifdef MY_ABC_HERE
+#include "md-hint.h"
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define SYNO_RAID_LEVEL_F1 45
+
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define CHECKINTERVAL (7UL*HZ)
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#include <linux/raid/libmd-report.h>
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#include <linux/raid/libmd-sync-report.h>
+#endif /* MY_ABC_HERE */
 
 #define MaxSector (~(sector_t)0)
 
@@ -34,6 +55,13 @@
  * 1 bit is an 'acknowledged' flag.
  */
 #define MD_MAX_BADBLOCKS	(PAGE_SIZE/8)
+
+#ifdef MY_ABC_HERE
+typedef struct _tag_SYNO_WAKEUP_DEVICE_WORK {
+    struct work_struct work;
+    struct mddev *mddev;
+} SYNO_WAKEUP_DEVICE_WORK;
+#endif /* MY_ABC_HERE */
 
 /*
  * MD's 'extended' device
@@ -54,6 +82,9 @@ struct md_rdev {
 	struct block_device *bdev;	/* block device handle */
 
 	struct page	*sb_page, *bb_page;
+#ifdef MY_ABC_HERE
+	struct page	*wakeup_page;
+#endif /* MY_ABC_HERE */
 	int		sb_loaded;
 	__u64		sb_events;
 	sector_t	data_offset;	/* start of data in array */
@@ -134,6 +165,14 @@ struct md_rdev {
 		sector_t size;		/* in sectors */
 	} badblocks;
 };
+
+#ifdef MY_ABC_HERE
+typedef struct _tag_SYNO_UPDATE_SB_WORK{
+    struct work_struct work;
+    struct mddev *mddev;
+} SYNO_UPDATE_SB_WORK;
+#endif /* MY_ABC_HERE */
+
 enum flag_bits {
 	Faulty,			/* device is known to have a fault */
 	In_sync,		/* device is in_sync with rest of array */
@@ -183,7 +222,16 @@ enum flag_bits {
 				 * Usually, this device should be faster
 				 * than other devices in the array
 				 */
+#ifdef MY_ABC_HERE
+	SynoNonFullInsync,	/* This device is rebuilding in fast rebuilding
+				 * mode, so it's not fully in sync.
+				 */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	DiskError,	/* device is know to have a fault in degraded state */
+#endif /* MY_ABC_HERE */
 };
+
 
 #define BB_LEN_MASK	(0x00000000000001FFULL)
 #define BB_OFFSET_MASK	(0x7FFFFFFFFFFFFE00ULL)
@@ -217,6 +265,50 @@ extern void md_ack_all_badblocks(struct badblocks *bb);
 
 struct md_cluster_info;
 
+#ifdef MY_ABC_HERE
+struct md_self_heal_record {
+	struct list_head record_list;
+	void             *private;
+	struct bio       *bio;
+	struct mddev     *mddev;
+	u32              u32_last_hash;
+	int              retry_cnt;
+	int              max_retry_cnt;
+	int              is_hashed; // in case that hash value is equal to initial u32_last_hash
+	int              request_cnt; // the number of retry requests at this bio->bi_sector
+	sector_t         sector_start;
+	sector_t         sector_leng;
+};
+
+u32 syno_self_heal_hash_bio_page(struct bio *bio);
+int syno_self_heal_is_valid_md_stat(struct mddev *mddev);
+int syno_self_heal_record_hash_value(struct md_self_heal_record *heal_record, struct bio *bio);
+void syno_self_heal_del_all_record(struct mddev *mddev);
+void syno_self_heal_find_and_del_record(struct mddev *mddev, struct bio *bio);
+void syno_self_heal_modify_bio_info(struct md_self_heal_record *heal_record, struct bio *bio);
+struct md_self_heal_record* syno_self_heal_init_record(struct mddev *mddev, struct bio *bio, int max_retry_cnt);
+struct md_self_heal_record* syno_self_heal_find_record(struct mddev *mddev, struct bio *bio);
+#endif /* MY_ABC_HERE */
+
+enum mddev_flags {
+	MD_CHANGE_DEVS,		/* Some device status has changed */
+	MD_CHANGE_CLEAN,	/* transition to or from 'clean' */
+	MD_CHANGE_PENDING,	/* switch from 'clean' to 'active' in progress */
+	MD_ARRAY_FIRST_USE,	/* First use of array, needs initialization */
+	MD_CLOSING,		/* If set, we are closing the array, do not open
+				 * it then */
+	MD_JOURNAL_CLEAN,	/* A raid with journal is already clean */
+	MD_HAS_JOURNAL,		/* The raid array has journal feature set */
+	MD_RELOAD_SB,		/* Reload the superblock because another node
+				 * updated it.
+				 */
+	MD_CLUSTER_RESYNC_LOCKED, /* cluster raid only, which means node
+				   * already took resync lock, need to
+				   * release the lock */
+};
+#define MD_UPDATE_SB_FLAGS (BIT(MD_CHANGE_DEVS) | \
+			    BIT(MD_CHANGE_CLEAN) | \
+			    BIT(MD_CHANGE_PENDING))	/* If these are set, md_update_sb needed */
 struct mddev {
 	void				*private;
 	struct md_personality		*pers;
@@ -224,18 +316,11 @@ struct mddev {
 	int				md_minor;
 	struct list_head		disks;
 	unsigned long			flags;
-#define MD_CHANGE_DEVS	0	/* Some device status has changed */
-#define MD_CHANGE_CLEAN 1	/* transition to or from 'clean' */
-#define MD_CHANGE_PENDING 2	/* switch from 'clean' to 'active' in progress */
-#define MD_UPDATE_SB_FLAGS (1 | 2 | 4)	/* If these are set, md_update_sb needed */
-#define MD_ARRAY_FIRST_USE 3    /* First use of array, needs initialization */
-#define MD_STILL_CLOSED	4	/* If set, then array has not been opened since
-				 * md_ioctl checked on it.
-				 */
-#define MD_JOURNAL_CLEAN 5	/* A raid with journal is already clean */
-#define MD_HAS_JOURNAL	6	/* The raid array has journal feature set */
 
 	int				suspended;
+#ifdef MY_ABC_HERE
+	int				pattern_debug;
+#endif /* MY_ABC_HERE */
 	atomic_t			active_io;
 	int				ro;
 	int				sysfs_active; /* set when sysfs deletes
@@ -278,6 +363,9 @@ struct mddev {
 	 */
 	int				can_decrease_events;
 
+#ifdef MY_ABC_HERE
+	int				sb_not_clean;
+#endif /* MY_ABC_HERE */
 	char				uuid[16];
 
 	/* If the array is being reshaped, we need to record the
@@ -329,32 +417,6 @@ struct mddev {
 	int				parallel_resync;
 
 	int				ok_start_degraded;
-	/* recovery/resync flags
-	 * NEEDED:   we might need to start a resync/recover
-	 * RUNNING:  a thread is running, or about to be started
-	 * SYNC:     actually doing a resync, not a recovery
-	 * RECOVER:  doing recovery, or need to try it.
-	 * INTR:     resync needs to be aborted for some reason
-	 * DONE:     thread is done and is waiting to be reaped
-	 * REQUEST:  user-space has requested a sync (used with SYNC)
-	 * CHECK:    user-space request for check-only, no repair
-	 * RESHAPE:  A reshape is happening
-	 * ERROR:    sync-action interrupted because io-error
-	 *
-	 * If neither SYNC or RESHAPE are set, then it is a recovery.
-	 */
-#define	MD_RECOVERY_RUNNING	0
-#define	MD_RECOVERY_SYNC	1
-#define	MD_RECOVERY_RECOVER	2
-#define	MD_RECOVERY_INTR	3
-#define	MD_RECOVERY_DONE	4
-#define	MD_RECOVERY_NEEDED	5
-#define	MD_RECOVERY_REQUESTED	6
-#define	MD_RECOVERY_CHECK	7
-#define MD_RECOVERY_RESHAPE	8
-#define	MD_RECOVERY_FROZEN	9
-#define	MD_RECOVERY_ERROR	10
-
 	unsigned long			recovery;
 	/* If a RAID personality determines that recovery (of a particular
 	 * device) will fail due to a read error on the source device, it
@@ -449,6 +511,38 @@ struct mddev {
 
 	atomic_t			max_corr_read_errors; /* max read retries */
 	struct list_head		all_mddevs;
+#ifdef MY_ABC_HERE
+	unsigned char			blActive;  /* to record whether this md is in active or not */
+	spinlock_t				ActLock;   /* lock for Active attr. */
+	unsigned long			ulLastReq; /* the last time received request */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define MD_NOT_CRASHED 0
+#define MD_CRASHED 1
+#define MD_CRASHED_ASSEMBLE 2
+    unsigned char           nodev_and_crashed;     // 1 ==> nodev && crashed. deny make_request
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define MD_AUTO_REMAP_MODE_FORCE_OFF 0
+#define MD_AUTO_REMAP_MODE_FORCE_ON 1
+#define MD_AUTO_REMAP_MODE_ISMAXDEGRADE 2
+    unsigned char           auto_remap;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	#define MD_SYNC_DEBUG_OFF 0
+	#define MD_SYNC_DEBUG_ON 1
+	unsigned char           sync_debug;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	unsigned char           resync_mode;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	mempool_t	*syno_mdio_mempool;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	struct list_head md_self_heal_record_list;
+	rwlock_t record_lock;
+#endif /* MY_ABC_HERE */
 
 	struct attribute_group		*to_remove;
 
@@ -456,14 +550,73 @@ struct mddev {
 
 	/* Generic flush handling.
 	 * The last to finish preflush schedules a worker to submit
-	 * the rest of the request (without the REQ_FLUSH flag).
+	 * the rest of the request (without the REQ_PREFLUSH flag).
 	 */
 	struct bio *flush_bio;
 	atomic_t flush_pending;
+	ktime_t start_flush, last_flush; /* last_flush is when the last completed
+					  * flush was started.
+					  */
 	struct work_struct flush_work;
 	struct work_struct event_work;	/* used by dm to report failure event */
 	void (*sync_super)(struct mddev *mddev, struct md_rdev *rdev);
 	struct md_cluster_info		*cluster_info;
+#ifdef MY_ABC_HERE
+	/**
+	 * syno_rh_tree is used to record rebuild hints,
+	 * hints in syno_rh_tree recorded the virtual address
+	 * of array which could be skipped during rebuilding.
+	 */
+	struct syno_hint_tree syno_rh_tree;
+	/**
+	 * syno_rh_mutex protects:
+	 *  syno_rh_tree,
+	 *  syno_allow_fast_rebuild - Avoid any hint being added
+	 *                            after set it to false.
+	 */
+	struct mutex syno_rh_mutex;
+	sector_t syno_rh_skipped_sectors;
+	bool syno_allow_fast_rebuild;
+#ifdef MY_ABC_HERE
+	/**
+	 * syno_sh_tree is used to record scrubbing hints,
+	 * hints in syno_sh_tree record the dev sectors already
+	 * rebuiled.
+	 *
+	 * syno_sh_tree is only used in sync_thread and md_stop,
+	 * so we don't need any lock to protect it.
+	 */
+	struct syno_hint_tree syno_sh_tree;
+	sector_t syno_last_rebuild_start;
+	bool syno_enable_requested_resync_hints;
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	unsigned char has_raid0_layout_feature;
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	int syno_md_thread_fixed_node;
+#endif /* MY_DEF_HERE */
+};
+
+enum recovery_flags {
+	/*
+	 * If neither SYNC or RESHAPE are set, then it is a recovery.
+	 */
+	MD_RECOVERY_RUNNING,	/* a thread is running, or about to be started */
+	MD_RECOVERY_SYNC,	/* actually doing a resync, not a recovery */
+	MD_RECOVERY_RECOVER,	/* doing recovery, or need to try it. */
+	MD_RECOVERY_INTR,	/* resync needs to be aborted for some reason */
+	MD_RECOVERY_DONE,	/* thread is done and is waiting to be reaped */
+	MD_RECOVERY_NEEDED,	/* we might need to start a resync/recover */
+	MD_RECOVERY_REQUESTED,	/* user-space has requested a sync (used with SYNC) */
+	MD_RECOVERY_CHECK,	/* user-space request for check-only, no repair */
+	MD_RECOVERY_RESHAPE,	/* A reshape is happening */
+	MD_RECOVERY_FROZEN,	/* User request to abort, and not restart, any action */
+	MD_RECOVERY_ERROR,	/* sync-action interrupted because io-error */
+#ifdef MY_ABC_HERE
+	MD_RESHAPE_START,
+#endif /* MY_ABC_HERE */
 };
 
 static inline int __must_check mddev_lock(struct mddev *mddev)
@@ -505,6 +658,14 @@ struct md_personality
 	int (*run)(struct mddev *mddev);
 	void (*free)(struct mddev *mddev, void *priv);
 	void (*status)(struct seq_file *seq, struct mddev *mddev);
+#ifdef MY_ABC_HERE
+	/**
+	 *  for our special purpose, like raid1, there is not exist a
+	 *  easy way for distinguish between hotplug or read/write error
+	 *  on last one disk which is in sync
+	 */
+	void (*syno_error_handler)(struct mddev *mddev, struct md_rdev *rdev);
+#endif /* MY_ABC_HERE */
 	/* error_handler must set ->faulty and clear ->in_sync
 	 * if appropriate, and should abort recovery if needed
 	 */
@@ -533,10 +694,40 @@ struct md_personality
 	 * This needs to be installed and then ->run used to activate the
 	 * array.
 	 */
+#ifdef MY_ABC_HERE
+	unsigned char (*ismaxdegrade) (struct mddev *mddev);
+	void (*syno_set_rdev_auto_remap) (struct mddev *mddev);
+#endif /* MY_ABC_HERE */
 	void *(*takeover) (struct mddev *mddev);
 	/* congested implements bdi.congested_fn().
 	 * Will not be called while array is 'suspended' */
 	int (*congested)(struct mddev *mddev, int bits);
+#ifdef MY_ABC_HERE
+	/* align_chunk_addr_virt_to_dev is used to transfer a range of
+	 * virtual addresses of array to the range of addresses of devices.
+	 * The addresses of devices need to be including in specified virtual
+	 * addresses range, so we need to align the chunk sectors.
+	 *
+	 * e.g. 3drive raid5:
+	 *
+	 *  dev_addr +---+---+---+
+	 *     0     | 0 | 1 | P |   a. [0 ,4) in array -> [0, 2) in devices
+	 *           +---+---+---+   b. [1, 5) in array -> [1, 2) in devices
+	 *     1     | 3 | P | 2 |   c. [2, 3) in array -> [1, 1) in devices
+	 *           +---+---+---+      note that [1,1) is illegal interval.
+	 *     2     | P | 4 | 5 |
+	 *           +---+---+---+
+	 *     each chunk represent the range of [X, X+1)
+	 */
+	void (*align_chunk_addr_virt_to_dev)(struct mddev *mddev,
+					     sector_t virt_start,
+					     sector_t virt_end,
+					     sector_t *dev_start,
+					     sector_t *dev_end);
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	void (*adjust_md_threads_node) (struct mddev *mddev);
+#endif /* MY_DEF_HERE */
 };
 
 struct md_sysfs_entry {
@@ -622,6 +813,19 @@ static inline void safe_put_page(struct page *p)
 	if (p) put_page(p);
 }
 
+#ifdef MY_ABC_HERE
+extern sector_t md_speedup_rebuild(struct mddev *mddev, sector_t sector_nr);
+#ifdef MY_ABC_HERE
+extern sector_t md_speedup_requested_resync(struct mddev *mddev, sector_t sector_nr);
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+extern void SynoUpdateSBTask(struct work_struct *work);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+extern void syno_md_error (struct mddev *mddev, struct md_rdev *rdev);
+extern int IsDeviceDisappear(struct block_device *bdev);
+#endif /* MY_ABC_HERE */
 extern int register_md_personality(struct md_personality *p);
 extern int unregister_md_personality(struct md_personality *p);
 extern int register_md_cluster_operations(struct md_cluster_operations *ops,
@@ -660,6 +864,16 @@ extern int md_integrity_register(struct mddev *mddev);
 extern int md_integrity_add_rdev(struct md_rdev *rdev, struct mddev *mddev);
 extern int strict_strtoul_scaled(const char *cp, unsigned long *res, int scale);
 
+#ifdef MY_ABC_HERE
+void SynoAutoRemapReport(struct mddev *mddev, sector_t sector, struct block_device *bdev);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+void RaidRemapModeSet(struct block_device *, unsigned char);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+void SYNORaidRdevUnplug(struct mddev *mddev, struct md_rdev *rdev);
+#endif /* MY_ABC_HERE */
 extern void mddev_init(struct mddev *mddev);
 extern int md_run(struct mddev *mddev);
 extern void md_stop(struct mddev *mddev);
@@ -667,6 +881,7 @@ extern void md_stop_writes(struct mddev *mddev);
 extern int md_rdev_init(struct md_rdev *rdev);
 extern void md_rdev_clear(struct md_rdev *rdev);
 
+extern void md_handle_request(struct mddev *mddev, struct bio *bio);
 extern void mddev_suspend(struct mddev *mddev);
 extern void mddev_resume(struct mddev *mddev);
 extern struct bio *bio_clone_mddev(struct bio *bio, gfp_t gfp_mask,
@@ -699,4 +914,58 @@ static inline int mddev_is_clustered(struct mddev *mddev)
 {
 	return mddev->cluster_info && mddev->bitmap_info.nodes > 1;
 }
+
+/* Maximum size of each resync request */
+#define RESYNC_BLOCK_SIZE (64*1024)
+#define RESYNC_PAGES ((RESYNC_BLOCK_SIZE + PAGE_SIZE-1) / PAGE_SIZE)
+
+/* for managing resync I/O pages */
+struct resync_pages {
+	void		*raid_bio;
+	struct page	*pages[RESYNC_PAGES];
+};
+
+static inline int resync_alloc_pages(struct resync_pages *rp,
+				     gfp_t gfp_flags)
+{
+	int i;
+
+	for (i = 0; i < RESYNC_PAGES; i++) {
+		rp->pages[i] = alloc_page(gfp_flags);
+		if (!rp->pages[i])
+			goto out_free;
+	}
+
+	return 0;
+
+out_free:
+	while (--i >= 0)
+		put_page(rp->pages[i]);
+	return -ENOMEM;
+}
+
+static inline void resync_free_pages(struct resync_pages *rp)
+{
+	int i;
+
+	for (i = 0; i < RESYNC_PAGES; i++)
+		put_page(rp->pages[i]);
+}
+
+static inline void resync_get_all_pages(struct resync_pages *rp)
+{
+	int i;
+
+	for (i = 0; i < RESYNC_PAGES; i++)
+		get_page(rp->pages[i]);
+}
+
+static inline struct page *resync_fetch_page(struct resync_pages *rp,
+					     unsigned idx)
+{
+	if (WARN_ON_ONCE(idx >= RESYNC_PAGES))
+		return NULL;
+	return rp->pages[idx];
+}
+
 #endif /* _MD_MD_H */

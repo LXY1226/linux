@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * soc-jack.c  --  ALSA SoC jack handling
  *
@@ -80,6 +83,11 @@ void snd_soc_jack_report(struct snd_soc_jack *jack, int status, int mask)
 	unsigned int sync = 0;
 	int enable;
 
+#if defined(MY_ABC_HERE)
+#else /* MY_ABC_HERE */
+	trace_snd_soc_jack_report(jack, mask, status);
+#endif /* MY_ABC_HERE */
+
 	if (!jack)
 		return;
 	trace_snd_soc_jack_report(jack, mask, status);
@@ -91,7 +99,10 @@ void snd_soc_jack_report(struct snd_soc_jack *jack, int status, int mask)
 	jack->status &= ~mask;
 	jack->status |= status & mask;
 
+#if defined(MY_ABC_HERE)
+#else /* MY_ABC_HERE */
 	trace_snd_soc_jack_notify(jack, status);
+#endif /* MY_ABC_HERE */
 
 	list_for_each_entry(pin, &jack->pins, list) {
 		enable = pin->mask & jack->status;
@@ -272,7 +283,10 @@ static irqreturn_t gpio_handler(int irq, void *data)
 	struct snd_soc_jack_gpio *gpio = data;
 	struct device *dev = gpio->jack->card->dev;
 
+#if defined(MY_ABC_HERE)
+#else /* MY_ABC_HERE */
 	trace_snd_soc_jack_irq(gpio->name);
+#endif /* MY_ABC_HERE */
 
 	if (device_may_wakeup(dev))
 		pm_wakeup_event(dev, gpio->debounce_time + 50);

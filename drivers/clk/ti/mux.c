@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * TI Multiplexer Clock
  *
@@ -26,7 +29,11 @@
 #undef pr_fmt
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_mux(_hw) container_of(_hw, struct clk_mux, hw)
+#endif /* MY_ABC_HERE */
 
 static u8 ti_clk_mux_get_parent(struct clk_hw *hw)
 {

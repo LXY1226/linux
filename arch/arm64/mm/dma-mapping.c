@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * SWIOTLB-based DMA API implementation
  *
@@ -39,7 +42,11 @@ static pgprot_t __get_dma_pgprot(struct dma_attrs *attrs, pgprot_t prot,
 
 static struct gen_pool *atomic_pool;
 
+#ifdef MY_ABC_HERE
+#define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_1M
+#else /* MY_ABC_HERE */
 #define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_256K
+#endif /* MY_ABC_HERE */
 static size_t atomic_pool_size = DEFAULT_DMA_COHERENT_POOL_SIZE;
 
 static int __init early_coherent_pool(char *p)
@@ -341,7 +348,11 @@ static int __swiotlb_get_sgtable(struct device *dev, struct sg_table *sgt,
 	return ret;
 }
 
+#ifdef MY_DEF_HERE
+struct dma_map_ops swiotlb_dma_ops = {
+#else /* MY_DEF_HERE */
 static struct dma_map_ops swiotlb_dma_ops = {
+#endif /* MY_DEF_HERE */
 	.alloc = __dma_alloc,
 	.free = __dma_free,
 	.mmap = __swiotlb_mmap,
@@ -357,6 +368,9 @@ static struct dma_map_ops swiotlb_dma_ops = {
 	.dma_supported = swiotlb_dma_supported,
 	.mapping_error = swiotlb_dma_mapping_error,
 };
+#ifdef MY_DEF_HERE
+EXPORT_SYMBOL(swiotlb_dma_ops);
+#endif /* MY_DEF_HERE */
 
 static int __init atomic_pool_init(void)
 {
@@ -419,6 +433,8 @@ out:
 	return -ENOMEM;
 }
 
+#if defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+#else /* CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 /********************************************
  * The following APIs are for dummy DMA ops *
  ********************************************/
@@ -493,7 +509,25 @@ static int __dummy_dma_supported(struct device *hwdev, u64 mask)
 {
 	return 0;
 }
+#endif /* CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 
+#if defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+struct dma_map_ops dummy_dma_ops = {
+	.alloc = __dma_alloc,
+	.free = __dma_free,
+	.mmap = __swiotlb_mmap,
+	.map_page = __swiotlb_map_page,
+	.unmap_page = __swiotlb_unmap_page,
+	.map_sg = __swiotlb_map_sg_attrs,
+	.unmap_sg = __swiotlb_unmap_sg_attrs,
+	.sync_single_for_cpu = __swiotlb_sync_single_for_cpu,
+	.sync_single_for_device = __swiotlb_sync_single_for_device,
+	.sync_sg_for_cpu = __swiotlb_sync_sg_for_cpu,
+	.sync_sg_for_device = __swiotlb_sync_sg_for_device,
+	.dma_supported = swiotlb_dma_supported,
+	.mapping_error = swiotlb_dma_mapping_error,
+};
+#else /* CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 struct dma_map_ops dummy_dma_ops = {
 	.alloc                  = __dummy_alloc,
 	.free                   = __dummy_free,
@@ -509,6 +543,7 @@ struct dma_map_ops dummy_dma_ops = {
 	.mapping_error          = __dummy_mapping_error,
 	.dma_supported          = __dummy_dma_supported,
 };
+#endif /* CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 EXPORT_SYMBOL(dummy_dma_ops);
 
 static int __init arm64_dma_init(void)

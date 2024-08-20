@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _ASM_X86_MCE_H
 #define _ASM_X86_MCE_H
 
@@ -38,10 +41,35 @@
 #define MCI_STATUS_PCC   (1ULL<<57)  /* processor context corrupt */
 #define MCI_STATUS_S	 (1ULL<<56)  /* Signaled machine check */
 #define MCI_STATUS_AR	 (1ULL<<55)  /* Action required */
+#ifdef MY_DEF_HERE /* reference: intel 253668-037US chapter15 & 253669-037US appendix E  */
+#define SYNO_MCI_STATUS_UECC_SHIFT 45
+#define SYNO_MCI_STATUS_CECC_SHIFT 46
+#define SYNO_MCI_STATUS_ECC_SYNDROME_SHIFT 47
+#define SYNO_MCI_STATUS_UECC (1ULL << SYNO_MCI_STATUS_UECC_SHIFT)       /* uncorrected ECC error */
+#define SYNO_MCI_STATUS_CECC (1ULL << SYNO_MCI_STATUS_CECC_SHIFT)       /* correctable ECC error */
+#define SYNO_MCI_STATUS_ECC (SYNO_MCI_STATUS_UECC | SYNO_MCI_STATUS_CECC)
+#define SYNO_MCI_STATUS_ECC_SYNDROME (0xffULL << SYNO_MCI_STATUS_ECC_SYNDROME_SHIFT) /* ECC syndrome */
+#endif /* MY_DEF_HERE */
 
 /* AMD-specific bits */
 #define MCI_STATUS_DEFERRED	(1ULL<<44)  /* declare an uncorrected error */
 #define MCI_STATUS_POISON	(1ULL<<43)  /* access poisonous data */
+#ifdef MY_DEF_HERE
+#define MCI_STATUS_TCC		(1ULL<<55)  /* Task context corrupt */
+#define MCI_STATUS_SYNDV	(1ULL<<53)  /* synd reg. valid */
+#define MCI_STATUS_SCRUB	(1ULL<<40)  /* Error detected during scrub operation */
+
+/*
+ * McaX field if set indicates a given bank supports MCA extensions:
+ *  - Deferred error interrupt type is specifiable by bank.
+ *  - MCx_MISC0[BlkPtr] field indicates presence of extended MISC registers,
+ *    But should not be used to determine MSR numbers.
+ *  - TCC bit is present in MCx_STATUS.
+ */
+#define MCI_CONFIG_MCAX		0x1
+#define MCI_IPID_MCATYPE	0xFFFF0000
+#define MCI_IPID_HWID		0xFFF
+#endif /* MY_DEF_HERE */
 
 /*
  * Note that the full MCACOD field of IA32_MCi_STATUS MSR is
@@ -90,6 +118,30 @@
 
 #define MCE_LOG_LEN 32
 #define MCE_LOG_SIGNATURE	"MACHINECHECK"
+
+#ifdef MY_DEF_HERE
+/* AMD Scalable MCA */
+#define MSR_AMD64_SMCA_MC0_CTL		0xc0002000
+#define MSR_AMD64_SMCA_MC0_STATUS	0xc0002001
+#define MSR_AMD64_SMCA_MC0_ADDR		0xc0002002
+#define MSR_AMD64_SMCA_MC0_MISC0	0xc0002003
+#define MSR_AMD64_SMCA_MC0_CONFIG	0xc0002004
+#define MSR_AMD64_SMCA_MC0_IPID		0xc0002005
+#define MSR_AMD64_SMCA_MC0_SYND		0xc0002006
+#define MSR_AMD64_SMCA_MC0_DESTAT	0xc0002008
+#define MSR_AMD64_SMCA_MC0_DEADDR	0xc0002009
+#define MSR_AMD64_SMCA_MC0_MISC1	0xc000200a
+#define MSR_AMD64_SMCA_MCx_CTL(x)	(MSR_AMD64_SMCA_MC0_CTL + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_STATUS(x)	(MSR_AMD64_SMCA_MC0_STATUS + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_ADDR(x)	(MSR_AMD64_SMCA_MC0_ADDR + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_MISC(x)	(MSR_AMD64_SMCA_MC0_MISC0 + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_CONFIG(x)	(MSR_AMD64_SMCA_MC0_CONFIG + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_IPID(x)	(MSR_AMD64_SMCA_MC0_IPID + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_SYND(x)	(MSR_AMD64_SMCA_MC0_SYND + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_DESTAT(x)	(MSR_AMD64_SMCA_MC0_DESTAT + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_DEADDR(x)	(MSR_AMD64_SMCA_MC0_DEADDR + 0x10*(x))
+#define MSR_AMD64_SMCA_MCx_MISCy(x, y)	((MSR_AMD64_SMCA_MC0_MISC1 + y) + (0x10*(x)))
+#endif /* MY_DEF_HERE */
 
 /*
  * This structure contains all data related to the MCE log.  Also
@@ -145,9 +197,31 @@ struct mce_vendor_flags {
 
 	      __reserved_0	: 61;
 };
+
+#ifdef MY_DEF_HERE
+struct mca_msr_regs {
+	u32 (*ctl)	(int bank);
+	u32 (*status)	(int bank);
+	u32 (*addr)	(int bank);
+	u32 (*misc)	(int bank);
+};
+#endif /* MY_DEF_HERE */
+
 extern struct mce_vendor_flags mce_flags;
 
 extern struct mca_config mca_cfg;
+#ifdef MY_DEF_HERE
+extern struct mca_msr_regs msr_ops;
+#endif /* MY_DEF_HERE */
+
+enum mce_notifier_prios {
+	MCE_PRIO_SRAO		= INT_MAX,
+	MCE_PRIO_EXTLOG		= INT_MAX - 1,
+	MCE_PRIO_NFIT		= INT_MAX - 2,
+	MCE_PRIO_EDAC		= INT_MAX - 3,
+	MCE_PRIO_LOWEST		= 0,
+};
+
 extern void mce_register_decode_chain(struct notifier_block *nb);
 extern void mce_unregister_decode_chain(struct notifier_block *nb);
 
@@ -207,8 +281,10 @@ static inline void cmci_recheck(void) {}
 
 #ifdef CONFIG_X86_MCE_AMD
 void mce_amd_feature_init(struct cpuinfo_x86 *c);
+int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr);
 #else
 static inline void mce_amd_feature_init(struct cpuinfo_x86 *c) { }
+static inline int umc_normaddr_to_sysaddr(u64 norm_addr, u16 nid, u8 umc, u64 *sys_addr) { return -EINVAL; };
 #endif
 
 int mce_available(struct cpuinfo_x86 *c);
@@ -248,9 +324,11 @@ void do_machine_check(struct pt_regs *, long);
 /*
  * Threshold handler
  */
-
 extern void (*mce_threshold_vector)(void);
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 extern void (*threshold_cpu_callback)(unsigned long action, unsigned int cpu);
+#endif /* MY_DEF_HERE */
 
 /* Deferred error interrupt handler */
 extern void (*deferred_error_int_vector)(void);
@@ -286,5 +364,62 @@ static inline void mcheck_intel_therm_init(void) { }
 struct cper_sec_mem_err;
 extern void apei_mce_report_mem_error(int corrected,
 				      struct cper_sec_mem_err *mem_err);
+
+/*
+ * Enumerate new IP types and HWID values in AMD processors which support
+ * Scalable MCA.
+ */
+#ifdef CONFIG_X86_MCE_AMD
+
+/* These may be used by multiple smca_hwid_mcatypes */
+enum smca_bank_types {
+	SMCA_LS = 0,	/* Load Store */
+	SMCA_IF,	/* Instruction Fetch */
+	SMCA_L2_CACHE,	/* L2 Cache */
+	SMCA_DE,	/* Decoder Unit */
+	SMCA_RESERVED,	/* Reserved */
+	SMCA_EX,	/* Execution Unit */
+	SMCA_FP,	/* Floating Point */
+	SMCA_L3_CACHE,	/* L3 Cache */
+	SMCA_CS,	/* Coherent Slave */
+	SMCA_CS_V2,	/* Coherent Slave */
+	SMCA_PIE,	/* Power, Interrupts, etc. */
+	SMCA_UMC,	/* Unified Memory Controller */
+	SMCA_PB,	/* Parameter Block */
+	SMCA_PSP,	/* Platform Security Processor */
+	SMCA_PSP_V2,	/* Platform Security Processor */
+	SMCA_SMU,	/* System Management Unit */
+	SMCA_SMU_V2,	/* System Management Unit */
+	SMCA_MP5,	/* Microprocessor 5 Unit */
+	SMCA_NBIO,	/* Northbridge IO Unit */
+	SMCA_PCIE,	/* PCI Express Unit */
+	N_SMCA_BANK_TYPES
+};
+
+#define HWID_MCATYPE(hwid, mcatype) (((hwid) << 16) | (mcatype))
+
+struct smca_hwid {
+	unsigned int bank_type;	/* Use with smca_bank_types for easy indexing. */
+	u32 hwid_mcatype;	/* (hwid,mcatype) tuple */
+	u32 xec_bitmap;		/* Bitmap of valid ExtErrorCodes; current max is 21. */
+	u8 count;		/* Number of instances. */
+};
+
+struct smca_bank {
+	struct smca_hwid *hwid;
+	u32 id;			/* Value of MCA_IPID[InstanceId]. */
+	u8 sysfs_id;		/* Value used for sysfs name. */
+};
+
+extern struct smca_bank smca_banks[MAX_NR_BANKS];
+
+extern const char *smca_get_long_name(enum smca_bank_types t);
+extern int mce_threshold_create_device(unsigned int cpu);
+extern int mce_threshold_remove_device(unsigned int cpu);
+#else
+
+static inline int mce_threshold_create_device(unsigned int cpu) { return 0; };
+static inline int mce_threshold_remove_device(unsigned int cpu) { return 0; };
+#endif
 
 #endif /* _ASM_X86_MCE_H */

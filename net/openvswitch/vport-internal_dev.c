@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2007-2012 Nicira, Inc.
  *
@@ -214,6 +217,32 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 	if (err)
 		goto error_unlock;
 
+#ifdef MY_ABC_HERE
+	if (syno_is_ovs_bond_name(vport->dev->name)) {
+		/* Always set carrier off, because it don't have any slaves at this time
+		 */
+		netif_carrier_off(vport->dev);
+	} else if (syno_is_ovs_eth_name(vport->dev->name)) {
+		struct net_device *eth_netdev =
+			syno_eth_get_from_ovs_eth(vport->dev);
+
+		/* Set carrier of the OVS bridge based on the supposed slave, although
+		 * the slave may not be added to the datapath at this time. When it's
+		 * added, the carrier will be updated again.
+		 */
+		if (eth_netdev) {
+			if (netif_carrier_ok(eth_netdev)) {
+				/* The default carrier of an ovs_eth is on. */
+			} else {
+				netif_carrier_off(vport->dev);
+			}
+
+			dev_put(eth_netdev);
+		} else {
+			netif_carrier_off(vport->dev);
+		}
+	}
+#endif /* MY_ABC_HERE */
 	dev_set_promiscuity(vport->dev, 1);
 	rtnl_unlock();
 	netif_start_queue(vport->dev);

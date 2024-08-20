@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Low-level exception handling code
  *
@@ -219,7 +222,11 @@ ENTRY(vectors)
 	ventry	el1_sync			// Synchronous EL1h
 	ventry	el1_irq				// IRQ EL1h
 	ventry	el1_fiq_invalid			// FIQ EL1h
+#if defined(MY_ABC_HERE) && defined(CONFIG_IGNORE_ASYNC_ABORT)
+	ventry	el1_ignore
+#else /* MY_ABC_HERE */
 	ventry	el1_error_invalid		// Error EL1h
+#endif /* MY_ABC_HERE && CONFIG_IGNORE_ASYNC_ABORT */
 
 	ventry	el0_sync			// Synchronous 64-bit EL0
 	ventry	el0_irq				// IRQ 64-bit EL0
@@ -291,6 +298,14 @@ ENDPROC(el1_fiq_invalid)
 el1_error_invalid:
 	inv_entry 1, BAD_ERROR
 ENDPROC(el1_error_invalid)
+
+#if defined(MY_ABC_HERE)
+#ifdef CONFIG_IGNORE_ASYNC_ABORT
+el1_ignore:
+	eret
+ENDPROC(el1_ignore)
+#endif
+#endif /* MY_ABC_HERE */
 
 /*
  * EL1 mode handlers.

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2014 Freescale Semiconductor, Inc.
  *
@@ -184,6 +187,19 @@ struct spi_nor {
 
 	void *priv;
 };
+
+#if defined(MY_ABC_HERE)
+static inline void spi_nor_set_flash_node(struct spi_nor *nor,
+					  struct device_node *np)
+{
+	nor->flash_node = np;
+}
+
+static inline struct device_node *spi_nor_get_flash_node(struct spi_nor *nor)
+{
+	return nor->flash_node;
+}
+#endif /* MY_ABC_HERE */
 
 /**
  * spi_nor_scan() - scan the SPI NOR

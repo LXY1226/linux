@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Intel ICH6-10, Series 5 and 6, Atom C2000 (Avoton/Rangeley) GPIO driver
  *
@@ -282,7 +285,11 @@ static void ichx_gpiolib_setup(struct gpio_chip *chip)
 {
 	chip->owner = THIS_MODULE;
 	chip->label = DRV_NAME;
+#if defined(MY_ABC_HERE)
+	chip->parent = &ichx_priv.dev->dev;
+#else /* MY_ABC_HERE */
 	chip->dev = &ichx_priv.dev->dev;
+#endif /* MY_ABC_HERE */
 
 	/* Allow chip-specific overrides of request()/get() */
 	chip->request = ichx_priv.desc->request ?

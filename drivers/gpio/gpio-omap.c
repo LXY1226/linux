@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Support functions for OMAP GPIO
  *
@@ -1102,7 +1105,11 @@ static int omap_gpio_chip_init(struct gpio_bank *bank, struct irq_chip *irqc)
 	if (bank->is_mpuio) {
 		bank->chip.label = "mpuio";
 		if (bank->regs->wkup_en)
+#if defined(MY_ABC_HERE)
+			bank->chip.parent = &omap_mpuio_device.dev;
+#else /* MY_ABC_HERE */
 			bank->chip.dev = &omap_mpuio_device.dev;
+#endif /* MY_ABC_HERE */
 		bank->chip.base = OMAP_MPUIO(0);
 	} else {
 		bank->chip.label = "gpio";
@@ -1209,7 +1216,11 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	}
 
 	bank->dev = dev;
+#if defined(MY_ABC_HERE)
+	bank->chip.parent = dev;
+#else /* MY_ABC_HERE */
 	bank->chip.dev = dev;
+#endif /* MY_ABC_HERE */
 	bank->chip.owner = THIS_MODULE;
 	bank->dbck_flag = pdata->dbck_flag;
 	bank->stride = pdata->bank_stride;

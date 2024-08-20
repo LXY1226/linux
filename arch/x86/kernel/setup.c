@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Copyright (C) 1995  Linus Torvalds
  *
@@ -113,6 +116,38 @@
 #include <asm/prom.h>
 #include <asm/microcode.h>
 #include <asm/kaiser.h>
+
+#ifdef MY_DEF_HERE
+#include <linux/synolib.h>
+#endif /* MY_DEF_HERE */
+
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+#include  <linux/synobios.h>
+
+#ifdef MY_DEF_HERE
+#include <linux/gpio.h>
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+extern u32 syno_pch_lpc_gpio_pin(int pin, int *pValue, int isWrite);
+#endif /* MY_DEF_HERE */
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
+
+#ifdef MY_ABC_HERE
+#ifdef MY_DEF_HERE
+extern int gSynoHddPowerupSeq, gSynoInternalHddNumber;
+#else /* MY_DEF_HERE */
+extern long g_syno_hdd_powerup_seq;
+#endif /* MY_DEF_HERE */
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+extern long g_smbus_hdd_powerctl;
+extern int gSynoSmbusHddAdapter;
+extern int gSynoSmbusHddAddress;
+extern void syno_smbus_hdd_powerctl_init(void);
+extern SYNO_SMBUS_HDD_POWERCTL SynoSmbusHddPowerCtl;
+#endif /* MY_DEF_HERE */
 
 /*
  * max_low_pfn_mapped: highest direct mapped pfn under 4GB
@@ -280,6 +315,472 @@ void * __init extend_brk(size_t size, size_t align)
 
 	return ret;
 }
+
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE) && !defined(MY_DEF_HERE)
+/*
+ * Synology sata power control functions
+ */
+#define SYNO_MAX_HDD_PRZ	4
+#define GPIO_UNDEF			0xFF
+
+/* SYNO_GET_HDD_ENABLE_PIN
+ * Query HDD power control pin for avoton, braswell
+ * input: index - disk index, 1-based
+ * return: Pin Number
+ */
+static u8 SYNO_GET_HDD_ENABLE_PIN(const int index)
+{
+	u8 ret = GPIO_UNDEF;
+
+#ifdef MY_DEF_HERE
+	if (0 == g_syno_hdd_enable_no) {
+		goto END;
+	}
+	if (index < 1 || index > g_syno_hdd_enable_no) {
+		goto END;
+	}
+	ret = g_syno_hdd_enable_list[index-1];
+#else /* MY_DEF_HERE */
+#if defined(MY_DEF_HERE)
+	u8 HddEnPinMap[] = {10, 15, 16, 17};
+#else
+	u8 *HddEnPinMap = NULL;
+#endif
+
+	/* Check support HDD enable pin */
+	if (NULL == HddEnPinMap) {
+		goto END;
+	}
+
+#ifdef MY_DEF_HERE
+	if (1 > index || (gSynoHddPowerupSeq && gSynoInternalHddNumber < index)) {
+#else /* MY_DEF_HERE */
+	if (1 > index || (0 < g_syno_hdd_powerup_seq && g_syno_hdd_powerup_seq < index)) {
+#endif /* MY_DEF_HERE */
+		printk("SYNO_GET_HDD_ENABLE_PIN(%d) is illegal", index);
+		WARN_ON(1);
+		goto END;
+	}
+
+	ret = HddEnPinMap[index-1];
+#endif /* MY_DEF_HERE */
+END:
+	return ret;
+}
+
+static u32 SYNO_X86_GPIO_PIN_SET(int pin, int *pValue)
+{
+	u32 ret = 0;
+
+#if defined(MY_DEF_HERE)
+	ret = syno_pch_lpc_gpio_pin(pin, pValue, 1);
+#elif defined(MY_DEF_HERE)
+	ret = syno_gpio_value_set(pin, *pValue);
+#endif /* MY_DEF_HERE / MY_DEF_HERE */
+	return ret;
+}
+#ifdef MY_DEF_HERE
+static int SYNO_X86_GPIO_PIN_GET(int pin)
+{
+	int ret = 0;
+
+#if defined(MY_DEF_HERE)
+	syno_pch_lpc_gpio_pin(pin, &ret, 0);
+#elif defined(MY_DEF_HERE)
+	syno_gpio_value_get(pin, &ret);
+#endif /* MY_DEF_HERE / MY_DEF_HERE */
+	return ret;
+}
+#endif /* MY_DEF_HERE */
+/* SYNO_CTRL_HDD_POWERON
+ * HDD power control for x86_64 and cedarview
+ * input: index - disk index, 1-based, 0 for all hdd.
+ *        value - 0 for off, 1 for on.
+ */
+int SYNO_CTRL_HDD_POWERON(int index, int value)
+{
+	int iRet = -EINVAL;
+#ifdef MY_DEF_HERE
+	u8 pin = SYNO_GET_HDD_ENABLE_PIN(index);
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	if (0 < g_smbus_hdd_powerctl) {
+		if (!SynoSmbusHddPowerCtl.bl_init){
+			syno_smbus_hdd_powerctl_init();
+		}
+		if (NULL != SynoSmbusHddPowerCtl.syno_smbus_hdd_enable_write) {
+			SynoSmbusHddPowerCtl.syno_smbus_hdd_enable_write(gSynoSmbusHddAdapter, gSynoSmbusHddAddress, index, value);
+		}
+
+		iRet = 0;
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	if(pin == GPIO_UNDEF) {
+		goto END;
+	}
+	SYNO_X86_GPIO_PIN_SET(pin, &value);
+#else /* MY_DEF_HERE */
+	if (syno_is_hw_version(HW_DS415p)) {
+		switch (index) {
+			case 0:
+				/* index is 1-based, so apply 0 for all */
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(1), &value);
+				mdelay(200);
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(2) , &value);
+				mdelay(200);
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(3) , &value);
+				mdelay(200);
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(4) , &value);
+				break;
+			case 1 ... 4:
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(index) , &value);
+				break;
+			default:
+				goto END;
+		}
+	/* Add models below with else if */
+	}else if(syno_is_hw_version(HW_DS716p) ||
+		syno_is_hw_version(HW_DS216p) ||
+		syno_is_hw_version(HW_DS216pII) ||
+		syno_is_hw_version(HW_DS716pII)) {
+		switch(index){
+			case 0:
+				/* index is 1-based, so apply 0 for all*/
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(1) , &value);
+				mdelay(200);
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(2) , &value);
+				break;
+			case 1 ... 2:
+				SYNO_X86_GPIO_PIN_SET(SYNO_GET_HDD_ENABLE_PIN(index) , &value);
+				break;
+			default:
+				goto END;
+		}
+	/* Add models below with else if*/
+	} else {
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+	iRet = 0;
+END:
+	return iRet;
+}
+
+/* SYNO_CHECK_HDD_ENABLE
+ * Check HDD enable for x86_64, cedarview, Avoton, Braswell, Apollolake
+ * input : index - disk index, 1-based.
+ * output: 0 - HDD not enable, 1 - HDD enable.
+ */
+int SYNO_CHECK_HDD_ENABLE(int index)
+{
+	int iEnVal = 0; /* defult is not enable */
+	u8 iPin = SYNO_GET_HDD_ENABLE_PIN(index);
+
+#ifdef MY_DEF_HERE
+	if (0 < g_smbus_hdd_powerctl) {
+		if (!SynoSmbusHddPowerCtl.bl_init){
+			syno_smbus_hdd_powerctl_init();
+		}
+		if ( NULL != SynoSmbusHddPowerCtl.syno_smbus_hdd_enable_read) {
+			iEnVal = SynoSmbusHddPowerCtl.syno_smbus_hdd_enable_read(gSynoSmbusHddAdapter, gSynoSmbusHddAddress, index);
+		}
+
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+
+	if(iPin == GPIO_UNDEF) {
+		goto END;
+	}
+
+	/* Check is internal disk */
+#ifdef MY_DEF_HERE
+	if (gSynoHddPowerupSeq && gSynoInternalHddNumber < index) {
+#else /* MY_DEF_HERE */
+	if (0 < g_syno_hdd_powerup_seq && g_syno_hdd_powerup_seq < index) {
+#endif /* MY_DEF_HERE */
+		goto END;
+	}
+
+#if defined(MY_DEF_HERE)
+	syno_pch_lpc_gpio_pin(iPin, &iEnVal, 0);
+#elif defined(MY_DEF_HERE)
+	syno_gpio_value_get(iPin, &iEnVal);
+#endif /* MY_DEF_HERE / MY_DEF_HERE */
+
+END:
+	return iEnVal;
+}
+
+/* SYNO_GET_HDD_PRESENT_PIN
+ * Query HDD present  pin for x86_64 and cedarview
+ * input: index - disk index, 1-based.
+ * return: Pin Number,
+ */
+#if defined(MY_ABC_HERE)
+u8 SYNO_GET_HDD_PRESENT_PIN(const int index)
+#else /* MY_ABC_HERE */
+static u8 SYNO_GET_HDD_PRESENT_PIN(const int index)
+#endif /* MY_ABC_HERE */
+{
+	u8 ret = GPIO_UNDEF;
+
+#ifdef MY_DEF_HERE
+	if (0 == g_syno_hdd_detect_no) {
+		goto END;
+	}
+	if (index < 1 || index > g_syno_hdd_detect_no) {
+		goto END;
+	}
+	ret = g_syno_hdd_detect_list[index-1];
+#else /* MY_DEF_HERE */
+
+#if defined(MY_DEF_HERE)
+	u8 przPinMap[] = {18, 28, 34, 44};
+#else
+	u8 *przPinMap = NULL;
+#endif
+
+	/* Check support HDD present pin */
+	if (NULL == przPinMap) {
+		goto END;
+	}
+
+#ifdef MY_DEF_HERE
+	if (1 > index || (gSynoHddPowerupSeq && gSynoInternalHddNumber < index)) {
+#else /* MY_DEF_HERE */
+	if (1 > index || (0 == g_syno_hdd_powerup_seq) || (0 < g_syno_hdd_powerup_seq && g_syno_hdd_powerup_seq < index)) {
+#endif /* MY_DEF_HERE */
+		goto END;
+	}
+
+	ret = przPinMap[index-1];
+#endif /* MY_DEF_HERE */
+END:
+	return ret;
+}
+
+/* SYNO_CHECK_HDD_PRESENT
+ * Check HDD present for x86_64, cedarview, Avoton, Braswell, Apollolake
+ * input : index - disk index, 1-based.
+ * output: 0 - HDD not present, 1 - HDD present.
+ */
+int SYNO_CHECK_HDD_PRESENT(int index)
+{
+	int iPrzVal = 1; /* defult is persent */
+	u8 iPin = SYNO_GET_HDD_PRESENT_PIN(index);
+
+	/* please check spec with HW */
+#if defined(MY_DEF_HERE)
+	const int iInverseValue = 1;
+#else
+	int iInverseValue = 0;
+#endif
+
+#ifdef MY_DEF_HERE
+	if (0 < g_smbus_hdd_powerctl) {
+		if (!SynoSmbusHddPowerCtl.bl_init){
+			syno_smbus_hdd_powerctl_init();
+		}
+		if ( NULL != SynoSmbusHddPowerCtl.syno_smbus_hdd_present_read) {
+			iPrzVal = SynoSmbusHddPowerCtl.syno_smbus_hdd_present_read(gSynoSmbusHddAdapter, gSynoSmbusHddAddress, index);
+		}
+
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	if(syno_is_hw_version(HW_RS1619xsp)) {
+		iInverseValue = 1;
+	}
+#endif /* MY_DEF_HERE */
+
+	if (GPIO_UNDEF == iPin) {
+		goto END;
+	}
+
+	/* Check is internal disk */
+#ifdef MY_DEF_HERE
+	if (gSynoHddPowerupSeq && gSynoInternalHddNumber < index) {
+#else /* MY_DEF_HERE */
+	if (0 < g_syno_hdd_powerup_seq && g_syno_hdd_powerup_seq < index) {
+#endif /* MY_DEF_HERE */
+		goto END;
+	}
+
+#if defined(MY_DEF_HERE)
+	syno_pch_lpc_gpio_pin(iPin, &iPrzVal, 0);
+#elif defined(MY_DEF_HERE)
+	syno_gpio_value_get(iPin, &iPrzVal);
+#endif /* MY_DEF_HERE / MY_DEF_HERE */
+
+	if (iInverseValue) {
+		if (iPrzVal) {
+			iPrzVal = 0;
+		} else {
+			iPrzVal = 1;
+		}
+	}
+
+END:
+	return iPrzVal;
+}
+#ifdef MY_DEF_HERE
+/* SYNO_GET_RP_POWERGOOD_PIN
+ * Query redundant powergood pin for x86_64
+ * input: index - RP index, 1-based.
+ * return: Power status
+ */
+static u8 SYNO_GET_RP_POWERGOOD_PIN(const int index)
+{
+	u8 ret = GPIO_UNDEF;
+
+	if (0 == g_syno_rp_detect_no) {
+		goto END;
+	}
+
+	if (1 > index || g_syno_rp_detect_no < index) {
+		printk("%s(%d) is illegal", __func__, index);
+		WARN_ON(1);
+		goto END;
+	}
+
+	ret = g_syno_rp_detect_list[index-1];
+
+END:
+	return ret;
+}
+
+/* SYNO_CHECK_RP_POWERGOOD
+ * Check RP POWERGOOD for x86_64
+ * input : index - disk index, 1-based.
+ * output: 0 - HDD not present, 1 - HDD present.
+ */
+int SYNO_CHECK_RP_POWERGOOD(int index)
+{
+	int iPrzVal = 1; /* defult is powergood */
+	u8 iPin = SYNO_GET_RP_POWERGOOD_PIN(index);
+
+	if (GPIO_UNDEF == iPin) {
+		goto END;
+	}
+
+	iPrzVal = SYNO_X86_GPIO_PIN_GET(iPin);
+END:
+	return iPrzVal;
+}
+EXPORT_SYMBOL(SYNO_CHECK_RP_POWERGOOD);
+int SynoHaveRPDetectPin(void)
+{
+	if (2 == g_syno_rp_detect_no) {
+		return 1;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(SynoHaveRPDetectPin);
+int SynoAllRedundantPowerDetected(void)
+{
+	if (2 == g_syno_rp_detect_no &&
+			!(SYNO_CHECK_RP_POWERGOOD(1) ^ SYNO_CHECK_RP_POWERGOOD(2))) {
+		return 1;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(SynoAllRedundantPowerDetected);
+extern int giSynoSpinupGroupDebug;
+void DBG_SpinupGroupListGpio(void)
+{
+	int i = 0;
+
+	if (0 == giSynoSpinupGroupDebug) {
+		return;
+	}
+
+	for (i = 1; i <= g_syno_rp_detect_no; ++i) {
+		printk("gpio debug: redundant power #%d, value= %d\n", i, SYNO_CHECK_RP_POWERGOOD(i));
+	}
+	for (i = 1; i <= g_syno_hdd_detect_no; ++i) {
+		printk("gpio debug: HDD #%d detect, value= %d\n", i, SYNO_CHECK_HDD_PRESENT(i));
+	}
+	for (i = 1; i <= g_syno_hdd_enable_no; ++i) {
+		printk("gpio debug: HDD #%d enable, value= %d\n", i, SYNO_X86_GPIO_PIN_GET(SYNO_GET_HDD_ENABLE_PIN(i)));
+	}
+}
+EXPORT_SYMBOL(DBG_SpinupGroupListGpio);
+#endif /* MY_DEF_HERE */
+/* SYNO_SUPPORT_HDD_DYNAMIC_ENABLE_POWER
+ * Query support HDD dynamic Power
+ * output: 0 - not support, 1 - support.
+ */
+int SYNO_SUPPORT_HDD_DYNAMIC_ENABLE_POWER(void)
+{
+	int iRet = 0;
+
+#ifdef MY_DEF_HERE
+	if (!gSynoHddPowerupSeq) {
+		goto END;
+	}
+#else /* MY_DEF_HERE */
+	if ((0 == g_syno_hdd_powerup_seq && !syno_is_hw_version(HW_DS1621xsp)) || SYNO_MAX_HDD_PRZ < g_syno_hdd_powerup_seq) {
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	iRet = 1;
+#else /* MY_DEF_HERE */
+	if (syno_is_hw_version(HW_DS415p) ||
+	    syno_is_hw_version(HW_DS916p) ||
+	    syno_is_hw_version(HW_DS713p) ||
+	    syno_is_hw_version(HW_DS716p) ||
+	    syno_is_hw_version(HW_DS416play) ||
+	    syno_is_hw_version(HW_DS216p) ||
+	    syno_is_hw_version(HW_DS216pII) ||
+	    syno_is_hw_version(HW_DS716pII)) {
+		iRet = 1;
+	} else {
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+END:
+	return iRet;
+}
+
+EXPORT_SYMBOL(SYNO_CTRL_HDD_POWERON);
+EXPORT_SYMBOL(SYNO_CHECK_HDD_ENABLE);
+EXPORT_SYMBOL(SYNO_CHECK_HDD_PRESENT);
+#if defined(MY_ABC_HERE)
+EXPORT_SYMBOL(SYNO_GET_HDD_PRESENT_PIN);
+#endif /* MY_ABC_HERE */
+EXPORT_SYMBOL(SYNO_SUPPORT_HDD_DYNAMIC_ENABLE_POWER);
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+/* Export Sysctl interface for RXD1215sas power control
+ *
+ * Drive GPIO20 to low for poweroff process. udev will
+ * use this interface when when encolure plugged in.
+ */
+int SynoProcEncPwrCtl(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int iValue = 0;
+
+	if (write) {
+		if (-1 == SYNO_X86_GPIO_PIN_SET(20, &iValue)) {
+			printk("fail to drive PCH GPIO20 to low\n");
+		}
+	}
+
+	return proc_dointvec(table, write, buffer, lenp, ppos);
+}
+EXPORT_SYMBOL(SynoProcEncPwrCtl);
+#endif /* MY_DEF_HERE */
 
 #ifdef CONFIG_X86_32
 static void __init cleanup_highmap(void)

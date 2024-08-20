@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2011 Fujitsu.  All rights reserved.
  * Written by Miao Xie <miaox@cn.fujitsu.com>
@@ -110,6 +113,12 @@ int btrfs_delete_delayed_dir_index(struct btrfs_trans_handle *trans,
 
 int btrfs_inode_delayed_dir_index_count(struct inode *inode);
 
+#ifdef MY_DEF_HERE
+int btrfs_run_delayed_items_and_get_processed(struct btrfs_trans_handle *trans,
+			    struct btrfs_root *root,
+			    unsigned long *processed_inodes,
+			    unsigned long *processed_items);
+#endif /* MY_DEF_HERE */
 int btrfs_run_delayed_items(struct btrfs_trans_handle *trans,
 			    struct btrfs_root *root);
 int btrfs_run_delayed_items_nr(struct btrfs_trans_handle *trans,
@@ -144,7 +153,7 @@ void btrfs_put_delayed_items(struct list_head *ins_list,
 int btrfs_should_delete_dir_index(struct list_head *del_list,
 				  u64 index);
 int btrfs_readdir_delayed_dir_index(struct dir_context *ctx,
-				    struct list_head *ins_list, bool *emitted);
+				    struct list_head *ins_list);
 
 /* for init */
 int __init btrfs_delayed_inode_init(void);

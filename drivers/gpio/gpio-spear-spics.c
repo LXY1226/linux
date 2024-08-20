@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * SPEAr platform SPI chipselect abstraction over gpiolib
  *
@@ -164,7 +167,11 @@ static int spics_gpio_probe(struct platform_device *pdev)
 	spics->chip.get = spics_get_value;
 	spics->chip.set = spics_set_value;
 	spics->chip.label = dev_name(&pdev->dev);
+#if defined(MY_ABC_HERE)
+	spics->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	spics->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	spics->chip.owner = THIS_MODULE;
 	spics->last_off = -1;
 

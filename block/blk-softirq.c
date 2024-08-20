@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Functions related to softirq rq completions
  */
@@ -168,7 +171,15 @@ void blk_complete_request(struct request *req)
 	if (unlikely(blk_should_fake_timeout(req->q)))
 		return;
 	if (!blk_mark_rq_complete(req))
+#ifdef MY_DEF_HERE
+	{
+#endif
 		__blk_complete_request(req);
+#ifdef MY_DEF_HERE
+	} else {
+		req->cmd_flags |= REQ_SYNO_COMPELETED_HARDIRQ_DONE;
+	}
+#endif
 }
 EXPORT_SYMBOL(blk_complete_request);
 

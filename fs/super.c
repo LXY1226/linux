@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/super.c
  *
@@ -173,6 +176,11 @@ static void destroy_super(struct super_block *s)
 {
 	list_lru_destroy(&s->s_dentry_lru);
 	list_lru_destroy(&s->s_inode_lru);
+#ifdef MY_ABC_HERE
+#ifdef CONFIG_SMP
+	free_percpu(s->s_files);
+#endif
+#endif /* MY_ABC_HERE */
 	security_sb_free(s);
 	WARN_ON(!list_empty(&s->s_mounts));
 	kfree(s->s_subtype);
@@ -202,6 +210,17 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags)
 	if (security_sb_alloc(s))
 		goto fail;
 
+#ifdef MY_ABC_HERE
+#ifdef CONFIG_SMP
+	s->s_files = alloc_percpu(struct list_head);
+	if (!s->s_files)
+		goto fail;
+	for_each_possible_cpu(i)
+		INIT_LIST_HEAD(per_cpu_ptr(s->s_files, i));
+#else
+	INIT_LIST_HEAD(&s->s_files);
+#endif
+#endif /* MY_ABC_HERE */
 	for (i = 0; i < SB_FREEZE_LEVELS; i++) {
 		if (__percpu_init_rwsem(&s->s_writers.rw_sem[i],
 					sb_writers_name[i],
@@ -250,6 +269,10 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags)
 	s->s_op = &default_op;
 	s->s_time_gran = 1000000000;
 	s->cleancache_poolid = CLEANCACHE_NO_POOL;
+#ifdef MY_ABC_HERE
+	mutex_init(&s->s_archive_mutex);
+	s->s_archive_version = 0;
+#endif /* MY_ABC_HERE */
 
 	s->s_shrink.seeks = DEFAULT_SEEKS;
 	s->s_shrink.scan_objects = super_cache_scan;
@@ -853,13 +876,21 @@ static DEFINE_SPINLOCK(unnamed_dev_lock);/* protects the above */
  */
 static int unnamed_dev_start = 1;
 
+#ifdef MY_DEF_HERE
+int get_anon_bdev_with_gfp(dev_t *p, gfp_t gfp_mask)
+#else
 int get_anon_bdev(dev_t *p)
+#endif /* MY_DEF_HERE */
 {
 	int dev;
 	int error;
 
  retry:
+#ifdef MY_DEF_HERE
+	if (ida_pre_get(&unnamed_dev_ida, gfp_mask) == 0)
+#else
 	if (ida_pre_get(&unnamed_dev_ida, GFP_ATOMIC) == 0)
+#endif /* MY_DEF_HERE */
 		return -ENOMEM;
 	spin_lock(&unnamed_dev_lock);
 	error = ida_get_new_above(&unnamed_dev_ida, unnamed_dev_start, &dev);
@@ -883,6 +914,13 @@ int get_anon_bdev(dev_t *p)
 	*p = MKDEV(0, dev & MINORMASK);
 	return 0;
 }
+#ifdef MY_DEF_HERE
+EXPORT_SYMBOL(get_anon_bdev_with_gfp);
+int get_anon_bdev(dev_t *p)
+{
+	return get_anon_bdev_with_gfp(p, GFP_ATOMIC);
+}
+#endif /* MY_DEF_HERE */
 EXPORT_SYMBOL(get_anon_bdev);
 
 void free_anon_bdev(dev_t dev)
@@ -967,7 +1005,7 @@ static int set_bdev_super(struct super_block *s, void *data)
 	 * We set the bdi here to the queue backing, file systems can
 	 * overwrite this in ->fill_super()
 	 */
-	s->s_bdi = &bdev_get_queue(s->s_bdev)->backing_dev_info;
+	s->s_bdi = bdev_get_queue(s->s_bdev)->backing_dev_info;
 	return 0;
 }
 
@@ -1031,6 +1069,10 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 
 		s->s_mode = mode;
 		strlcpy(s->s_id, bdevname(bdev, b), sizeof(s->s_id));
+#ifdef MY_DEF_HERE
+		if (NULL != strstr(s->s_id, "synoboot"))
+			printk(KERN_NOTICE "%s: %s mounted, process=%s\n", fs_type->name, s->s_id, current->comm);
+#endif /* MY_DEF_HERE */
 		sb_set_blocksize(s, block_size(bdev));
 		error = fill_super(s, data, flags & MS_SILENT ? 1 : 0);
 		if (error) {

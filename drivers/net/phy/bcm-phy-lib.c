@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2015 Broadcom Corporation
  *
@@ -183,26 +186,46 @@ int bcm_phy_enable_eee(struct phy_device *phydev)
 	int val;
 
 	/* Enable EEE at PHY level */
+#if defined(MY_ABC_HERE)
+	val = phy_read_mmd_indirect(phydev, BRCM_CL45VEN_EEE_CONTROL,
+				    MDIO_MMD_AN);
+#else /* MY_ABC_HERE */
 	val = phy_read_mmd_indirect(phydev, BRCM_CL45VEN_EEE_CONTROL,
 				    MDIO_MMD_AN, phydev->addr);
+#endif /* MY_ABC_HERE */
 	if (val < 0)
 		return val;
 
 	val |= LPI_FEATURE_EN | LPI_FEATURE_EN_DIG1000X;
 
+#if defined(MY_ABC_HERE)
+	phy_write_mmd_indirect(phydev, BRCM_CL45VEN_EEE_CONTROL,
+			       MDIO_MMD_AN, (u32)val);
+#else /* MY_ABC_HERE */
 	phy_write_mmd_indirect(phydev, BRCM_CL45VEN_EEE_CONTROL,
 			       MDIO_MMD_AN,  phydev->addr, (u32)val);
+#endif /* MY_ABC_HERE */
 
 	/* Advertise EEE */
+#if defined(MY_ABC_HERE)
+	val = phy_read_mmd_indirect(phydev, BCM_CL45VEN_EEE_ADV,
+				    MDIO_MMD_AN);
+#else /* MY_ABC_HERE */
 	val = phy_read_mmd_indirect(phydev, BCM_CL45VEN_EEE_ADV,
 				    MDIO_MMD_AN, phydev->addr);
+#endif /* MY_ABC_HERE */
 	if (val < 0)
 		return val;
 
 	val |= (MDIO_AN_EEE_ADV_100TX | MDIO_AN_EEE_ADV_1000T);
 
+#if defined(MY_ABC_HERE)
+	phy_write_mmd_indirect(phydev, BCM_CL45VEN_EEE_ADV,
+			       MDIO_MMD_AN, (u32)val);
+#else /* MY_ABC_HERE */
 	phy_write_mmd_indirect(phydev, BCM_CL45VEN_EEE_ADV,
 			       MDIO_MMD_AN,  phydev->addr, (u32)val);
+#endif /* MY_ABC_HERE */
 
 	return 0;
 }

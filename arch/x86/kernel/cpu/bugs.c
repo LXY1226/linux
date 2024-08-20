@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Copyright (C) 1994  Linus Torvalds
  *
@@ -74,6 +77,15 @@ EXPORT_SYMBOL_GPL(mds_idle_clear);
 
 void __init check_bugs(void)
 {
+#ifdef MY_DEF_HERE
+	if (cmdline_find_option_bool(boot_command_line, "SpectreAll_on") ||
+		cmdline_find_option_bool(boot_command_line, "SpectreV2_on") ||
+		cmdline_find_option_bool(boot_command_line, "SSBD_on") ||
+		cmdline_find_option_bool(boot_command_line, "MDS_on") ||
+		cmdline_find_option_bool(boot_command_line, "KPTI_on")) {
+		cpu_mitigations = CPU_MITIGATIONS_AUTO;
+	}
+#endif /* MY_DEF_HERE */
 	identify_boot_cpu();
 
 	if (!IS_ENABLED(CONFIG_SMP)) {
@@ -233,6 +245,14 @@ static void __init mds_select_mitigation(void)
 		mds_mitigation = MDS_MITIGATION_OFF;
 		return;
 	}
+#ifdef MY_DEF_HERE
+	if(cmdline_find_option_bool(boot_command_line, "SpectreAll_on") ||
+			cmdline_find_option_bool(boot_command_line, "MDS_on")) {
+		mds_mitigation = MDS_MITIGATION_FULL;
+	} else {
+		mds_mitigation = MDS_MITIGATION_OFF;
+	}
+#endif
 }
 
 static void __init mds_print_mitigation(void)
@@ -802,7 +822,18 @@ static enum spectre_v2_mitigation_cmd __init spectre_v2_parse_cmdline(void)
 
 	ret = cmdline_find_option(boot_command_line, "spectre_v2", arg, sizeof(arg));
 	if (ret < 0)
-		return SPECTRE_V2_CMD_AUTO;
+#ifdef MY_DEF_HERE
+	if (ret < 0) {
+		if (cmdline_find_option_bool(boot_command_line, "SpectreAll_on") ||
+			cmdline_find_option_bool(boot_command_line, "SpectreV2_on")) {
+			return SPECTRE_V2_CMD_AUTO;
+		} else {
+			return SPECTRE_V2_CMD_NONE;
+		}
+	}
+#else
+	return SPECTRE_V2_CMD_AUTO;
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(mitigation_options); i++) {
 		if (!match_option(arg, ret, mitigation_options[i].option))
@@ -902,13 +933,17 @@ specv2_set_mode:
 	spectre_v2_enabled = mode;
 	pr_info("%s\n", spectre_v2_strings[mode]);
 
+#ifdef MY_DEF_HERE
+	if (cmdline_find_option_bool(boot_command_line, "SpectreAll_on") ||
+		cmdline_find_option_bool(boot_command_line, "SpectreV2_on")) {
+#endif /* MY_DEF_HERE */
 	/*
 	 * If spectre v2 protection has been enabled, unconditionally fill
 	 * RSB during a context switch; this protects against two independent
 	 * issues:
 	 *
-	 *	- RSB underflow (and switch to BTB) on Skylake+
-	 *	- SpectreRSB variant of spectre v2 on X86_BUG_SPECTRE_V2 CPUs
+	 *  - RSB underflow (and switch to BTB) on Skylake+
+	 *  - SpectreRSB variant of spectre v2 on X86_BUG_SPECTRE_V2 CPUs
 	 */
 	setup_force_cpu_cap(X86_FEATURE_RSB_CTXSW);
 	pr_info("Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch\n");
@@ -931,6 +966,9 @@ specv2_set_mode:
 
 	/* Set up IBPB and STIBP depending on the general spectre V2 command */
 	spectre_v2_user_select_mitigation(cmd);
+#ifdef MY_DEF_HERE
+	}
+#endif /* MY_DEF_HERE */
 }
 
 static void update_stibp_msr(void * __unused)
@@ -1070,6 +1108,12 @@ static enum ssb_mitigation_cmd __init ssb_parse_cmdline(void)
 	char arg[20];
 	int ret, i;
 
+#ifdef MY_DEF_HERE
+	if (cmdline_find_option_bool(boot_command_line, "SpectreAll_on") ||
+		cmdline_find_option_bool(boot_command_line, "SSBD_on")) {
+		return SPEC_STORE_BYPASS_CMD_ON;
+	}
+#endif /* MY_DEF_HERE */
 	if (cmdline_find_option_bool(boot_command_line, "nospec_store_bypass_disable") ||
 	    cpu_mitigations_off()) {
 		return SPEC_STORE_BYPASS_CMD_NONE;

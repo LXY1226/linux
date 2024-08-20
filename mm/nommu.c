@@ -263,6 +263,11 @@ void *__vmalloc(unsigned long size, gfp_t gfp_mask, pgprot_t prot)
 }
 EXPORT_SYMBOL(__vmalloc);
 
+void *__vmalloc_node_flags(unsigned long size, int node, gfp_t flags)
+{
+	return __vmalloc(size, flags, PAGE_KERNEL);
+}
+
 void *vmalloc_user(unsigned long size)
 {
 	void *ret;
@@ -667,7 +672,11 @@ static void __put_nommu_region(struct vm_region *region)
 		up_write(&nommu_region_sem);
 
 		if (region->vm_file)
+#ifdef CONFIG_AUFS_FHSM
+			vmr_fput(region);
+#else
 			fput(region->vm_file);
+#endif /* CONFIG_AUFS_FHSM */
 
 		/* IO memory and memory shared directly out of the pagecache
 		 * from ramfs/tmpfs mustn't be released here */
@@ -825,7 +834,11 @@ static void delete_vma(struct mm_struct *mm, struct vm_area_struct *vma)
 	if (vma->vm_ops && vma->vm_ops->close)
 		vma->vm_ops->close(vma);
 	if (vma->vm_file)
+#ifdef CONFIG_AUFS_FHSM
+		vma_fput(vma);
+#else
 		fput(vma->vm_file);
+#endif /* CONFIG_AUFS_FHSM */
 	put_nommu_region(vma->vm_region);
 	kmem_cache_free(vm_area_cachep, vma);
 }
@@ -1351,7 +1364,11 @@ unsigned long do_mmap(struct file *file,
 					goto error_just_free;
 				}
 			}
+#ifdef CONFIG_AUFS_FHSM
+			vmr_fput(region);
+#else
 			fput(region->vm_file);
+#endif /* CONFIG_AUFS_FHSM */
 			kmem_cache_free(vm_region_jar, region);
 			region = pregion;
 			result = start;
@@ -1426,10 +1443,18 @@ error_just_free:
 	up_write(&nommu_region_sem);
 error:
 	if (region->vm_file)
+#ifdef CONFIG_AUFS_FHSM
+		vmr_fput(region);
+#else
 		fput(region->vm_file);
+#endif /* CONFIG_AUFS_FHSM */
 	kmem_cache_free(vm_region_jar, region);
 	if (vma->vm_file)
+#ifdef CONFIG_AUFS_FHSM
+		vma_fput(vma);
+#else
 		fput(vma->vm_file);
+#endif /* CONFIG_AUFS_FHSM */
 	kmem_cache_free(vm_area_cachep, vma);
 	return ret;
 

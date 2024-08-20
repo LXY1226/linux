@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  lpc_ich.c - LPC interface for Intel ICH
  *
@@ -54,6 +57,7 @@
  *	document number TBD : Avoton SoC
  *	document number TBD : Coleto Creek
  *	document number TBD : Wildcat Point-LP
+ *	document number TBD : Denverton SoC
  *	document number TBD : 9 Series
  */
 
@@ -67,6 +71,10 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/lpc_ich.h>
 #include <linux/platform_data/itco_wdt.h>
+
+#if defined(MY_DEF_HERE) && defined(MY_DEF_HERE)
+#include <linux/synobios.h>
+#endif /* MY_DEF_HERE && SYNO_AVOTON */
 
 #define ACPIBASE		0x40
 #define ACPIBASE_GPE_OFF	0x28
@@ -212,6 +220,7 @@ enum lpc_chipsets {
 	LPC_BAYTRAIL,   /* Bay Trail SoC */
 	LPC_COLETO,	/* Coleto Creek */
 	LPC_WPT_LP,	/* Wildcat Point-LP */
+	LPC_DVN,	/* Denverton SoC */
 	LPC_BRASWELL,	/* Braswell SoC */
 	LPC_9S,		/* 9 Series */
 };
@@ -491,6 +500,9 @@ static struct lpc_ich_info lpc_chipset_info[] = {
 	[LPC_LPT] = {
 		.name = "Lynx Point",
 		.iTCO_version = 2,
+#ifdef MY_DEF_HERE
+		.gpio_version = ICH_V6_GPIO,
+#endif /* MY_DEF_HERE */
 	},
 	[LPC_LPT_LP] = {
 		.name = "Lynx Point_LP",
@@ -516,6 +528,10 @@ static struct lpc_ich_info lpc_chipset_info[] = {
 	[LPC_WPT_LP] = {
 		.name = "Wildcat Point_LP",
 		.iTCO_version = 2,
+	},
+	[LPC_DVN] = {
+		.name = "Denverton SoC",
+		.iTCO_version = 3,
 	},
 	[LPC_BRASWELL] = {
 		.name = "Braswell SoC",
@@ -757,6 +773,8 @@ static const struct pci_device_id lpc_ich_ids[] = {
 	{ PCI_VDEVICE(INTEL, 0x9cc6), LPC_WPT_LP},
 	{ PCI_VDEVICE(INTEL, 0x9cc7), LPC_WPT_LP},
 	{ PCI_VDEVICE(INTEL, 0x9cc9), LPC_WPT_LP},
+	{ PCI_VDEVICE(INTEL, 0x19dc), LPC_DVN},
+	{ PCI_VDEVICE(INTEL, 0x19de), LPC_DVN},
 	{ 0, },			/* End of list */
 };
 MODULE_DEVICE_TABLE(pci, lpc_ich_ids);
@@ -884,6 +902,222 @@ static int lpc_ich_check_conflict_gpio(struct resource *res)
 	return use_gpio ? use_gpio : ret;
 }
 
+#ifdef MY_DEF_HERE
+static u32 gpiobase = 0;
+static u32 *writable_pin = NULL;
+static u32 SynoGpioCount = 0;
+
+static u32 ich9_writable_pin[] = {1, 6, 7, 10, 15, 16, 17, 18, 20, 21, 24, 25, 30, 31, 32, 33, 34, 35, 36, 37, 46, 47, 49, 55, 57};
+static u32 ich10_writable_pin[] = {1, 6, 7, 10, 15, 16, 17, 18, 20, 21, 24, 25, 29, 30, 31, 32, 33, 34, 35, 36, 37, 42, 43, 45, 46, 47, 49, 55, 57};
+static u32 c206_writable_pin[] = {0, 5, 16, 20, 21, 22, 34, 38, 48, 52, 54, 69, 70, 71};
+static u32 c226_writable_pin[] = {5, 16, 18, 19, 20, 21, 23, 32, 33, 34, 35, 36, 37, 45};
+static u32 avoton_writable_pin[] = {10, 15, 16, 17, 49, 50, 53, 54};
+#ifdef MY_DEF_HERE
+static u32 broadwellntb_writable_pin[] = {3, 4, 5, 26, 28, 32, 33, 44, 45, 46};
+#elif defined MY_DEF_HERE
+static u32 broadwellntbap_writable_pin[] = {3, 4, 5, 26, 28, 31, 32, 33, 44, 45, 46};
+#else
+static u32 broadwell_writable_pin[] = {3, 4, 5, 15, 24, 25, 26, 27, 28, 45, 61, 70, 71};
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+/* for avoton gpio we define that
+ * CORE WELL gpio (GPIOS_X) start from 0 to 31
+ * SUS WELL gpio (GPIO_SUSX) start from 32 to 63
+ */
+static u32 coreWellGpio = 0;
+static u32 susWellGpio = 0;
+static u32 avoton_corewell_gpioin_pin = 0x18041831; //pin 15 16 and 17 used as output pin for DS415+, so we don't read these pin from CPU
+static u32 avoton_suswell_gpioin_pin = 0xC181114;
+
+// avoton gpio pin 0~63
+#define GPIO_MAX_PIN 63
+#else /* MY_DEF_HERE */
+// other x64 platform gpio pin 0~95
+#define GPIO_MAX_PIN 95
+#endif /* MY_DEF_HERE */
+
+u32 syno_pch_lpc_gpio_pin(int pin, int *pValue, int isWrite)
+{
+	static DEFINE_SPINLOCK(lock);
+	static unsigned long flags;
+	int ret = -1;
+    int i = 0;
+    u32 addr_use_select, addr_io_select, addr_lvl;
+	u32 val_lvl;
+#ifdef MY_DEF_HERE
+	u32 *pVal_lvl = NULL;
+	u32 gpioin_pin = 0;
+#else /* MY_DEF_HERE */
+    u32 val_use_select, val_io_select;
+#endif /* MY_DEF_HERE */
+    u32 mppPin = pin;
+    u32 tmpVal;
+
+    if (0 == gpiobase || ( pin < 0 || pin > GPIO_MAX_PIN )
+			|| NULL == pValue) {
+        printk("parameter error. gpiobase=%08X, pin=%d, pValue=%p\n", gpiobase, pin, pValue);
+        goto END;
+    }
+	spin_lock_irqsave(&lock, flags);
+
+    if (1 == isWrite) {
+		// SynoGpioCount should follow the assigned array size of writable_pin
+		while (i < SynoGpioCount) {
+            if (pin == writable_pin[i]) {
+                break;
+            }
+			i++;
+        }
+        if (i == SynoGpioCount) {
+            printk("pin %d is protected by driver.\n", pin);
+            goto UNLOCK;
+        }
+    }
+
+    if (mppPin < 32) {
+        addr_use_select = gpiobase + 0x00;
+        addr_io_select = gpiobase + 0x04;
+#ifdef MY_DEF_HERE
+		addr_lvl = gpiobase + 0x08;
+		pVal_lvl = &coreWellGpio;
+		gpioin_pin = avoton_corewell_gpioin_pin;
+#else /* MY_DEF_HERE */
+        addr_lvl = gpiobase + 0x0c;
+#endif /* MY_DEF_HERE */
+    } else if (mppPin < 64) {
+        addr_use_select = gpiobase + 0x30;
+        addr_io_select = gpiobase + 0x34;
+#ifdef MY_DEF_HERE
+		addr_lvl = gpiobase + 0x88;
+		pVal_lvl = &susWellGpio;
+		gpioin_pin = avoton_suswell_gpioin_pin;
+#else /* MY_DEF_HERE */
+        addr_lvl = gpiobase + 0x38;
+#endif /* MY_DEF_HERE */
+        mppPin %= 32;
+    } else {
+        addr_use_select = gpiobase + 0x40;
+        addr_io_select = gpiobase + 0x44;
+        addr_lvl = gpiobase + 0x48;
+        mppPin %= 32;
+	}
+/*
+ * If Avoton GPIO pin set ouput, we can't read the value from register
+ * so we need to store the gpio values in kernel instead of register
+ */
+#ifdef MY_DEF_HERE
+	if (0 == isWrite) {
+        //out put value
+		if ((1 << mppPin) & gpioin_pin) {
+			// Input pin is GPI, read from GPI register directly
+			val_lvl = inl(addr_lvl);
+			*pValue = (val_lvl & (1 << mppPin)) >> mppPin;
+		} else {
+			*pValue = (*pVal_lvl & (1 << mppPin)) >> mppPin;
+		}
+	} else {
+		if (1 == *pValue) {
+			tmpVal = 1 << mppPin;
+			*pVal_lvl |= tmpVal;
+			outl(*pVal_lvl, addr_lvl);
+		} else {
+			tmpVal = ~(1 << mppPin);
+			*pVal_lvl &= tmpVal;
+			outl(*pVal_lvl, addr_lvl);
+		}
+	}
+#else /* MY_DEF_HERE */
+    if (0 == isWrite) {
+        //change use select to GPIO
+        val_use_select = inl(addr_use_select);
+        tmpVal = 1 << mppPin;
+        val_use_select |= tmpVal;
+        outl(val_use_select, addr_use_select);
+
+        //out put value
+        val_lvl = inl(addr_lvl);
+
+        *pValue = (val_lvl & (1 << mppPin)) >> mppPin;
+    } else {
+        //change use select to GPIO
+        val_use_select = inl(addr_use_select);
+        tmpVal = 1 << mppPin;
+        val_use_select |= tmpVal;
+        outl(val_use_select, addr_use_select);
+
+        //change I/O select to output
+        val_io_select = inl(addr_io_select);
+        tmpVal = ~(1 << mppPin);
+        val_io_select &= tmpVal;
+        outl(val_io_select, addr_io_select);
+
+        //out put value
+        val_lvl = inl(addr_lvl);
+        if (1 == *pValue) {
+            tmpVal = 1 << mppPin;
+            val_lvl |= tmpVal;
+            outl(val_lvl, addr_lvl);
+        } else {
+            tmpVal = ~(1 << mppPin);
+            val_lvl &= tmpVal;
+            outl(val_lvl, addr_lvl);
+        }
+    }
+#endif /* MY_DEF_HERE */
+    ret = 0;
+
+UNLOCK:
+	spin_unlock_irqrestore(&lock, flags);
+END:
+    return ret;
+}
+EXPORT_SYMBOL(syno_pch_lpc_gpio_pin);
+
+static int syno_gpio_init(struct pci_dev *dev)
+{
+	switch(dev->device) {
+		case PCI_DEVICE_ID_INTEL_COUGARPOINT_LPC_C206:
+			writable_pin = c206_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(c206_writable_pin);
+			break;
+		case PCI_DEVICE_ID_INTEL_LYNXPOINT_LPC_C226:
+			writable_pin = c226_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(c226_writable_pin);
+			break;
+		case PCI_DEVICE_ID_INTEL_AVOTON_LPC:
+			writable_pin = avoton_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(avoton_writable_pin);
+			break;
+		case PCI_DEVICE_ID_INTEL_ICH9_7: /* ICH9R */ /* TODO test */
+			writable_pin = ich9_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(ich9_writable_pin);
+			break;
+		case PCI_DEVICE_ID_INTEL_ICH10_1: /* ICH10R */ /* TODO test */
+			writable_pin = ich10_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(ich10_writable_pin);
+			break;
+		case PCI_DEVICE_ID_INTEL_BROADWELL_LPC:
+#ifdef MY_DEF_HERE
+			writable_pin = broadwellntb_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(broadwellntb_writable_pin);
+#elif defined MY_DEF_HERE
+			writable_pin = broadwellntbap_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(broadwellntbap_writable_pin);
+#else
+			writable_pin = broadwell_writable_pin;
+			SynoGpioCount = ARRAY_SIZE(broadwell_writable_pin);
+#endif /* MY_DEF_HERE */
+			break;
+		default:
+			printk("Unknown LPC device %04x\n", dev->device);
+			break;
+	}
+
+	return 0;
+}
+#endif /* MY_DEF_HERE */
+
 static int lpc_ich_init_gpio(struct pci_dev *dev)
 {
 	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
@@ -927,6 +1161,22 @@ gpe0_done:
 		ret = -ENODEV;
 		goto gpio_done;
 	}
+#ifdef MY_DEF_HERE
+	gpiobase = base_addr;
+	syno_gpio_init(dev);
+#ifdef MY_DEF_HERE
+	/* For Avoton models
+	 * gpio_sus18 and gpio_sus22 is output pin and the default value is 1
+	 * gpio sus21 is for ds415+ phy reset
+	 * So we need set the default value to 1
+	 */
+	if (syno_is_hw_version(HW_DS415p)) {
+		susWellGpio = 0x640000;
+	} else {
+		susWellGpio = 0x440000;
+	}
+#endif /* MY_DEF_HERE */
+#endif /* MY_DEF_HERE */
 
 	/* Older devices provide fewer GPIO and have a smaller resource size. */
 	res = &gpio_ich_res[ICH_RES_GPIO];

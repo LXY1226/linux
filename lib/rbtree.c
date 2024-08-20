@@ -485,7 +485,7 @@ struct rb_node *rb_next(const struct rb_node *node)
 	 * as we can.
 	 */
 	if (node->rb_right) {
-		node = node->rb_right; 
+		node = node->rb_right;
 		while (node->rb_left)
 			node=node->rb_left;
 		return (struct rb_node *)node;
@@ -517,7 +517,7 @@ struct rb_node *rb_prev(const struct rb_node *node)
 	 * as we can.
 	 */
 	if (node->rb_left) {
-		node = node->rb_left; 
+		node = node->rb_left;
 		while (node->rb_right)
 			node=node->rb_right;
 		return (struct rb_node *)node;
@@ -539,17 +539,39 @@ void rb_replace_node(struct rb_node *victim, struct rb_node *new,
 {
 	struct rb_node *parent = rb_parent(victim);
 
+	/* Copy the pointers/colour from the victim to the replacement */
+	*new = *victim;
+
 	/* Set the surrounding nodes to point to the replacement */
+	if (victim->rb_left)
+		rb_set_parent(victim->rb_left, new);
+	if (victim->rb_right)
+		rb_set_parent(victim->rb_right, new);
 	__rb_change_child(victim, new, parent, root);
+}
+EXPORT_SYMBOL(rb_replace_node);
+
+void rb_replace_node_rcu(struct rb_node *victim, struct rb_node *new,
+			 struct rb_root *root)
+{
+	struct rb_node *parent = rb_parent(victim);
+
+	/* Copy the pointers/colour from the victim to the replacement */
+	*new = *victim;
+
+	/* Set the surrounding nodes to point to the replacement */
 	if (victim->rb_left)
 		rb_set_parent(victim->rb_left, new);
 	if (victim->rb_right)
 		rb_set_parent(victim->rb_right, new);
 
-	/* Copy the pointers/colour from the victim to the replacement */
-	*new = *victim;
+	/* Set the parent's pointer to the new node last after an RCU barrier
+	 * so that the pointers onwards are seen to be set correctly when doing
+	 * an RCU walk over the tree.
+	 */
+	__rb_change_child_rcu(victim, new, parent, root);
 }
-EXPORT_SYMBOL(rb_replace_node);
+EXPORT_SYMBOL(rb_replace_node_rcu);
 
 static struct rb_node *rb_left_deepest_node(const struct rb_node *node)
 {

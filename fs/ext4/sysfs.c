@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/ext4/sysfs.c
  *
@@ -26,6 +29,21 @@ typedef enum {
 	attr_feature,
 	attr_pointer_ui,
 	attr_pointer_atomic,
+#ifdef MY_ABC_HERE
+	attr_syno_fs_error_new_event_flag,
+	attr_syno_fs_error_mounted,
+	attr_syno_fs_error_count,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	attr_lazyinit_info,
+	attr_lazyinit_speed,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	attr_incompat_supp,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	attr_compat_ro_supp,
+#endif /* MY_ABC_HERE */
 } attr_id_t;
 
 typedef enum {
@@ -107,6 +125,25 @@ static ssize_t reserved_clusters_store(struct ext4_attr *a,
 	return count;
 }
 
+#ifdef MY_ABC_HERE
+static ssize_t syno_fs_error_new_event_flag_store(struct ext4_attr *a,
+				       struct ext4_sb_info *sbi, const char *buf, size_t count)
+{
+	long t;
+	int ret;
+
+	ret = kstrtol(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+
+	if (!(1 == t || 0 == t)) {
+		return -EINVAL;
+	}
+	sbi->s_new_error_fs_event_flag = (int)t;
+	return count;
+}
+#endif /* MY_ABC_HERE */
+
 static ssize_t trigger_test_error(struct ext4_attr *a,
 				  struct ext4_sb_info *sbi,
 				  const char *buf, size_t count)
@@ -187,6 +224,21 @@ EXT4_RW_ATTR_SBI_UI(msg_ratelimit_burst, s_msg_ratelimit_state.burst);
 EXT4_RO_ATTR_ES_UI(errors_count, s_error_count);
 EXT4_RO_ATTR_ES_UI(first_error_time, s_first_error_time);
 EXT4_RO_ATTR_ES_UI(last_error_time, s_last_error_time);
+#ifdef MY_ABC_HERE
+EXT4_ATTR_FUNC(syno_fs_error_new_event_flag, 0644);
+EXT4_ATTR_FUNC(syno_fs_error_mounted, 0444);
+EXT4_ATTR_FUNC(syno_fs_error_count, 0444);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+EXT4_ATTR_FUNC(lazyinit_info, 0444);
+EXT4_ATTR_FUNC(lazyinit_speed, 0444);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+EXT4_ATTR_FUNC(incompat_supp, 0444);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+EXT4_ATTR_FUNC(compat_ro_supp, 0444);
+#endif /* MY_ABC_HERE */
 
 static unsigned int old_bump_val = 128;
 EXT4_ATTR_PTR(max_writeback_mb_bump, 0444, pointer_ui, &old_bump_val);
@@ -216,6 +268,15 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(errors_count),
 	ATTR_LIST(first_error_time),
 	ATTR_LIST(last_error_time),
+#ifdef MY_ABC_HERE
+	ATTR_LIST(syno_fs_error_new_event_flag),
+	ATTR_LIST(syno_fs_error_mounted),
+	ATTR_LIST(syno_fs_error_count),
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	ATTR_LIST(lazyinit_info),
+	ATTR_LIST(lazyinit_speed),
+#endif /* MY_ABC_HERE */
 	NULL,
 };
 
@@ -236,6 +297,12 @@ static struct attribute *ext4_feat_attrs[] = {
 	ATTR_LIST(encryption),
 #endif
 	ATTR_LIST(metadata_csum_seed),
+#ifdef MY_ABC_HERE
+	ATTR_LIST(incompat_supp),
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	ATTR_LIST(compat_ro_supp),
+#endif /* MY_ABC_HERE */
 	NULL,
 };
 
@@ -290,6 +357,32 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 				atomic_read((atomic_t *) ptr));
 	case attr_feature:
 		return snprintf(buf, PAGE_SIZE, "supported\n");
+#ifdef MY_ABC_HERE
+	case attr_syno_fs_error_new_event_flag:
+		return snprintf(buf, PAGE_SIZE, "%d\n", sbi->s_new_error_fs_event_flag);
+	case attr_syno_fs_error_mounted:
+		return snprintf(buf, PAGE_SIZE, "%s\n",
+				sbi->s_mount_path ? sbi->s_mount_path : "NULL");
+	case attr_syno_fs_error_count:
+		return snprintf(buf, PAGE_SIZE, "%d\n", sbi->s_es->s_error_count); 
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	case attr_lazyinit_info:
+		return snprintf(buf, PAGE_SIZE, "%u %u\n",
+				sbi->s_li_request ? sbi->s_li_request->lr_next_group : sbi->s_groups_count,
+				sbi->s_groups_count);
+	case attr_lazyinit_speed:
+		return snprintf(buf, PAGE_SIZE, "%lu\n",
+				sbi->s_li_request ? sbi->s_li_request->lr_timeout : 0);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	case attr_incompat_supp:
+		return snprintf(buf, PAGE_SIZE, "%u\n", EXT4_FEATURE_INCOMPAT_SUPP);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	case attr_compat_ro_supp:
+		return snprintf(buf, PAGE_SIZE, "%u\n", EXT4_FEATURE_RO_COMPAT_SUPP);
+#endif /* MY_ABC_HERE */
 	}
 
 	return 0;
@@ -324,6 +417,10 @@ static ssize_t ext4_attr_store(struct kobject *kobj,
 		return inode_readahead_blks_store(a, sbi, buf, len);
 	case attr_trigger_test_error:
 		return trigger_test_error(a, sbi, buf, len);
+#ifdef MY_ABC_HERE
+	case attr_syno_fs_error_new_event_flag:
+		return syno_fs_error_new_event_flag_store(a, sbi, buf, len);
+#endif /* MY_ABC_HERE */
 	}
 	return 0;
 }

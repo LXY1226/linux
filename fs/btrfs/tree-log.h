@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2008 Oracle.  All rights reserved.
  *
@@ -27,8 +30,10 @@
 
 struct btrfs_log_ctx {
 	int log_ret;
+#ifdef MY_DEF_HERE
+#else
 	int log_transid;
-	int io_err;
+#endif /* MY_DEF_HERE */
 	bool log_new_dentries;
 	struct list_head list;
 };
@@ -36,8 +41,10 @@ struct btrfs_log_ctx {
 static inline void btrfs_init_log_ctx(struct btrfs_log_ctx *ctx)
 {
 	ctx->log_ret = 0;
+#ifdef MY_DEF_HERE
+#else
 	ctx->log_transid = 0;
-	ctx->io_err = 0;
+#endif /* MY_DEF_HERE */
 	ctx->log_new_dentries = false;
 	INIT_LIST_HEAD(&ctx->list);
 }

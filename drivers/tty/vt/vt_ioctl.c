@@ -345,6 +345,44 @@ static void vt_disallocate_all(void)
 	}
 }
 
+/*
+ * currently, setting the mode from KD_TEXT to KD_GRAPHICS doesn't do a whole
+ * lot. i'm not sure if it should do any restoration of modes or what...
+ *
+ * XXX It should at least call into the driver, fbdev's definitely need to
+ * restore their engine state. --BenH
+ *
+ * Called with the console lock held.
+ */
+static int vt_kdsetmode(struct vc_data *vc, unsigned long mode)
+{
+	switch (mode) {
+	case KD_GRAPHICS:
+		break;
+	case KD_TEXT0:
+	case KD_TEXT1:
+		mode = KD_TEXT;
+	case KD_TEXT:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (vc->vc_mode == mode)
+		return 0;
+
+	vc->vc_mode = mode;
+	if (vc->vc_num != fg_console)
+		return 0;
+
+	/* explicitly blank/unblank the screen if switching modes */
+	if (mode == KD_TEXT)
+		do_unblank_screen(1);
+	else
+		do_blank_screen(1);
+
+	return 0;
+}
 
 /*
  * We handle the console-specific ioctl's here.  We allow the
@@ -465,47 +503,13 @@ int vt_ioctl(struct tty_struct *tty,
 	}
 
 	case KDSETMODE:
-		/*
-		 * currently, setting the mode from KD_TEXT to KD_GRAPHICS
-		 * doesn't do a whole lot. i'm not sure if it should do any
-		 * restoration of modes or what...
-		 *
-		 * XXX It should at least call into the driver, fbdev's definitely
-		 * need to restore their engine state. --BenH
-		 */
 		if (!perm)
 			return -EPERM;
-		switch (arg) {
-		case KD_GRAPHICS:
-			break;
-		case KD_TEXT0:
-		case KD_TEXT1:
-			arg = KD_TEXT;
-		case KD_TEXT:
-			break;
-		default:
-			ret = -EINVAL;
-			goto out;
-		}
+
 		console_lock();
-		if (vc->vc_mode == (unsigned char) arg) {
-			console_unlock();
-			break;
-		}
-		vc->vc_mode = (unsigned char) arg;
-		if (console != fg_console) {
-			console_unlock();
-			break;
-		}
-		/*
-		 * explicitly blank/unblank the screen if switching modes
-		 */
-		if (arg == KD_TEXT)
-			do_unblank_screen(1);
-		else
-			do_blank_screen(1);
+		ret = vt_kdsetmode(vc, arg);
 		console_unlock();
-		break;
+		return ret;
 
 	case KDGETMODE:
 		uival = vc->vc_mode;

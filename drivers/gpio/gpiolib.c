@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -69,14 +72,25 @@ struct gpio_desc *gpio_to_desc(unsigned gpio)
 {
 	struct gpio_chip *chip;
 	unsigned long flags;
+#ifdef MY_DEF_HERE
+	unsigned int iBase;
+#endif /* MY_DEF_HERE */
 
 	spin_lock_irqsave(&gpio_lock, flags);
 
 	list_for_each_entry(chip, &gpio_chips, list) {
+#ifdef MY_DEF_HERE
+		iBase = ARCH_NR_GPIOS - (chip->base+chip->ngpio);
+		if (iBase <= gpio && iBase + chip->ngpio > gpio) {
+			spin_unlock_irqrestore(&gpio_lock, flags);
+			return &chip->desc[gpio - iBase];
+		}
+#else /* MY_DEF_HERE */
 		if (chip->base <= gpio && chip->base + chip->ngpio > gpio) {
 			spin_unlock_irqrestore(&gpio_lock, flags);
 			return &chip->desc[gpio - chip->base];
 		}
+#endif /* MY_DEF_HERE */
 	}
 
 	spin_unlock_irqrestore(&gpio_lock, flags);
@@ -213,8 +227,13 @@ static int gpiochip_add_to_list(struct gpio_chip *chip)
 	if (pos != &gpio_chips && pos->prev != &gpio_chips) {
 		_chip = list_entry(pos->prev, struct gpio_chip, list);
 		if (_chip->base + _chip->ngpio > chip->base) {
+#if defined(MY_ABC_HERE)
+			dev_err(chip->parent,
+				"GPIO integer space overlap, cannot add chip\n");
+#else /* MY_ABC_HERE */
 			dev_err(chip->dev,
 			       "GPIO integer space overlap, cannot add chip\n");
+#endif /* MY_ABC_HERE */
 			err = -EBUSY;
 		}
 	}
@@ -275,7 +294,11 @@ static int gpiochip_set_desc_names(struct gpio_chip *gc)
 
 		gpio = gpio_name_to_desc(gc->names[i]);
 		if (gpio)
+#if defined(MY_ABC_HERE)
+			dev_warn(gc->parent, "Detected name collision for "
+#else /* MY_ABC_HERE */
 			dev_warn(gc->dev, "Detected name collision for "
+#endif /* MY_ABC_HERE */
 				 "GPIO name '%s'\n",
 				 gc->names[i]);
 	}
@@ -356,8 +379,13 @@ int gpiochip_add(struct gpio_chip *chip)
 	INIT_LIST_HEAD(&chip->pin_ranges);
 #endif
 
+#if defined(MY_ABC_HERE)
+	if (!chip->owner && chip->parent && chip->parent->driver)
+		chip->owner = chip->parent->driver->owner;
+#else /* MY_ABC_HERE */
 	if (!chip->owner && chip->dev && chip->dev->driver)
 		chip->owner = chip->dev->driver->owner;
+#endif /* MY_ABC_HERE */
 
 	status = gpiochip_set_desc_names(chip);
 	if (status)
@@ -432,7 +460,12 @@ void gpiochip_remove(struct gpio_chip *chip)
 	spin_unlock_irqrestore(&gpio_lock, flags);
 
 	if (requested)
+#if defined(MY_ABC_HERE)
+		dev_crit(chip->parent,
+			 "REMOVING GPIOCHIP WITH GPIOS STILL REQUESTED\n");
+#else /* MY_ABC_HERE */
 		dev_crit(chip->dev, "REMOVING GPIOCHIP WITH GPIOS STILL REQUESTED\n");
+#endif /* MY_ABC_HERE */
 
 	kfree(chip->desc);
 	chip->desc = NULL;
@@ -691,11 +724,19 @@ int _gpiochip_irqchip_add(struct gpio_chip *gpiochip,
 	if (!gpiochip || !irqchip)
 		return -EINVAL;
 
+#if defined(MY_ABC_HERE)
+	if (!gpiochip->parent) {
+#else /* MY_ABC_HERE */
 	if (!gpiochip->dev) {
+#endif /* MY_ABC_HERE */
 		pr_err("missing gpiochip .dev parent pointer\n");
 		return -EINVAL;
 	}
+#if defined(MY_ABC_HERE)
+	of_node = gpiochip->parent->of_node;
+#else /* MY_ABC_HERE */
 	of_node = gpiochip->dev->of_node;
+#endif /* MY_ABC_HERE */
 #ifdef CONFIG_OF_GPIO
 	/*
 	 * If the gpiochip has an assigned OF node this takes precedence
@@ -2504,7 +2545,11 @@ static int gpiolib_seq_show(struct seq_file *s, void *v)
 
 	seq_printf(s, "%sGPIOs %d-%d", (char *)s->private,
 			chip->base, chip->base + chip->ngpio - 1);
+#if defined(MY_ABC_HERE)
+	dev = chip->parent;
+#else /* MY_ABC_HERE */
 	dev = chip->dev;
+#endif /* MY_ABC_HERE */
 	if (dev)
 		seq_printf(s, ", %s/%s", dev->bus ? dev->bus->name : "no-bus",
 			dev_name(dev));
@@ -2552,3 +2597,46 @@ static int __init gpiolib_debugfs_init(void)
 subsys_initcall(gpiolib_debugfs_init);
 
 #endif	/* DEBUG_FS */
+
+#ifdef MY_DEF_HERE
+int syno_gpio_value_set(int iPin, int iValue)
+{
+	int iRet = -1;
+	struct gpio_desc *desc;
+	desc = gpio_to_desc(iPin); //pin validation is checked here
+
+	if (!desc) {
+		goto END;
+	}
+
+	if (GPIOF_DIR_OUT != gpiod_get_direction(desc)) {
+		printk("pin %d is not writable.\n", iPin);
+		goto END;
+	}
+
+	gpiod_set_value(desc, iValue);
+
+	iRet = 0;
+END:
+	return iRet;
+}
+EXPORT_SYMBOL(syno_gpio_value_set);
+
+int syno_gpio_value_get(int iPin, int *pValue)
+{
+	int iRet = -1;
+	struct gpio_desc *desc;
+	desc = gpio_to_desc(iPin); //pin validation is checked here
+
+	if (!desc) {
+		goto END;
+	}
+
+	*pValue = gpiod_get_value(desc);
+
+	iRet = 0;
+END:
+	return iRet;
+}
+EXPORT_SYMBOL(syno_gpio_value_get);
+#endif /* MY_DEF_HERE */

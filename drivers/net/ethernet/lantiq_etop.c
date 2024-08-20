@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   This program is free software; you can redistribute it and/or modify it
  *   under the terms of the GNU General Public License version 2 as published
@@ -390,8 +393,13 @@ ltq_etop_mdio_probe(struct net_device *dev)
 		return -ENODEV;
 	}
 
+#if defined(MY_ABC_HERE)
+	phydev = phy_connect(dev, phydev_name(phydev),
+			     &ltq_etop_mdio_link, priv->pldata->mii_mode);
+#else /* MY_ABC_HERE */
 	phydev = phy_connect(dev, dev_name(&phydev->dev),
 			     &ltq_etop_mdio_link, priv->pldata->mii_mode);
+#endif /* MY_ABC_HERE */
 
 	if (IS_ERR(phydev)) {
 		netdev_err(dev, "Could not attach to PHY\n");
@@ -408,9 +416,13 @@ ltq_etop_mdio_probe(struct net_device *dev)
 
 	phydev->advertising = phydev->supported;
 	priv->phydev = phydev;
+#if defined(MY_ABC_HERE)
+	phy_attached_info(phydev);
+#else /* MY_ABC_HERE */
 	pr_info("%s: attached PHY [%s] (phy_addr=%s, irq=%d)\n",
 	       dev->name, phydev->drv->name,
 	       dev_name(&phydev->dev), phydev->irq);
+#endif /* MY_ABC_HERE */
 
 	return 0;
 }
@@ -435,6 +447,9 @@ ltq_etop_mdio_init(struct net_device *dev)
 	priv->mii_bus->name = "ltq_mii";
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		priv->pdev->name, priv->pdev->id);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	priv->mii_bus->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
 	if (!priv->mii_bus->irq) {
 		err = -ENOMEM;
@@ -443,10 +458,15 @@ ltq_etop_mdio_init(struct net_device *dev)
 
 	for (i = 0; i < PHY_MAX_ADDR; ++i)
 		priv->mii_bus->irq[i] = PHY_POLL;
+#endif /* MY_ABC_HERE */
 
 	if (mdiobus_register(priv->mii_bus)) {
 		err = -ENXIO;
+#if defined(MY_ABC_HERE)
+		goto err_out_free_mdiobus;
+#else /* MY_ABC_HERE */
 		goto err_out_free_mdio_irq;
+#endif /* MY_ABC_HERE */
 	}
 
 	if (ltq_etop_mdio_probe(dev)) {
@@ -457,8 +477,12 @@ ltq_etop_mdio_init(struct net_device *dev)
 
 err_out_unregister_bus:
 	mdiobus_unregister(priv->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 err_out_free_mdio_irq:
 	kfree(priv->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 err_out_free_mdiobus:
 	mdiobus_free(priv->mii_bus);
 err_out:
@@ -472,7 +496,11 @@ ltq_etop_mdio_cleanup(struct net_device *dev)
 
 	phy_disconnect(priv->phydev);
 	mdiobus_unregister(priv->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(priv->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 	mdiobus_free(priv->mii_bus);
 }
 

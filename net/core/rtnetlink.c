@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * INET		An implementation of the TCP/IP protocol suite for the LINUX
  *		operating system.  INET is implemented using the  BSD Socket
@@ -807,10 +810,14 @@ static void copy_rtnl_link_stats(struct rtnl_link_stats *a,
 	a->tx_compressed = b->tx_compressed;
 }
 
+#if defined(MY_ABC_HERE)
+// do nothing
+#else /* MY_ABC_HERE */
 static void copy_rtnl_link_stats64(void *v, const struct rtnl_link_stats64 *b)
 {
 	memcpy(v, b, sizeof(*b));
 }
+#endif /* MY_ABC_HERE */
 
 /* All VF info */
 static inline int rtnl_vfinfo_size(const struct net_device *dev,
@@ -894,6 +901,10 @@ static noinline size_t if_nlmsg_size(const struct net_device *dev,
 	       + nla_total_size(4) /* IFLA_PROMISCUITY */
 	       + nla_total_size(4) /* IFLA_NUM_TX_QUEUES */
 	       + nla_total_size(4) /* IFLA_NUM_RX_QUEUES */
+#if defined(MY_ABC_HERE)
+	       + nla_total_size(4) /* IFLA_MAX_GSO_SEGS */
+	       + nla_total_size(4) /* IFLA_MAX_GSO_SIZE */
+#endif /* MY_ABC_HERE */
 	       + nla_total_size(1) /* IFLA_OPERSTATE */
 	       + nla_total_size(1) /* IFLA_LINKMODE */
 	       + nla_total_size(4) /* IFLA_CARRIER_CHANGES */
@@ -1048,8 +1059,33 @@ static int rtnl_phys_switch_id_fill(struct sk_buff *skb, struct net_device *dev)
 	return 0;
 }
 
+#if defined(MY_ABC_HERE)
 static noinline_for_stack int rtnl_fill_stats(struct sk_buff *skb,
 					      struct net_device *dev)
+{
+	struct rtnl_link_stats64 *sp;
+	struct nlattr *attr;
+
+	attr = nla_reserve(skb, IFLA_STATS64,
+			   sizeof(struct rtnl_link_stats64));
+	if (!attr)
+		return -EMSGSIZE;
+
+	sp = nla_data(attr);
+	dev_get_stats(dev, sp);
+
+	attr = nla_reserve(skb, IFLA_STATS,
+			   sizeof(struct rtnl_link_stats));
+	if (!attr)
+		return -EMSGSIZE;
+
+	copy_rtnl_link_stats(nla_data(attr), sp);
+
+	return 0;
+}
+#else /* MY_ABC_HERE */
+static noinline_for_stack int rtnl_fill_stats(struct sk_buff *skb,
+		struct net_device *dev)
 {
 	const struct rtnl_link_stats64 *stats;
 	struct rtnl_link_stats64 temp;
@@ -1073,6 +1109,7 @@ static noinline_for_stack int rtnl_fill_stats(struct sk_buff *skb,
 
 	return 0;
 }
+#endif /* MY_ABC_HERE */
 
 static noinline_for_stack int rtnl_fill_vfinfo(struct sk_buff *skb,
 					       struct net_device *dev,
@@ -1226,6 +1263,10 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 	    nla_put_u32(skb, IFLA_GROUP, dev->group) ||
 	    nla_put_u32(skb, IFLA_PROMISCUITY, dev->promiscuity) ||
 	    nla_put_u32(skb, IFLA_NUM_TX_QUEUES, dev->num_tx_queues) ||
+#if defined(MY_ABC_HERE)
+	    nla_put_u32(skb, IFLA_GSO_MAX_SEGS, dev->gso_max_segs) ||
+	    nla_put_u32(skb, IFLA_GSO_MAX_SIZE, dev->gso_max_size) ||
+#endif /* MY_ABC_HERE */
 #ifdef CONFIG_RPS
 	    nla_put_u32(skb, IFLA_NUM_RX_QUEUES, dev->num_rx_queues) ||
 #endif

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/hfsplus/bnode.c
  *
@@ -39,6 +42,16 @@ void hfs_bnode_read(struct hfs_bnode *node, void *buf, int off, int len)
 	}
 }
 
+#ifdef MY_ABC_HERE
+u32 hfs_bnode_read_u32(struct hfs_bnode *node, int off)
+{
+	__be32 data;
+	/* TODO: optimize later... */
+	hfs_bnode_read(node, &data, off, 4);
+	return be32_to_cpu(data);
+}
+#endif /* MY_ABC_HERE */
+
 u16 hfs_bnode_read_u16(struct hfs_bnode *node, int off)
 {
 	__be16 data;
@@ -75,6 +88,14 @@ void hfs_bnode_write(struct hfs_bnode *node, void *buf, int off, int len)
 {
 	struct page **pagep;
 	int l;
+
+#ifdef MY_ABC_HERE
+	if (off > node->tree->node_size)
+		if(printk_ratelimit())
+			printk(KERN_ERR "the offset of hfsplus's node is "
+				"beyond the node size: %d/%u, page_offset:%u\n",
+				off, node->tree->node_size, node->page_offset);
+#endif
 
 	off += node->page_offset;
 	pagep = node->page + (off >> PAGE_CACHE_SHIFT);
@@ -583,9 +604,15 @@ struct hfs_bnode *hfs_bnode_create(struct hfs_btree *tree, u32 num)
 	node = hfs_bnode_findhash(tree, num);
 	spin_unlock(&tree->hash_lock);
 	if (node) {
+#ifdef MY_ABC_HERE
+		tree->sb->s_flags |= MS_RDONLY;
+		pr_crit("new node %u already hashed?\n", num);
+		return ERR_PTR(-EIO);
+#else
 		pr_crit("new node %u already hashed?\n", num);
 		WARN_ON(1);
 		return node;
+#endif /* MY_ABC_HERE */
 	}
 	node = __hfs_bnode_create(tree, num);
 	if (!node)
@@ -631,7 +658,15 @@ void hfs_bnode_put(struct hfs_bnode *node)
 		hfs_dbg(BNODE_REFS, "put_node(%d:%d): %d\n",
 			node->tree->cnid, node->this,
 			atomic_read(&node->refcnt));
+#ifdef MY_ABC_HERE
+		if (!atomic_read(&node->refcnt)) {
+			printk("hfsplus:node refcnt wrong (%d).\n", atomic_read(&node->refcnt));
+			tree->sb->s_flags |= MS_RDONLY;
+			return;
+		}
+#else
 		BUG_ON(!atomic_read(&node->refcnt));
+#endif /* MY_ABC_HERE */ 
 		if (!atomic_dec_and_lock(&node->refcnt, &tree->hash_lock))
 			return;
 		for (i = 0; i < tree->pages_per_bnode; i++) {

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* audit_watch.c -- watching inodes
  *
  * Copyright 2003-2009 Red Hat, Inc.
@@ -363,7 +366,7 @@ static int audit_get_nd(struct audit_watch *watch, struct path *parent)
 	struct dentry *d = kern_path_locked(watch->path, parent);
 	if (IS_ERR(d))
 		return PTR_ERR(d);
-	mutex_unlock(&d_backing_inode(parent->dentry)->i_mutex);
+	inode_unlock(d_backing_inode(parent->dentry));
 	if (d_is_positive(d)) {
 		/* update watch filter fields */
 		watch->dev = d_backing_inode(d)->i_sb->s_dev;
@@ -487,6 +490,11 @@ static int audit_watch_handle_event(struct fsnotify_group *group,
 {
 	struct inode *inode;
 	struct audit_parent *parent;
+
+#ifdef MY_ABC_HERE
+	if (data_type == FSNOTIFY_EVENT_SYNO)
+		return 0;
+#endif /* MY_ABC_HERE */
 
 	parent = container_of(inode_mark, struct audit_parent, mark);
 

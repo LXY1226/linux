@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/kernel/time.c
  *
@@ -182,8 +185,12 @@ int do_sys_settimeofday(const struct timespec *tv, const struct timezone *tz)
 		update_vsyscall_tz();
 		if (firsttime) {
 			firsttime = 0;
+#ifdef MY_ABC_HERE
+/* Keep UTC Time In Kernel And RTC */
+#else
 			if (!tv)
 				warp_clock();
+#endif /* MY_ABC_HERE */
 		}
 	}
 	if (tv)

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /**
  * core.h - DesignWare USB3 DRD Core Header
  *
@@ -30,7 +33,10 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb/otg.h>
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 #include <linux/ulpi/interface.h>
+#endif /* MY_DEF_HERE */
 
 #include <linux/phy/phy.h>
 
@@ -83,6 +89,9 @@
 #define DWC3_GCTL		0xc110
 #define DWC3_GEVTEN		0xc114
 #define DWC3_GSTS		0xc118
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#define DWC3_GUCTL1		0xc11c
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 #define DWC3_GSNPSID		0xc120
 #define DWC3_GGPIO		0xc124
 #define DWC3_GUID		0xc128
@@ -105,6 +114,9 @@
 #define DWC3_GPRTBIMAP_HS1	0xc184
 #define DWC3_GPRTBIMAP_FS0	0xc188
 #define DWC3_GPRTBIMAP_FS1	0xc18c
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#define DWC3_GUCTL2		0xc19c
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 #define DWC3_VER_NUMBER		0xc1a0
 #define DWC3_VER_TYPE		0xc1a4
@@ -125,7 +137,10 @@
 #define DWC3_GEVNTCOUNT(n)	(0xc40c + (n * 0x10))
 
 #define DWC3_GHWPARAMS8		0xc600
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 #define DWC3_GFLADJ		0xc630
+#endif /* MY_DEF_HERE */
 
 /* Device Registers */
 #define DWC3_DCFG		0xc700
@@ -140,12 +155,19 @@
 #define DWC3_DEPCMDPAR0(n)	(0xc808 + (n * 0x10))
 #define DWC3_DEPCMD(n)		(0xc80c + (n * 0x10))
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#define DWC3_DEV_IMOD	0xca00
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 /* OTG Registers */
 #define DWC3_OCFG		0xcc00
 #define DWC3_OCTL		0xcc04
 #define DWC3_OEVT		0xcc08
 #define DWC3_OEVTEN		0xcc0C
 #define DWC3_OSTS		0xcc10
+#ifdef MY_DEF_HERE
+#define DWC3_DEV_IMOD	0xca00
+#endif /* MY_DEF_HERE */
 
 /* Bit fields */
 
@@ -176,6 +198,8 @@
 /* Global USB2 PHY Configuration Register */
 #define DWC3_GUSB2PHYCFG_PHYSOFTRST	(1 << 31)
 #define DWC3_GUSB2PHYCFG_SUSPHY		(1 << 6)
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 #define DWC3_GUSB2PHYCFG_ULPI_UTMI	(1 << 4)
 #define DWC3_GUSB2PHYCFG_ENBLSLPM	(1 << 8)
 
@@ -186,6 +210,7 @@
 #define DWC3_GUSB2PHYACC_ADDR(n)	(n << 16)
 #define DWC3_GUSB2PHYACC_EXTEND_ADDR(n)	(n << 8)
 #define DWC3_GUSB2PHYACC_DATA(n)	(n & 0xff)
+#endif /* MY_DEF_HERE */
 
 /* Global USB3 PIPE Control Register */
 #define DWC3_GUSB3PIPECTL_PHYSOFTRST	(1 << 31)
@@ -239,10 +264,22 @@
 /* Global HWPARAMS6 Register */
 #define DWC3_GHWPARAMS6_EN_FPGA			(1 << 7)
 
+#if defined(MY_DEF_HERE) || defined(CONFIG_SYNO_LSP_RTD1619)
+/* Global GEVNTCOUNT EVNT_HANDLER_BUSY*/
+#define DWC3_EVNT_HANDLER_BUSY		(1 << 31)
+#endif /* MY_DEF_HERE || CONFIG_SYNO_LSP_RTD1619 */
+#if defined(MY_DEF_HERE)
+#else /* MY_DEF_HERE */
 /* Global Frame Length Adjustment Register */
 #define DWC3_GFLADJ_30MHZ_SDBND_SEL		(1 << 7)
 #define DWC3_GFLADJ_30MHZ_MASK			0x3f
+#endif /* MY_DEF_HERE */
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+/* Global User Control Register 2 */
+#define DWC3_GUCTL2_RST_ACTBITLATER		(1 << 14)
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 /* Device Configuration Register */
 #define DWC3_DCFG_DEVADDR(addr)	((addr) << 3)
 #define DWC3_DCFG_DEVADDR_MASK	DWC3_DCFG_DEVADDR(0x7f)
@@ -399,6 +436,11 @@
 #define DWC3_DEPCMD_TYPE_ISOC		1
 #define DWC3_DEPCMD_TYPE_BULK		2
 #define DWC3_DEPCMD_TYPE_INTR		3
+
+#if defined(MY_DEF_HERE) || defined(CONFIG_SYNO_LSP_RTD1619)
+#define DWC3_DEVICE_IMODC(n)		((0xffff & (n)) << 16)
+#define DWC3_DEVICE_IMODI(n)		((0xffff & (n)))
+#endif /* MY_DEF_HERE || CONFIG_SYNO_LSP_RTD1619 */
 
 /* Structures */
 
@@ -762,16 +804,30 @@ struct dwc3 {
 	struct phy		*usb2_generic_phy;
 	struct phy		*usb3_generic_phy;
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	struct ulpi		*ulpi;
+#endif /* MY_DEF_HERE */
 
 	void __iomem		*regs;
 	size_t			regs_size;
 
 	enum usb_dr_mode	dr_mode;
 
+#if defined(CONFIG_USB_RTK_DWC3_DRD_MODE) && defined(MY_DEF_HERE)
+	bool has_gadget;
+	bool has_xhci;
+#endif /* defined(CONFIG_USB_RTK_DWC3_DRD_MODE) && defined(MY_DEF_HERE) */
+
 	/* used for suspend/resume */
 	u32			dcfg;
 	u32			gctl;
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_USB_RTK_DWC3_DRD_MODE
+	bool has_gadget;
+	bool has_xhci;
+#endif
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 	u32			nr_scratch;
 	u32			num_event_buffers;
@@ -806,6 +862,12 @@ struct dwc3 {
 #define DWC3_REVISION_260A	0x5533260a
 #define DWC3_REVISION_270A	0x5533270a
 #define DWC3_REVISION_280A	0x5533280a
+#if defined(MY_DEF_HERE) || defined(CONFIG_SYNO_LSP_RTD1619)
+#define DWC3_REVISION_300A	0x5533300a
+#endif /* MY_DEF_HERE / CONFIG_SYNO_LSP_RTD1619 */
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#define DWC3_REVISION_310A	0x5533310a
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 /*
  * NOTICE: we're using bit 31 as a "is usb 3.1" flag. This is really
@@ -840,7 +902,10 @@ struct dwc3 {
 	u8			lpm_nyet_threshold;
 	u8			hird_threshold;
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	const char		*hsphy_interface;
+#endif /* MY_DEF_HERE */
 
 	unsigned		delayed_status:1;
 	unsigned		ep0_bounced:1;
@@ -853,6 +918,9 @@ struct dwc3 {
 	unsigned		pullups_connected:1;
 	unsigned		resize_fifos:1;
 	unsigned		setup_packet_pending:1;
+#ifdef MY_DEF_HERE
+	unsigned		start_config_issued:1;
+#endif /* MY_DEF_HERE */
 	unsigned		three_stage_setup:1;
 	unsigned		usb3_lpm_capable:1;
 
@@ -866,7 +934,16 @@ struct dwc3 {
 	unsigned		rx_detect_poll_quirk:1;
 	unsigned		dis_u3_susphy_quirk:1;
 	unsigned		dis_u2_susphy_quirk:1;
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	unsigned		dis_enblslpm_quirk:1;
+#endif /* MY_DEF_HERE */
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#if IS_ENABLED(CONFIG_USB_DWC3_RTK)
+	unsigned		dis_ss_park_mode:1;
+	unsigned		dis_hs_park_mode:1;
+#endif /* CONFIG_USB_DWC3_RTK */
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 	unsigned		tx_de_emphasis_quirk:1;
 	unsigned		tx_de_emphasis:2;
@@ -1021,6 +1098,14 @@ struct dwc3_gadget_ep_cmd_params {
 void dwc3_set_mode(struct dwc3 *dwc, u32 mode);
 int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc);
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+/* check whether we are on the DWC_usb31 core */
+static inline bool dwc3_is_usb31(struct dwc3 *dwc)
+{
+	return !!(dwc->revision & DWC3_REVISION_IS_DWC31);
+}
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 #if IS_ENABLED(CONFIG_USB_DWC3_HOST) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
 int dwc3_host_init(struct dwc3 *dwc);
 void dwc3_host_exit(struct dwc3 *dwc);
@@ -1077,6 +1162,8 @@ static inline int dwc3_gadget_resume(struct dwc3 *dwc)
 }
 #endif /* !IS_ENABLED(CONFIG_USB_DWC3_HOST) */
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 #if IS_ENABLED(CONFIG_USB_DWC3_ULPI)
 int dwc3_ulpi_init(struct dwc3 *dwc);
 void dwc3_ulpi_exit(struct dwc3 *dwc);
@@ -1086,5 +1173,6 @@ static inline int dwc3_ulpi_init(struct dwc3 *dwc)
 static inline void dwc3_ulpi_exit(struct dwc3 *dwc)
 { }
 #endif
+#endif /* MY_DEF_HERE */
 
 #endif /* __DRIVERS_USB_DWC3_CORE_H */

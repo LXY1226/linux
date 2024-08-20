@@ -30,6 +30,10 @@ KBUILD_CFLAGS	+= -mgeneral-regs-only $(lseinstr)
 KBUILD_CFLAGS	+= $(call cc-option, -mpc-relative-literal-loads)
 KBUILD_AFLAGS	+= $(lseinstr)
 
+# Avoid generating .eh_frame* sections.
+KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables -fno-unwind-tables
+KBUILD_AFLAGS	+= -fno-asynchronous-unwind-tables -fno-unwind-tables
+
 ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
 KBUILD_CPPFLAGS	+= -mbig-endian
 AS		+= -EB
@@ -53,8 +57,20 @@ head-y		:= arch/arm64/kernel/head.o
 ifeq ($(CONFIG_ARM64_RANDOMIZE_TEXT_OFFSET), y)
 TEXT_OFFSET := $(shell awk 'BEGIN {srand(); printf "0x%03x000\n", int(512 * rand())}')
 else
+ifneq (,$(filter y, $(CONFIG_SYNO_LSP_RTD129X) $(CONFIG_SYNO_LSP_RTD1619)))
+TEXT_OFFSET := 0x00280000
+else # CONFIG_SYNO_LSP_RTD129X || CONFIG_SYNO_LSP_RTD1619
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_16_12), y)
+ifeq ($(CONFIG_ARCH_MVEBU_PD), y)
+TEXT_OFFSET := 0x00180000
+else # CONFIG_ARCH_MVEBU_PD
 TEXT_OFFSET := 0x00080000
-endif
+endif # CONFIG_ARCH_MVEBU_PD
+else # CONFIG_SYNO_LSP_ARMADA_16_12
+TEXT_OFFSET := 0x00080000
+endif # CONFIG_SYNO_LSP_ARMADA_16_12
+endif # CONFIG_SYNO_LSP_RTD129X || CONFIG_SYNO_LSP_RTD1619
+endif # CONFIG_ARM64_RANDOMIZE_TEXT_OFFSET
 
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS += $(call cc-disable-warning, asm-operand-widths)
@@ -84,6 +100,9 @@ KBUILD_DTBS	:= dtbs
 all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
 
 boot := arch/arm64/boot
+ifeq ($(CONFIG_SYNO_LSP_RTD129X), y)
+DTC_FLAGS ?= -p 8192
+endif
 
 Image: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
@@ -95,12 +114,20 @@ zinstall install: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $@
 
 %.dtb: scripts
+ifeq ($(CONFIG_SYNO_LSP_RTD129X), y)
+	$(Q)$(MAKE) $(build)=$(boot)/dts DTC_FLAGS="$(DTC_FLAGS)" $(boot)/dts/$@
+else
 	$(Q)$(MAKE) $(build)=$(boot)/dts $(boot)/dts/$@
+endif
 
 PHONY += dtbs dtbs_install
 
 dtbs: prepare scripts
+ifeq ($(CONFIG_SYNO_LSP_RTD129X), y)
+	$(Q)$(MAKE) $(build)=$(boot)/dts DTC_FLAGS="$(DTC_FLAGS)"
+else
 	$(Q)$(MAKE) $(build)=$(boot)/dts
+endif
 
 dtbs_install:
 	$(Q)$(MAKE) $(dtbinst)=$(boot)/dts

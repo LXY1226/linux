@@ -104,6 +104,9 @@ bool path_noexec(const struct path *path)
 	return (path->mnt->mnt_flags & MNT_NOEXEC) ||
 	       (path->mnt->mnt_sb->s_iflags & SB_I_NOEXEC);
 }
+#ifdef CONFIG_AUFS_FHSM
+EXPORT_SYMBOL_GPL(path_noexec);
+#endif /* CONFIG_AUFS_FHSM */
 
 #ifdef CONFIG_USELIB
 /*
@@ -1354,13 +1357,13 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 		return;
 
 	/* Be careful if suid/sgid is set */
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	/* reload atomically mode/uid/gid now that lock held */
 	mode = inode->i_mode;
 	uid = inode->i_uid;
 	gid = inode->i_gid;
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 
 	/* We ignore suid/sgid if there are no mappings for them in the ns */
 	if (!kuid_has_mapping(bprm->cred->user_ns, uid) ||

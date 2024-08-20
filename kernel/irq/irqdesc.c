@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 1992, 1998-2006 Linus Torvalds, Ingo Molnar
  * Copyright (C) 2005-2006, Thomas Gleixner, Russell King
@@ -557,6 +560,9 @@ __irq_get_desc_lock(unsigned int irq, unsigned long *flags, bool bus,
 	}
 	return desc;
 }
+#ifdef MY_DEF_HERE
+EXPORT_SYMBOL_GPL(__irq_get_desc_lock);
+#endif /* MY_DEF_HERE */
 
 void __irq_put_desc_unlock(struct irq_desc *desc, unsigned long flags, bool bus)
 {
@@ -564,6 +570,9 @@ void __irq_put_desc_unlock(struct irq_desc *desc, unsigned long flags, bool bus)
 	if (bus)
 		chip_bus_sync_unlock(desc);
 }
+#ifdef MY_DEF_HERE
+EXPORT_SYMBOL_GPL(__irq_put_desc_unlock);
+#endif /* MY_DEF_HERE */
 
 int irq_set_percpu_devid(unsigned int irq)
 {

@@ -1,3 +1,7 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
+#if !defined(MY_ABC_HERE)
 /*
  * net/dsa/mv88e6123_61_65.c - Marvell 88e6123/6161/6165 switch chip support
  * Copyright (c) 2008-2009 Marvell Semiconductor
@@ -122,3 +126,4 @@ struct dsa_switch_driver mv88e6123_61_65_switch_driver = {
 MODULE_ALIAS("platform:mv88e6123");
 MODULE_ALIAS("platform:mv88e6161");
 MODULE_ALIAS("platform:mv88e6165");
+#endif /* MY_ABC_HERE */

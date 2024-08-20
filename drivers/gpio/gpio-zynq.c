@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Xilinx Zynq GPIO device driver
  *
@@ -592,7 +595,11 @@ static int zynq_gpio_request(struct gpio_chip *chip, unsigned offset)
 {
 	int ret;
 
+#if defined(MY_ABC_HERE)
+	ret = pm_runtime_get_sync(chip->parent);
+#else /* MY_ABC_HERE */
 	ret = pm_runtime_get_sync(chip->dev);
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * If the device is already active pm_runtime_get() will return 1 on
@@ -603,7 +610,11 @@ static int zynq_gpio_request(struct gpio_chip *chip, unsigned offset)
 
 static void zynq_gpio_free(struct gpio_chip *chip, unsigned offset)
 {
+#if defined(MY_ABC_HERE)
+	pm_runtime_put(chip->parent);
+#else /* MY_ABC_HERE */
 	pm_runtime_put(chip->dev);
+#endif /* MY_ABC_HERE */
 }
 
 static const struct dev_pm_ops zynq_gpio_dev_pm_ops = {
@@ -698,7 +709,11 @@ static int zynq_gpio_probe(struct platform_device *pdev)
 	chip = &gpio->chip;
 	chip->label = gpio->p_data->label;
 	chip->owner = THIS_MODULE;
+#if defined(MY_ABC_HERE)
+	chip->parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	chip->dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	chip->get = zynq_gpio_get_value;
 	chip->set = zynq_gpio_set_value;
 	chip->request = zynq_gpio_request;

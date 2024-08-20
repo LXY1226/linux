@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2014-2015 Hisilicon Limited.
  *
@@ -72,7 +75,11 @@ static void hns_get_mdix_mode(struct net_device *net_dev,
 	struct hns_nic_priv *priv = netdev_priv(net_dev);
 	struct phy_device *phy_dev = priv->phy;
 
+#if defined(MY_ABC_HERE)
+	if (!phy_dev || !phy_dev->mdio.bus) {
+#else /* MY_ABC_HERE */
 	if (!phy_dev || !phy_dev->bus) {
+#endif /* MY_ABC_HERE */
 		cmd->eth_tp_mdix_ctrl = ETH_TP_MDI_INVALID;
 		cmd->eth_tp_mdix = ETH_TP_MDI_INVALID;
 		return;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
    linear.c : Multiple Devices driver for Linux
 	      Copyright (C) 1994-96 Marc ZYNGIER
@@ -21,20 +24,32 @@
 #include <linux/seq_file.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <trace/events/block.h>
 #include "md.h"
 #include "linear.h"
 
 /*
  * find which device holds a particular offset
  */
+#ifdef MY_ABC_HERE
+static inline struct dev_info *which_dev(struct mddev *mddev, sector_t sector, bool take_rcu)
+#else /* MY_ABC_HERE */
 static inline struct dev_info *which_dev(struct mddev *mddev, sector_t sector)
+#endif /* MY_ABC_HERE */
 {
 	int lo, mid, hi;
 	struct linear_conf *conf;
 
 	lo = 0;
 	hi = mddev->raid_disks - 1;
+#ifdef MY_ABC_HERE
+	if (take_rcu)
+		conf = rcu_dereference(mddev->private);
+	else
+		conf = mddev->private;
+#else /* MY_ABC_HERE */
 	conf = mddev->private;
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Binary Search
@@ -65,11 +80,29 @@ static int linear_congested(struct mddev *mddev, int bits)
 
 	rcu_read_lock();
 	conf = rcu_dereference(mddev->private);
+#ifdef MY_ABC_HERE
+	if (mddev->degraded) {
+		rcu_read_unlock();
+		return ret;
+	}
 
 	for (i = 0; i < conf->raid_disks && !ret ; i++) {
-		struct request_queue *q = bdev_get_queue(conf->disks[i].rdev->bdev);
-		ret |= bdi_congested(&q->backing_dev_info, bits);
+		struct md_rdev *rdev = rcu_dereference(conf->disks[i].rdev);
+		struct request_queue *q = NULL;
+
+		if (!rdev) {
+			continue;
+		}
+
+		q = bdev_get_queue(rdev->bdev);
+		ret |= bdi_congested(q->backing_dev_info, bits);
 	}
+#else /* MY_ABC_HERE */
+	for (i = 0; i < conf->raid_disks && !ret ; i++) {
+		struct request_queue *q = bdev_get_queue(conf->disks[i].rdev->bdev);
+		ret |= bdi_congested(q->backing_dev_info, bits);
+	}
+#endif /* MY_ABC_HERE */
 
 	rcu_read_unlock();
 	return ret;
@@ -131,9 +164,25 @@ static struct linear_conf *linear_conf(struct mddev *mddev, int raid_disks)
 			discard_supported = true;
 	}
 	if (cnt != raid_disks) {
+#ifdef MY_ABC_HERE
+		/*
+		 * for Linear status consistense to other raid type
+		 * Let it can assemble.
+		 */
+		mddev->degraded = mddev->raid_disks - cnt;
+#ifdef MY_ABC_HERE
+		if (MD_CRASHED_ASSEMBLE != mddev->nodev_and_crashed) {
+			mddev->nodev_and_crashed = MD_CRASHED;
+		}
+#endif /* MY_ABC_HERE */
+		printk(KERN_ERR "md/linear:%s: not enough drives present.\n",
+		       mdname(mddev));
+		return conf;
+#else /* MY_ABC_HERE */
 		printk(KERN_ERR "md/linear:%s: not enough drives present. Aborting!\n",
 		       mdname(mddev));
 		goto out;
+#endif /* MY_ABC_HERE */
 	}
 
 	if (!discard_supported)
@@ -178,6 +227,9 @@ static int linear_run (struct mddev *mddev)
 
 	if (md_check_no_bitmap(mddev))
 		return -EINVAL;
+#ifdef MY_ABC_HERE
+	mddev->degraded = 0;
+#endif /* MY_ABC_HERE */
 	conf = linear_conf(mddev, mddev->raid_disks);
 
 	if (!conf)
@@ -244,51 +296,166 @@ static void linear_free(struct mddev *mddev, void *priv)
 	kfree(conf);
 }
 
+#ifdef MY_ABC_HERE
+/**
+ * This is end_io callback function.
+ * We can use this for bad sector report and device error
+ * handing. Prevent umount panic from file system
+ *
+ * @author \$Author: khchen $
+ * @version \$Revision: 1.1
+ *
+ * @param bio    Should not be NULL. Passing from block layer
+ * @param error  error number
+ */
+static void
+SynoLinearEndRequest(struct bio *bio)
+{
+	int bio_error = bio->bi_error;
+	struct mddev *mddev = NULL;
+	struct md_rdev *rdev = NULL;
+	struct bio *orig_bio;
+
+	orig_bio = bio->bi_private;
+
+	rdev = (struct md_rdev *)orig_bio->bi_next;
+	mddev = rdev->mddev;
+	orig_bio->bi_next = bio->bi_next;
+	orig_bio->bi_error = bio->bi_error;
+
+	if (bio_error) {
+#ifdef MY_ABC_HERE
+		if (IsDeviceDisappear(rdev->bdev)) {
+			syno_md_error(mddev, rdev);
+		} else {
+#ifdef MY_ABC_HERE
+			struct dev_info *tmp_dev;
+			sector_t report_sector;
+
+			rcu_read_lock();
+			tmp_dev = which_dev(mddev, orig_bio->bi_iter.bi_sector, true);
+			report_sector = orig_bio->bi_iter.bi_sector -
+			                (tmp_dev->end_sector - rdev->sectors) +
+			                rdev->data_offset;
+			rcu_read_unlock();
+#ifdef MY_ABC_HERE
+			if (bio_flagged(bio, BIO_AUTO_REMAP)) {
+				SynoReportBadSector(report_sector, bio->bi_rw, mddev->md_minor,
+					bio->bi_bdev, __FUNCTION__);
+			}
+#else /* MY_ABC_HERE */
+			SynoReportBadSector(report_sector, bio->bi_rw, mddev->md_minor,
+				bio->bi_bdev, __FUNCTION__);
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+			md_error(mddev, rdev);
+		}
+#else /* MY_ABC_HERE */
+		md_error(mddev, rdev);
+#endif /* MY_ABC_HERE */
+	}
+
+	atomic_dec(&rdev->nr_pending);
+	bio_put(bio);
+	/* Let mount could successful and bad sector could keep accessing, no matter it success or not */
+	bio_endio(orig_bio);
+}
+#endif /* MY_ABC_HERE */
+
 static void linear_make_request(struct mddev *mddev, struct bio *bio)
 {
 	char b[BDEVNAME_SIZE];
 	struct dev_info *tmp_dev;
-	struct bio *split;
 	sector_t start_sector, end_sector, data_offset;
+#ifdef MY_ABC_HERE
+	struct bio *cloned_bio, *orig_bio;
+#endif /* MY_ABC_HERE */
+	sector_t bio_sector = bio->bi_iter.bi_sector;
 
 	if (unlikely(bio->bi_rw & REQ_FLUSH)) {
 		md_flush_request(mddev, bio);
 		return;
 	}
 
-	do {
-		tmp_dev = which_dev(mddev, bio->bi_iter.bi_sector);
-		start_sector = tmp_dev->end_sector - tmp_dev->rdev->sectors;
-		end_sector = tmp_dev->end_sector;
-		data_offset = tmp_dev->rdev->data_offset;
-		bio->bi_bdev = tmp_dev->rdev->bdev;
+#ifdef MY_ABC_HERE
+	/**
+	 * if there has any device offline, we don't make any request to
+	 * our linear md array
+	 */
+#ifdef MY_ABC_HERE
+	if (mddev->nodev_and_crashed) {
+#else /* MY_ABC_HERE */
+	if (mddev->degraded) {
+#endif /* MY_ABC_HERE */
+		bio->bi_error = -EIO;
+		bio_endio(bio);
+		return;
+	}
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	tmp_dev = which_dev(mddev, bio_sector, false);
+#else /* MY_ABC_HERE */
+	tmp_dev = which_dev(mddev, bio_sector);
+#endif /* MY_ABC_HERE */
+	start_sector = tmp_dev->end_sector - tmp_dev->rdev->sectors;
+	end_sector = tmp_dev->end_sector;
+	data_offset = tmp_dev->rdev->data_offset;
 
-		if (unlikely(bio->bi_iter.bi_sector >= end_sector ||
-			     bio->bi_iter.bi_sector < start_sector))
-			goto out_of_bounds;
+	if (unlikely(bio_sector >= end_sector ||
+		     bio_sector < start_sector))
+		goto out_of_bounds;
 
-		if (unlikely(bio_end_sector(bio) > end_sector)) {
-			/* This bio crosses a device boundary, so we have to
-			 * split it.
-			 */
-			split = bio_split(bio, end_sector -
-					  bio->bi_iter.bi_sector,
-					  GFP_NOIO, fs_bio_set);
-			bio_chain(split, bio);
-		} else {
-			split = bio;
+	if (unlikely(bio_end_sector(bio) > end_sector)) {
+		/* This bio crosses a device boundary, so we have to split it */
+		struct bio *split = bio_split(bio, end_sector - bio_sector,
+					      GFP_NOIO, mddev->bio_set);
+		bio_chain(split, bio);
+#ifdef MY_ABC_HERE
+		bio_set_flag(bio, BIO_SEND_SELF);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		bio_set_flag(bio, BIO_DELAYED);
+#endif /* MY_ABC_HERE */
+		generic_make_request(bio);
+		bio = split;
+	}
+
+#ifdef MY_ABC_HERE
+	cloned_bio = bio_clone_mddev(bio, GFP_NOIO, mddev);
+
+	if (cloned_bio) {
+		atomic_inc(&tmp_dev->rdev->nr_pending);
+		cloned_bio->bi_end_io = SynoLinearEndRequest;
+		cloned_bio->bi_private = bio;
+
+		orig_bio = bio;
+		orig_bio->bi_next = (void *)tmp_dev->rdev;
+		bio = cloned_bio;
+	}
+#endif /* MY_ABC_HERE */
+
+	bio->bi_bdev = tmp_dev->rdev->bdev;
+	bio->bi_iter.bi_sector = bio->bi_iter.bi_sector -
+		start_sector + data_offset;
+	if (unlikely((bio->bi_rw & REQ_DISCARD) &&
+		!blk_queue_discard(bdev_get_queue(bio->bi_bdev)))) {
+		/* Just ignore it */
+#ifdef MY_ABC_HERE
+		if (cloned_bio) {
+			atomic_dec(&tmp_dev->rdev->nr_pending);
+			orig_bio->bi_next = bio->bi_next;
+			bio_put(bio);
+			bio = orig_bio;
 		}
-
-		split->bi_iter.bi_sector = split->bi_iter.bi_sector -
-			start_sector + data_offset;
-
-		if (unlikely((split->bi_rw & REQ_DISCARD) &&
-			 !blk_queue_discard(bdev_get_queue(split->bi_bdev)))) {
-			/* Just ignore it */
-			bio_endio(split);
-		} else
-			generic_make_request(split);
-	} while (split != bio);
+#endif /* MY_ABC_HERE */
+		bio_endio(bio);
+	} else {
+		if (mddev->gendisk)
+			trace_block_bio_remap(bdev_get_queue(bio->bi_bdev),
+					      bio, disk_devt(mddev->gendisk),
+					      bio_sector);
+		generic_make_request(bio);
+	}
 	return;
 
 out_of_bounds:
@@ -303,15 +470,181 @@ out_of_bounds:
 	bio_io_error(bio);
 }
 
+#ifdef MY_ABC_HERE
+static void
+syno_linear_status(struct seq_file *seq, struct mddev *mddev)
+{
+	struct linear_conf *conf;
+	struct md_rdev *rdev;
+	int j;
+
+	seq_printf(seq, " %dk rounding", mddev->chunk_sectors / 2);
+	seq_printf(seq, " [%d/%d] [", mddev->raid_disks, mddev->raid_disks - mddev->degraded);
+	rcu_read_lock();
+	conf = rcu_dereference(mddev->private);
+	for (j = 0; j < mddev->raid_disks; j++)
+	{
+		rdev = rcu_dereference(conf->disks[j].rdev);
+#ifdef MY_ABC_HERE
+		if (rdev &&
+			!test_bit(Faulty, &rdev->flags)) {
+#else /* MY_ABC_HERE */
+		if(rdev) {
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+			seq_printf (seq, "%s", 
+						test_bit(In_sync, &rdev->flags) ? 
+						(test_bit(DiskError, &rdev->flags) ? "E" : "U") : "_");
+#else /* MY_ABC_HERE */
+			seq_printf (seq, "%s", "U");
+#endif /* MY_ABC_HERE */
+		} else {
+			seq_printf (seq, "%s", "_");
+		}
+	}
+	rcu_read_unlock();
+	seq_printf (seq, "]");
+}
+#else /* MY_ABC_HERE */
 static void linear_status (struct seq_file *seq, struct mddev *mddev)
 {
 
 	seq_printf(seq, " %dk rounding", mddev->chunk_sectors / 2);
 }
+#endif /* MY_ABC_HERE */
 
 static void linear_quiesce(struct mddev *mddev, int state)
 {
 }
+
+#ifdef MY_ABC_HERE
+static int
+SynoLinearRemoveDisk(struct mddev *mddev, struct md_rdev *rdev)
+{
+	int err = 0;
+	char nm[20];
+	struct linear_conf *conf = mddev->private;
+	int number = rdev->raid_disk;
+
+	if (!rdev) {
+		goto END;
+	}
+
+	/*
+		use the same synchronize method as RAID5
+		see raid5.c:raid5_remove_disk
+	*/
+	conf->disks[number].rdev = NULL;
+	synchronize_rcu();
+	if (atomic_read(&rdev->nr_pending)) {
+		/* lost the race, try later */
+		err = -EBUSY;
+		conf->disks[number].rdev = rdev;
+		goto END;
+	}
+
+	/**
+	 * Linear don't has their own thread, we just remove it's sysfs
+	 * when there has no other pending request
+	 */
+	sprintf(nm,"rd%d", number);
+	sysfs_remove_link(&mddev->kobj, nm);
+	rdev->raid_disk = -1;
+END:
+	return err;
+}
+
+/**
+ * This is our implement for raid handler.
+ * It mainly for handling device hotplug.
+ * We let it look like other raid type.
+ * Set it faulty could let SDK know it's status
+ *
+ * @author \$Author: khchen $
+ * @version \$Revision: 1.1
+ *
+ * @param mddev  Should not be NULL. passing from md.c
+ * @param rdev   Should not be NULL. passing from md.c
+ */
+static void
+SynoLinearError(struct mddev *mddev, struct md_rdev *rdev)
+{
+	char b[BDEVNAME_SIZE];
+	printk(KERN_ALERT
+		"md/raid:%s: Disk failure on %s, disabling device.\n",
+		mdname(mddev), bdevname(rdev->bdev, b));
+	if (test_and_clear_bit(In_sync, &rdev->flags)) {
+		if (mddev->degraded < mddev->raid_disks) {
+			SYNO_UPDATE_SB_WORK *update_sb = NULL;
+			mddev->degraded++;
+#ifdef MY_ABC_HERE
+			if (MD_CRASHED_ASSEMBLE != mddev->nodev_and_crashed) {
+				mddev->nodev_and_crashed = MD_CRASHED;
+			}
+#endif /* MY_ABC_HERE */
+			set_bit(Faulty, &rdev->flags);
+#ifdef MY_ABC_HERE
+			clear_bit(DiskError, &rdev->flags);
+#endif /* MY_ABC_HERE */
+
+			if (NULL == (update_sb = kzalloc(sizeof(SYNO_UPDATE_SB_WORK), GFP_ATOMIC))) {
+				WARN_ON(!update_sb);
+				goto END;
+			}
+
+			INIT_WORK(&update_sb->work, SynoUpdateSBTask);
+			update_sb->mddev = mddev;
+			schedule_work(&update_sb->work);
+			set_bit(MD_CHANGE_DEVS, &mddev->flags);
+		}
+	}
+END:
+	return;
+}
+
+/**
+ * This is our implement for raid handler.
+ * It mainly for mdadm set device faulty. We let it look like
+ * other raid type. Let it become read only (scemd would remount
+ * if it find DiskError)
+ *
+ * You should not sync super block in the same thread, otherwise
+ * would panic.
+ *
+ * @author \$Author: khchen $
+ * @version \$Revision: 1.1  *
+ *
+ * @param mddev  Should not be NULL. passing from md.c
+ * @param rdev   Should not be NULL. passing from md.c
+ */
+static void
+SynoLinearErrorInternal(struct mddev *mddev, struct md_rdev *rdev)
+{
+	char b[BDEVNAME_SIZE];
+	printk(KERN_ALERT
+		"md/raid:%s: Disk failure on %s, disabling device.\n",
+		mdname(mddev), bdevname(rdev->bdev, b));
+#ifdef MY_ABC_HERE
+	if (!test_bit(DiskError, &rdev->flags)) {
+		SYNO_UPDATE_SB_WORK *update_sb = NULL;
+
+		set_bit(DiskError, &rdev->flags);
+		if (NULL == (update_sb = kzalloc(sizeof(SYNO_UPDATE_SB_WORK), GFP_ATOMIC))) {
+			WARN_ON(!update_sb);
+			goto END;
+		}
+
+		INIT_WORK(&update_sb->work, SynoUpdateSBTask);
+		update_sb->mddev = mddev;
+		schedule_work(&update_sb->work);
+		set_bit(MD_CHANGE_DEVS, &mddev->flags);
+	}
+
+END:
+#endif /* MY_ABC_HERE */
+	return;
+}
+#endif /* MY_ABC_HERE */
 
 static struct md_personality linear_personality =
 {
@@ -321,8 +654,17 @@ static struct md_personality linear_personality =
 	.make_request	= linear_make_request,
 	.run		= linear_run,
 	.free		= linear_free,
+#ifdef MY_ABC_HERE
+	.status		= syno_linear_status,
+#else /* MY_ABC_HERE */
 	.status		= linear_status,
+#endif /* MY_ABC_HERE */
 	.hot_add_disk	= linear_add,
+#ifdef MY_ABC_HERE
+	.hot_remove_disk    = SynoLinearRemoveDisk,
+	.error_handler      = SynoLinearErrorInternal,
+	.syno_error_handler = SynoLinearError,
+#endif /* MY_ABC_HERE */
 	.size		= linear_size,
 	.quiesce	= linear_quiesce,
 	.congested	= linear_congested,

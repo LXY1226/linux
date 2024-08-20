@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Functions for working with the Flattened Device Tree data format
  *
@@ -17,6 +20,9 @@
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/of_reserved_mem.h>
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+#include <linux/cma.h>
+#endif
 #include <linux/sizes.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -28,6 +34,154 @@
 
 #include <asm/setup.h>  /* for COMMAND_LINE_SIZE */
 #include <asm/page.h>
+
+#ifdef MY_DEF_HERE
+#include <linux/synolib.h>
+#ifdef MY_ABC_HERE
+extern int gSynoHddPowerupSeq, gSynoInternalHddNumber;
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+extern int giSynoSpinupGroup[SYNO_SPINUP_GROUP_MAX];
+extern int giSynoSpinupGroupNum;
+extern int giSynoSpinupGroupDelay;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+extern int gSynoSmbusHddAdapter;
+extern int gSynoSmbusHddAddress;
+extern char gSynoSmbusHddType[16];
+extern int gSynoSmbusSwitchCount;
+extern int gSynoSmbusSwitchAdapters[SMBUS_SWITCH_MAX_COUNT+1];
+extern int gSynoSmbusSwitchAddrs[SMBUS_SWITCH_MAX_COUNT+1];
+extern int gSynoSmbusSwitchVals[SMBUS_SWITCH_MAX_COUNT+1];
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_ABC_HERE
+void __init syno_init_internal_hdd_number(void)
+{
+	int internalHDDNumber = 0;
+	struct device_node *pSlotNode = NULL;
+	char *szSynoHddPowerupSeq = NULL;
+	szSynoHddPowerupSeq = (char *)of_get_property(of_root, DT_HDD_POWERUP_SEQ, NULL);
+
+	if (szSynoHddPowerupSeq && 0 == strncmp(szSynoHddPowerupSeq, "true", strlen("true"))) {
+		gSynoHddPowerupSeq = 1;
+
+		for_each_child_of_node(of_root, pSlotNode) {
+			// get index number of internal_slot, e.g. /internal_slot@4 --> 4
+			if (!pSlotNode->full_name || 0 != strncmp(pSlotNode->full_name, "/"DT_INTERNAL_SLOT, strlen("/"DT_INTERNAL_SLOT))) {
+				continue;
+			}
+			internalHDDNumber++;
+		}
+		gSynoInternalHddNumber = internalHDDNumber;
+	}
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+void __init syno_init_spinup_group(void)
+{
+	int group_num = 0, retReadDT = 0, spinupGroupMemberNum = 0, spinupGroupDelay = 0;
+	for (group_num = 0; group_num < sizeof(giSynoSpinupGroup)/sizeof(int); group_num++) {
+		retReadDT = of_property_read_u32_index(of_root, DT_SYNO_SPINUP_GROUP, group_num, &spinupGroupMemberNum);
+		// if reading DT error, this means that reading to the end of spinup_group or no spinup_group
+		if (retReadDT) {
+			break;
+		}
+		giSynoSpinupGroup[group_num] = spinupGroupMemberNum;
+		printk("SYNO Spinup Group %d: %d\n", group_num, giSynoSpinupGroup[group_num]);
+	}
+	giSynoSpinupGroupNum = group_num;
+
+	retReadDT = of_property_read_u32_index(of_root, DT_SYNO_SPINUP_GROUP_DELAY, 0, &spinupGroupDelay);
+	if (0 == retReadDT) {
+		giSynoSpinupGroupDelay = spinupGroupDelay;
+		printk("SYNO Spinup Group Delay: %d\n", giSynoSpinupGroupDelay);
+	}
+}
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+void __init syno_init_smbus_hdd_pwrctl(void)
+{
+	int retReadDT = 0;
+	int smbushddadapter = 0;
+	int smbushddaddress = 0;
+	char *smbushddtype = NULL;
+	int i;
+	int smbusSwitchAdapter = 0;
+	int smbusSwitchAddr = 0;
+	int smbusSwitchVal = 0;
+
+	smbushddtype = (char *)of_get_property(of_root, DT_SYNO_HDD_SMBUS_TYPE, NULL);
+
+
+	if (smbushddtype != NULL) {
+		snprintf(gSynoSmbusHddType, sizeof(gSynoSmbusHddType), "%s", smbushddtype);
+		printk("SYNO Smbus Hdd Type: %s\n", gSynoSmbusHddType);
+	}
+
+	retReadDT = of_property_read_u32_index(of_root, DT_SYNO_HDD_SMBUS_ADAPTER, 0, &smbushddadapter);
+	if (0 == retReadDT) {
+		gSynoSmbusHddAdapter = smbushddadapter;
+		printk("SYNO Smbus Hdd Adapter: %d\n", gSynoSmbusHddAdapter);
+	}
+
+	retReadDT = of_property_read_u32_index(of_root, DT_SYNO_HDD_SMBUS_ADDRESS, 0, &smbushddaddress);
+	if (0 == retReadDT) {
+		gSynoSmbusHddAddress = smbushddaddress;
+		printk("SYNO Smbus Hdd Address: 0x%02x\n", gSynoSmbusHddAddress);
+	}
+	// set the smbus switch settings to open the switches early
+	// the last position in the array is used to handle the errors
+	// note:
+	//     gSynoSmbusSwitchCount is used to record the last index. When there is
+	//     an error occurs, it means the array size is stop here, and therefore 
+	//     gSynoSmbusSwitchCount is updated at that moment. After the update,  
+	//     break the for loop.
+	for (i = 0;i <= SMBUS_SWITCH_MAX_COUNT;i++){
+		retReadDT = of_property_read_u32_index(of_root, DT_SYNO_SMBUS_SWITCH_ADAPTERS, i, &smbusSwitchAdapter);
+		if (0 == retReadDT) {
+			// if the number of switches are more than the maximum setting
+			if (i == SMBUS_SWITCH_MAX_COUNT){
+				printk(KERN_ERR "Smbus switch settings are more than %d. The rest of settings will not be applied.\n",
+					SMBUS_SWITCH_MAX_COUNT);
+				gSynoSmbusSwitchCount = i;
+				break;
+			}
+			gSynoSmbusSwitchAdapters[i] = smbusSwitchAdapter;
+			printk("SYNO Smbus Switch Adapter[%d]: %d\n", i, gSynoSmbusSwitchAdapters[i]);
+		} else {
+			gSynoSmbusSwitchCount = i;
+			printk("System reads %d pairs of smbus configs", i);
+			break;
+		}
+		retReadDT = of_property_read_u32_index(of_root, DT_SYNO_SMBUS_SWITCH_ADDRS, i, &smbusSwitchAddr);
+		if (0 == retReadDT) {
+			gSynoSmbusSwitchAddrs[i] = smbusSwitchAddr;
+			printk("SYNO Smbus Switch Addr[%d]: 0x%02x\n", i, gSynoSmbusSwitchAddrs[i]);
+		} else {
+			gSynoSmbusSwitchCount = i;
+			printk("SYNO Smbus Switch Addr[%d] loads fail, please check\n", i);
+			break;
+		}
+		retReadDT = of_property_read_u32_index(of_root, DT_SYNO_SMBUS_SWITCH_VALS, i, &smbusSwitchVal);
+		if (0 == retReadDT) {
+			gSynoSmbusSwitchVals[i] = smbusSwitchVal;
+			printk("SYNO Smbus Switch Val[%d]: 0x%02x\n", i, gSynoSmbusSwitchVals[i]);
+		} else {
+			gSynoSmbusSwitchCount = i;
+			printk("SYNO Smbus Switch Val[%d] loads fail, please check\n", i);
+			break;
+		}
+	}
+	gSynoSmbusSwitchAdapters[gSynoSmbusSwitchCount] = -1;
+	gSynoSmbusSwitchAddrs[gSynoSmbusSwitchCount] = 0;
+	gSynoSmbusSwitchVals[gSynoSmbusSwitchCount] = 0xff;
+	return;
+}
+#endif /*MY_DEF_HERE */
+#endif /* MY_DEF_HERE */
 
 /*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
@@ -588,6 +742,13 @@ void __init early_init_fdt_scan_reserved_mem(void)
 	if (!initial_boot_params)
 		return;
 
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+	/* Reserve the dtb region */
+	early_init_dt_reserve_memory_arch(__pa(initial_boot_params),
+					  fdt_totalsize(initial_boot_params),
+					  0);
+#endif
+
 	/* Process header /memreserve/ fields */
 	for (n = 0; ; n++) {
 		fdt_get_mem_rsv(initial_boot_params, n, &base, &size);
@@ -797,6 +958,55 @@ static inline void early_init_dt_check_for_initrd(unsigned long node)
 {
 }
 #endif /* CONFIG_BLK_DEV_INITRD */
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+extern of_cma_info_t of_cma_info;
+static inline void early_init_dt_check_for_cma(unsigned long node)
+{
+	int i, len;
+	const __be32 *prop;
+
+	pr_debug("Looking for cma properties... ");
+
+	// init data
+	memset(&of_cma_info, 0, sizeof(of_cma_info_t)) ;
+	of_cma_info.region_enable = 0;
+	of_cma_info.region_cnt = 0;
+
+	prop = of_get_flat_dt_prop(node, "cma-region-enable", &len);
+	if (prop) {
+		of_cma_info.region_enable = of_read_number(prop, len/4);
+	}
+	pr_debug("of_cma_info.region_enable %d\n", of_cma_info.region_enable);
+
+	prop = of_get_flat_dt_prop(node, "cma-region-info", &len);
+	if (prop) {
+		int array_size;
+		array_size = len / (sizeof(u32)*CMA_REGION_COLUMN);
+		of_cma_info.region_cnt = array_size = min(array_size,MAX_CMA_AREAS);
+		for (i=0; i<array_size; i++) {
+			of_cma_info.region[i].flag = of_read_number(prop, 1 + (i*CMA_REGION_COLUMN));
+			of_cma_info.region[i].size = of_read_number(prop, 2 + (i*CMA_REGION_COLUMN));
+			of_cma_info.region[i].size = of_cma_info.region[i].size & 0xFFFFFFFF; // work around
+            of_cma_info.region[i].base = of_read_number(prop, 3 + (i*CMA_REGION_COLUMN));
+            of_cma_info.region[i].base = of_cma_info.region[i].base & 0xFFFFFFFF; // work around
+			pr_debug("region_cnt.region[%d] { 0x%08x, 0x%016llx, 0x%016llx }\n", i,
+				of_cma_info.region[i].flag,
+				of_cma_info.region[i].size,
+				of_cma_info.region[i].base);
+			pr_debug("region_cnt.region[%d] { 0x%08x, %pa, %pa }\n", i,
+				of_cma_info.region[i].flag,
+				&(of_cma_info.region[i].size),
+				&(of_cma_info.region[i].base));
+		}
+	}
+}
+#else
+static inline void early_init_dt_check_for_cma(unsigned long node)
+{
+	pr_debug("#CONFIG_CMA_AREA is not set\n");
+}
+#endif
+
 
 #ifdef CONFIG_SERIAL_EARLYCON
 extern struct of_device_id __earlycon_of_table[];
@@ -941,20 +1151,82 @@ int __init early_init_dt_scan_memory(unsigned long node, const char *uname,
 	return 0;
 }
 
+#ifdef MY_DEF_HERE
+/*
+ * Convert configs to something easy to use in C code
+ */
+#if defined(CONFIG_CMDLINE_FORCE)
+static const int overwrite_incoming_cmdline = 1;
+static const int read_dt_cmdline;
+static const int concat_cmdline;
+#elif defined(CONFIG_CMDLINE_EXTEND)
+static const int overwrite_incoming_cmdline;
+static const int read_dt_cmdline = 1;
+static const int concat_cmdline = 1;
+#else /* CMDLINE_FROM_BOOTLOADER */
+static const int overwrite_incoming_cmdline;
+static const int read_dt_cmdline = 1;
+static const int concat_cmdline;
+#endif
+
+#ifdef CONFIG_CMDLINE
+static const char *config_cmdline = CONFIG_CMDLINE;
+#else
+static const char *config_cmdline = "";
+#endif
+#endif /* MY_DEF_HERE */
+
 int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 				     int depth, void *data)
 {
+#ifdef MY_DEF_HERE
+	int l = 0;
+	const char *p = NULL;
+	char *cmdline = data;
+#else /* MY_DEF_HERE */
 	int l;
 	const char *p;
+#endif /* MY_DEF_HERE */
 
 	pr_debug("search \"chosen\", depth: %d, uname: %s\n", depth, uname);
 
+#ifdef MY_DEF_HERE
+	if (depth != 1 || !cmdline ||
+#else /* MY_DEF_HERE */
 	if (depth != 1 || !data ||
+#endif /* MY_DEF_HERE */
 	    (strcmp(uname, "chosen") != 0 && strcmp(uname, "chosen@0") != 0))
 		return 0;
 
 	early_init_dt_check_for_initrd(node);
 
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+	early_init_dt_check_for_cma(node);
+#endif
+#ifdef MY_DEF_HERE
+	/* Put CONFIG_CMDLINE in if forced or if data had nothing in it to start */
+	if (overwrite_incoming_cmdline || !cmdline[0])
+		strlcpy(cmdline, config_cmdline, COMMAND_LINE_SIZE);
+
+	/* Retrieve command line unless forcing */
+	if (read_dt_cmdline)
+		p = of_get_flat_dt_prop(node, "bootargs", &l);
+
+	if (p != NULL && l > 0) {
+		if (concat_cmdline) {
+			int cmdline_len;
+			int copy_len;
+			strlcat(cmdline, " ", COMMAND_LINE_SIZE);
+			cmdline_len = strlen(cmdline);
+			copy_len = COMMAND_LINE_SIZE - cmdline_len - 1;
+			copy_len = min((int)l, copy_len);
+			strncpy(cmdline + cmdline_len, p, copy_len);
+			cmdline[cmdline_len + copy_len] = '\0';
+		} else {
+			strlcpy(cmdline, p, min((int)l, COMMAND_LINE_SIZE));
+		}
+	}
+#else /* MY_DEF_HERE */
 	/* Retrieve command line */
 	p = of_get_flat_dt_prop(node, "bootargs", &l);
 	if (p != NULL && l > 0)
@@ -971,6 +1243,7 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 #endif
 		strlcpy(data, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
 #endif /* CONFIG_CMDLINE */
+#endif /* MY_DEF_HERE */
 
 	pr_debug("Command line is: %s\n", (char*)data);
 
@@ -1117,6 +1390,18 @@ void __init unflatten_device_tree(void)
 
 	/* Get pointer to "/chosen" and "/aliases" nodes for use everywhere */
 	of_alias_scan(early_init_dt_alloc_memory_arch);
+
+#ifdef MY_DEF_HERE
+#ifdef MY_DEF_HERE
+	syno_init_spinup_group();
+#endif /* MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+	syno_init_internal_hdd_number();
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	syno_init_smbus_hdd_pwrctl();
+#endif /* MY_DEF_HERE */
+#endif /* MY_DEF_HERE && MY_DEF_HERE */
 }
 
 /**
@@ -1135,6 +1420,7 @@ void __init unflatten_and_copy_device_tree(void)
 	int size;
 	void *dt;
 
+
 	if (!initial_boot_params) {
 		pr_warn("No valid device tree found, continuing without\n");
 		return;
@@ -1152,6 +1438,12 @@ void __init unflatten_and_copy_device_tree(void)
 }
 
 #ifdef CONFIG_SYSFS
+#if defined(CONFIG_X86) && defined(MY_DEF_HERE)
+static int __init of_fdt_raw_init(void)
+{
+	return 0;
+}
+#else /* CONFIG_X86 && MY_DEF_HERE*/
 static ssize_t of_fdt_raw_read(struct file *filp, struct kobject *kobj,
 			       struct bin_attribute *bin_attr,
 			       char *buf, loff_t off, size_t count)
@@ -1176,6 +1468,7 @@ static int __init of_fdt_raw_init(void)
 	of_fdt_raw_attr.size = fdt_totalsize(initial_boot_params);
 	return sysfs_create_bin_file(firmware_kobj, &of_fdt_raw_attr);
 }
+#endif /* CONFIG_X86 && MY_DEF_HERE*/
 late_initcall(of_fdt_raw_init);
 #endif
 

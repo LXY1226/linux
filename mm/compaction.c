@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * linux/mm/compaction.c
  *
@@ -1701,7 +1704,11 @@ static void compact_node(int nid)
 }
 
 /* Compact all nodes in the system */
+#ifdef MY_ABC_HERE
+void compact_nodes(void)
+#else /* MY_ABC_HERE */
 static void compact_nodes(void)
+#endif /* MY_ABC_HERE */
 {
 	int nid;
 
@@ -1711,6 +1718,9 @@ static void compact_nodes(void)
 	for_each_online_node(nid)
 		compact_node(nid);
 }
+#ifdef MY_ABC_HERE
+EXPORT_SYMBOL(compact_nodes);
+#endif /* MY_ABC_HERE */
 
 /* The written value is actually unused, all memory is compacted */
 int sysctl_compact_memory;

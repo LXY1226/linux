@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_MATH64_H
 #define _LINUX_MATH64_H
 
@@ -242,5 +245,23 @@ static inline u64 mul_u64_u32_div(u64 a, u32 mul, u32 divisor)
 	return rl.ll;
 }
 #endif /* mul_u64_u32_div */
+
+#ifdef MY_ABC_HERE
+static inline u64 mod_u64_rem64(u64 dividend, u64 divisor)
+{
+#ifdef CONFIG_32BIT
+        if (dividend < divisor) {
+                return dividend;
+        } else if (dividend == divisor) {
+                return (u64)0;
+        }
+
+        return dividend - (div64_u64(dividend, divisor) * divisor);
+#else
+        return dividend % divisor;
+#endif
+}
+#endif /* MY_ABC_HERE */
+
 
 #endif /* _LINUX_MATH64_H */

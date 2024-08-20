@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2003-2006, Cluster File Systems, Inc, info@clusterfs.com
  * Written by Alex Tomas <alex@clusterfs.com>
@@ -481,8 +484,18 @@ static int __ext4_ext_check(const char *function, unsigned int line,
 	if (ext_depth(inode) != depth &&
 	    !ext4_extent_block_csum_verify(inode, eh)) {
 		error_msg = "extent tree corrupted";
+#ifdef MY_ABC_HERE
+		ext4_msg(inode->i_sb, KERN_CRIT,
+			" %s:%d: inode#%lu: bad header/extent: %s - magic %x, "
+			"entries %u, max %u(%u), depth %u(%u)",
+			function, line, inode->i_ino,
+			error_msg, le16_to_cpu(eh->eh_magic),
+			le16_to_cpu(eh->eh_entries), le16_to_cpu(eh->eh_max),
+			max, le16_to_cpu(eh->eh_depth), depth);
+#else
 		err = -EFSBADCRC;
 		goto corrupted;
+#endif /* MY_ABC_HERE */
 	}
 	return 0;
 
@@ -2179,10 +2192,20 @@ cleanup:
 	kfree(npath);
 	return err;
 }
+#ifdef MY_ABC_HERE
+static int rbd_meta_fill_next_extent(struct syno_rbd_meta_ioctl_args *args,
+				     u64 next_start, u64 phys, u64 len,
+				     u32 flags);
+#endif /* MY_ABC_HERE */
+
 
 static int ext4_fill_fiemap_extents(struct inode *inode,
 				    ext4_lblk_t block, ext4_lblk_t num,
-				    struct fiemap_extent_info *fieinfo)
+				    struct fiemap_extent_info *fieinfo
+#ifdef MY_ABC_HERE
+				    , struct syno_rbd_meta_ioctl_args *rbd_meta
+#endif /* MY_ABC_HERE */
+				    )
 {
 	struct ext4_ext_path *path = NULL;
 	struct ext4_extent *ex;
@@ -2307,7 +2330,11 @@ static int ext4_fill_fiemap_extents(struct inode *inode,
 			}
 		}
 
-		if (exists) {
+		if (exists
+#ifdef MY_ABC_HERE
+		    && fieinfo
+#endif /* MY_ABC_HERE */
+		    ) {
 			err = fiemap_fill_next_extent(fieinfo,
 				(__u64)es.es_lblk << blksize_bits,
 				(__u64)es.es_pblk << blksize_bits,
@@ -2320,6 +2347,27 @@ static int ext4_fill_fiemap_extents(struct inode *inode,
 				break;
 			}
 		}
+#ifdef MY_ABC_HERE
+		if (rbd_meta) {
+			if (!exists) {
+				printk(KERN_WARNING
+				"rbd meta file must not have holes\n");
+				err = -EOPNOTSUPP;
+				break;
+			}
+			err = rbd_meta_fill_next_extent(rbd_meta,
+				((__u64)es.es_lblk + (__u64)es.es_len) << blksize_bits,
+				(__u64)es.es_pblk << blksize_bits,
+				(__u64)es.es_len << blksize_bits,
+				flags);
+			if (err < 0)
+				break;
+			if (err == 1) {
+				err = 0;
+				break;
+			}
+		}
+#endif /* MY_ABC_HERE */
 
 		block = es.es_lblk + es.es_len;
 	}
@@ -2328,6 +2376,88 @@ static int ext4_fill_fiemap_extents(struct inode *inode,
 	kfree(path);
 	return err;
 }
+
+#ifdef MY_ABC_HERE
+#define VALID_FIEMAP_FLAG_ON_RBD_META	(FIEMAP_EXTENT_UNWRITTEN | \
+					 FIEMAP_EXTENT_LAST)
+
+static int rbd_meta_fill_next_extent(struct syno_rbd_meta_ioctl_args *args,
+				     u64 next_start, u64 phys, u64 len,
+				     u32 flags)
+{
+	unsigned long long idx = args->cnt;
+	unsigned long long max_cnt;
+
+	if (flags & ~(VALID_FIEMAP_FLAG_ON_RBD_META)) {
+		printk(KERN_WARNING
+		       "rbd meta with invalid fiemap flag %u\n", flags);
+		return -EINVAL;
+	}
+
+	if (args->act == SYNO_RBD_META_MAPPING) {
+		max_cnt = (args->size - sizeof(struct syno_rbd_meta_ioctl_args)) /
+			sizeof(struct syno_rbd_meta_file_mapping);
+		if ((idx + 1) > max_cnt)
+			return 1;
+
+		args->mappings[idx].length = len;
+		args->mappings[idx].dev_offset = phys;
+	}
+	if (flags & FIEMAP_EXTENT_LAST)
+		args->start = (u64) -1;
+	else
+		args->start = next_start;
+	args->cnt++;
+	return 0;
+}
+
+int ext4_rbd_meta_file_mapping(struct inode *inode,
+			struct syno_rbd_meta_ioctl_args *args)
+{
+	int ret;
+	unsigned char blksize_bits = inode->i_sb->s_blocksize_bits;
+	ext4_lblk_t start_blk;
+	ext4_lblk_t len_blks;
+	__u64 last;
+	u64 isize;
+
+	if (args->start == (u64)-1)
+		return -EINVAL;
+
+	filemap_write_and_wait(inode->i_mapping);
+
+	if (ext4_has_inline_data(inode)) {
+		printk(KERN_WARNING "rbd meta file must not inline\n");
+		return -EINVAL;
+	}
+	if (!(ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))) {
+		printk(KERN_WARNING "only support extent inode on rbd meta file\n");
+		return -EOPNOTSUPP;
+	}
+
+	isize = ALIGN_DOWN(inode->i_size, (1ULL << blksize_bits));
+	if (!isize)
+		return -EINVAL;
+	if (args->start >= isize) {
+		args->cnt = 0;
+		args->start = (u64) -1;
+		return 0;
+	}
+
+	start_blk = args->start >> blksize_bits;
+	last = (isize - 1) >> blksize_bits;
+	if (last >= EXT_MAX_BLOCKS)
+		last = EXT_MAX_BLOCKS - 1;
+	len_blks = ((ext4_lblk_t) last) - start_blk + 1;
+
+	args->cnt = 0;
+	ret = ext4_fill_fiemap_extents(inode, start_blk,
+				       len_blks, NULL, args);
+	if (!ret && args->start != (u64) -1 && args->start >= isize)
+		args->start = (u64) -1;
+	return ret;
+}
+#endif /* MY_ABC_HERE */
 
 /*
  * ext4_ext_put_gap_in_cache:
@@ -4840,7 +4970,7 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 	else
 		max_blocks -= lblk;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	/*
 	 * Indirect files do not support unwritten extnets
@@ -4946,7 +5076,7 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 out_dio:
 	ext4_inode_resume_unlocked_dio(inode);
 out_mutex:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return ret;
 }
 
@@ -5017,7 +5147,7 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	if (mode & FALLOC_FL_KEEP_SIZE)
 		flags |= EXT4_GET_BLOCKS_KEEP_SIZE;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	/*
 	 * We only support preallocation for extent-based files only
@@ -5051,7 +5181,7 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 						EXT4_I(inode)->i_sync_tid);
 	}
 out:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	trace_ext4_fallocate_exit(inode, offset, max_blocks, ret);
 	return ret;
 }
@@ -5260,7 +5390,11 @@ int ext4_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		 * and pushing extents back to the user.
 		 */
 		error = ext4_fill_fiemap_extents(inode, start_blk,
-						 len_blks, fieinfo);
+						 len_blks, fieinfo
+#ifdef MY_ABC_HERE
+						 , NULL
+#endif /* MY_ABC_HERE */
+						 );
 	}
 	return error;
 }
@@ -5552,7 +5686,7 @@ int ext4_collapse_range(struct inode *inode, loff_t offset, loff_t len)
 			return ret;
 	}
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	/*
 	 * There is no need to overlap collapse range with EOF, in which case
 	 * it is effectively a truncate operation
@@ -5648,7 +5782,7 @@ out_mmap:
 	up_write(&EXT4_I(inode)->i_mmap_sem);
 	ext4_inode_resume_unlocked_dio(inode);
 out_mutex:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return ret;
 }
 
@@ -5699,7 +5833,7 @@ int ext4_insert_range(struct inode *inode, loff_t offset, loff_t len)
 			return ret;
 	}
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	/* Currently just for extent based files */
 	if (!ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
 		ret = -EOPNOTSUPP;
@@ -5823,7 +5957,7 @@ out_mmap:
 	up_write(&EXT4_I(inode)->i_mmap_sem);
 	ext4_inode_resume_unlocked_dio(inode);
 out_mutex:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return ret;
 }
 
@@ -5858,8 +5992,8 @@ ext4_swap_extents(handle_t *handle, struct inode *inode1,
 
 	BUG_ON(!rwsem_is_locked(&EXT4_I(inode1)->i_data_sem));
 	BUG_ON(!rwsem_is_locked(&EXT4_I(inode2)->i_data_sem));
-	BUG_ON(!mutex_is_locked(&inode1->i_mutex));
-	BUG_ON(!mutex_is_locked(&inode2->i_mutex));
+	BUG_ON(!inode_is_locked(inode1));
+	BUG_ON(!inode_is_locked(inode2));
 
 	*erp = ext4_es_remove_extent(inode1, lblk1, count);
 	if (unlikely(*erp))

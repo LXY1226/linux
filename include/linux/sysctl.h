@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * sysctl.h: General linux system control interface
  *
@@ -57,6 +60,14 @@ extern int proc_doulongvec_ms_jiffies_minmax(struct ctl_table *table, int,
 				      void __user *, size_t *, loff_t *);
 extern int proc_do_large_bitmap(struct ctl_table *, int,
 				void __user *, size_t *, loff_t *);
+#if defined (MY_ABC_HERE) || defined(MY_DEF_HERE)
+extern int SynoProcDoStringVec(struct ctl_table *, int,
+		                void __user *, size_t *, loff_t *);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+extern int SynoProcDoIntVec(struct ctl_table *, int,
+	void __user *, size_t *, loff_t *);
+#endif /* MY_DEF_HERE */
 
 /*
  * Register a set of sysctl names by calling register_sysctl_table

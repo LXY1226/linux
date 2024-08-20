@@ -268,7 +268,7 @@ static int bt_get(struct blk_mq_alloc_data *data,
 	if (tag != -1)
 		return tag;
 
-	if (!gfpflags_allow_blocking(data->gfp))
+	if (data->flags & BLK_MQ_REQ_NOWAIT)
 		return -1;
 
 	bs = bt_wait_ptr(bt, hctx);
@@ -303,7 +303,7 @@ static int bt_get(struct blk_mq_alloc_data *data,
 		data->ctx = blk_mq_get_ctx(data->q);
 		data->hctx = data->q->mq_ops->map_queue(data->q,
 				data->ctx->cpu);
-		if (data->reserved) {
+		if (data->flags & BLK_MQ_REQ_RESERVED) {
 			bt = &data->hctx->tags->breserved_tags;
 		} else {
 			last_tag = &data->ctx->last_tag;
@@ -349,10 +349,9 @@ static unsigned int __blk_mq_get_reserved_tag(struct blk_mq_alloc_data *data)
 
 unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 {
-	if (!data->reserved)
-		return __blk_mq_get_tag(data);
-
-	return __blk_mq_get_reserved_tag(data);
+	if (data->flags & BLK_MQ_REQ_RESERVED)
+		return __blk_mq_get_reserved_tag(data);
+	return __blk_mq_get_tag(data);
 }
 
 static struct bt_wait_state *bt_wake_ptr(struct blk_mq_bitmap_tags *bt)
@@ -474,6 +473,18 @@ void blk_mq_all_tag_busy_iter(struct blk_mq_tags *tags, busy_tag_iter_fn *fn,
 			false);
 }
 EXPORT_SYMBOL(blk_mq_all_tag_busy_iter);
+
+void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
+		busy_tag_iter_fn *fn, void *priv)
+{
+	int i;
+
+	for (i = 0; i < tagset->nr_hw_queues; i++) {
+		if (tagset->tags && tagset->tags[i])
+			blk_mq_all_tag_busy_iter(tagset->tags[i], fn, priv);
+	}
+}
+EXPORT_SYMBOL(blk_mq_tagset_busy_iter);
 
 void blk_mq_queue_tag_busy_iter(struct request_queue *q, busy_iter_fn *fn,
 		void *priv)

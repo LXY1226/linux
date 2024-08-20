@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  This file contains work-arounds for many known PCI hardware
  *  bugs.  Devices present only on certain architectures (host
@@ -28,6 +31,59 @@
 #include <asm/dma.h>	/* isa_dma_bridge_buggy */
 #include "pci.h"
 
+#if defined(MY_ABC_HERE)
+#define _8M	0x00800000
+#define _64M	0x04000000
+#define MV_PCI_BAR_1	2
+#define MV_PCI_BAR_2	4
+
+/* On some Marvell switches, announced BAR size are incorrect and too big to
+ * fit to the pcie aperture (e.g. BAR2 on some of those systems reports 2GB).
+ * Therefore ignore those BARs and assign resources only for correct BARs.
+ * The BAR0 is always correct and allows to reconfigure corrupted BAR1 and/or
+ * BAR2 size
+ */
+static void quirk_ignore_msys_bar(struct pci_dev *dev)
+{
+	int bar2_size;
+
+	switch (dev->device) {
+	case PCI_DEVICE_ID_MARVELL_BOBCAT2:
+		bar2_size = _64M;
+		break;
+	case PCI_DEVICE_ID_MARVELL_ALLEYCAT3:
+		bar2_size = _8M;
+		break;
+	default:
+		return;
+	}
+
+	/* Don't try to assign any of the broken BARs. */
+	if (resource_size(&dev->resource[MV_PCI_BAR_2]) != bar2_size) {
+		dev_info(&dev->dev, "BAR %d size: %pR is corrupted - skipping\n",
+			 MV_PCI_BAR_2, &dev->resource[MV_PCI_BAR_2]);
+
+		dev->resource[MV_PCI_BAR_2].start = 0;
+		dev->resource[MV_PCI_BAR_2].end = 0;
+		dev->resource[MV_PCI_BAR_2].flags = 0;
+	}
+
+	if (resource_size(&dev->resource[MV_PCI_BAR_1]) != _64M) {
+		dev_info(&dev->dev, "BAR %d size: %pR is corrupted - skipping\n",
+			 MV_PCI_BAR_1, &dev->resource[MV_PCI_BAR_1]);
+
+		dev->resource[MV_PCI_BAR_2].start = 0;
+		dev->resource[MV_PCI_BAR_2].end = 0;
+		dev->resource[MV_PCI_BAR_1].flags = 0;
+	}
+}
+
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_MARVELL, PCI_DEVICE_ID_MARVELL_ALLEYCAT3,
+			 quirk_ignore_msys_bar);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_MARVELL, PCI_DEVICE_ID_MARVELL_BOBCAT2,
+			 quirk_ignore_msys_bar);
+#endif /* MY_ABC_HERE */
+
 /*
  * Decoding should be disabled for a PCI device during BAR sizing to avoid
  * conflict. But doing so may cause problems on host bridge and perhaps other
@@ -40,6 +96,9 @@ static void quirk_mmio_always_on(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_ANY_ID, PCI_ANY_ID,
 				PCI_CLASS_BRIDGE_HOST, 8, quirk_mmio_always_on);
+#ifdef MY_DEF_HERE
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x2934, quirk_mmio_always_on);
+#endif /* MY_DEF_HERE */
 
 /* The Mellanox Tavor device gives false positive parity errors
  * Mark this device with a broken_parity_status, to allow
@@ -1641,6 +1700,18 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_PXH_0,	quirk_pc
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_PXH_1,	quirk_pcie_pxh);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_PXHV,	quirk_pcie_pxh);
 
+#ifdef MY_DEF_HERE
+static void syno_quirk_pcie_msi(struct pci_dev *dev)
+{
+	dev->no_msi = 1;
+	dev_warn(&dev->dev, "syno quirk detected Vendor ID:0x%04hx, Device ID:0x%04hx; MSI disabled\n", dev->vendor, dev->device);
+}
+#ifdef MY_DEF_HERE
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_REALTEK,	PCI_DEVICE_ID_REALTEK_8168,	syno_quirk_pcie_msi);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_ASMEDIA,	PCI_DEVICE_ID_ASMEDIA_1061,	syno_quirk_pcie_msi);
+#endif /* MY_DEF_HERE */
+#endif /* MY_DEF_HERE */
+
 /*
  * Some Intel PCI Express chipsets have trouble with downstream
  * device power management.
@@ -3129,6 +3200,183 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CHELSIO, 0x0030,
 			 quirk_broken_intx_masking);
 DECLARE_PCI_FIXUP_HEADER(0x1814, 0x0601, /* Ralink RT2800 802.11n PCI */
 			 quirk_broken_intx_masking);
+
+#ifdef MY_ABC_HERE
+/*
+ * Marvell provide PCI Programming steps for 88SE9235 without SPI flash
+ * to slove some compatibility issue.
+ *
+ * The reference document is put in SynoStorage
+ *     HW_Docs\datasheets_Roadmaps\SATA\marvell\SATA6g_88SE923x\software\
+ *     Marvell_SE92159235_NonSPI__flash_Support_App_Note_r1.0.doc
+ */
+static void mv9235_non_spi_programming(struct pci_dev *dev)
+{
+	void __iomem *bar5;
+
+	bar5 = ioremap(pci_resource_start(dev, 5), pci_resource_len(dev, 5));
+	if (!bar5) {
+		dev_warn(&dev->dev, "Can't map mv9235 registers\n");
+		return;
+	}
+
+	dev_info(&dev->dev, "Apply mv9235 specific programming steps\n");
+
+	// sata port0-interrupt boundary of command
+	writel(0x00000104, bar5+0x178);
+	ndelay(80);
+	// Disable the interrupt blocking; port interrupt coalescing count
+	writel(0x00500B03, bar5+0x17C);
+	ndelay(80);
+	// sata port1-interrupt boundary of command
+	writel(0x00000104, bar5+0x1F8);
+	ndelay(80);
+	// Disable the interrupt blocking; port interrupt coalescing count
+	writel(0x00500B03, bar5+0x1FC);
+	ndelay(80);
+	// sata port2-interrupt boundary of command
+	writel(0x00000104, bar5+0x278);
+	ndelay(80);
+	// Disable the interrupt blocking; port interrupt coalescing count
+	writel(0x00500B03, bar5+0x27C);
+	ndelay(80);
+	// sata port3-interrupt boundary of command
+	writel(0x00000104, bar5+0x2F8);
+	ndelay(80);
+	// Disable the interrupt blocking; port interrupt coalescing count
+	writel(0x00500B03, bar5+0x2FC);
+	ndelay(80);
+	// 6G drives issue/HW CC
+	writel(0x0000001C, bar5+0xA0);
+	ndelay(80);
+	writel(0x00935038, bar5+0xA4);
+	ndelay(80);
+	// SSC parameter calculate in PLL CTL2
+	writel(0x0000000C, bar5+0xA0);
+	ndelay(80);
+	writel(0xA5A58757, bar5+0xA4);
+	ndelay(80);
+	// SSC parameter calculate in PLL CTL1
+	writel(0x00000008, bar5+0xA0);
+	ndelay(80);
+	writel(0x0001388F, bar5+0xA4);
+	ndelay(80);
+}
+DECLARE_PCI_FIXUP_FINAL(0x1b4b, 0x9235, mv9235_non_spi_programming);
+DECLARE_PCI_FIXUP_FINAL(0x1b4b, 0x9215, mv9235_non_spi_programming);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+/*
+ * Marvell provide PCI Programming steps for 88SE9170 without SPI flash
+ * to slove some compatibility issue.
+ */
+static void mv9170_non_spi_programming(struct pci_dev *dev)
+{
+	void __iomem *bar5;
+
+	bar5 = ioremap(pci_resource_start(dev, 5), pci_resource_len(dev, 5));
+	if (!bar5) {
+		dev_warn(&dev->dev, "Can't map mv9170 registers\n");
+		return;
+	}
+
+	dev_info(&dev->dev, "Apply mv9170 specific programming steps\n");
+
+	//port0-GEN1
+	writel(0x0000008D, bar5+0x178);
+	ndelay(80);
+	writel(0x0000C962, bar5+0x17C);
+	ndelay(80);
+	//port1-GEN1
+	writel(0x0000008D, bar5+0x1F8);
+	ndelay(80);
+	writel(0x0000C962, bar5+0x1FC);
+	ndelay(80);
+	//port0-GEN3
+	writel(0x00000091, bar5+0x178);
+	ndelay(80);
+	writel(0x00000E75, bar5+0x17C);
+	ndelay(80);
+	//port1-GEN3
+	writel(0x00000091, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00000E75, bar5+0x1FC);
+	ndelay(80);
+	//port0-password
+	writel(0x000000A2, bar5+0x178);
+	ndelay(80);
+	writel(0x00000046, bar5+0x17C);
+	ndelay(80);
+	//port1-password
+	writel(0x000000A2, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00000046, bar5+0x1FC);
+	ndelay(80);
+	//port0-ffe-isel
+	writel(0x000000ED, bar5+0x178);
+	ndelay(80);
+	writel(0x00002400, bar5+0x17C);
+	ndelay(80);
+	//port1-ffe-isel
+	writel(0x000000ED, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00002400, bar5+0x1FC);
+	ndelay(80);
+	//port0-sampler-scale
+	writel(0x000000DB, bar5+0x178);
+	ndelay(80);
+	writel(0x00000000, bar5+0x17C);
+	ndelay(80);
+	//port1-sampler-scale
+	writel(0x000000DB, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00000000, bar5+0x1FC);
+	ndelay(80);
+	//port0-vset
+	writel(0x000000A9, bar5+0x178);
+	ndelay(80);
+	writel(0x00005556, bar5+0x17C);
+	ndelay(80);
+	//port1-vset
+	writel(0x000000A9, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00005556, bar5+0x1FC);
+	ndelay(80);
+	//port0-cal-sampler-start
+	writel(0x000000D6, bar5+0x178);
+	ndelay(80);
+	writel(0x00000000, bar5+0x17C);
+	ndelay(80);
+	//port1-cal-sampler-start
+	writel(0x000000D6, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00000000, bar5+0x1FC);
+	ndelay(80);
+	//port0-cal-sampler-start
+	writel(0x000000D6, bar5+0x178);
+	ndelay(80);
+	writel(0x00000200, bar5+0x17C);
+	ndelay(80);
+	//port1-cal-sampler-start
+	writel(0x000000D6, bar5+0x1F8);
+	ndelay(80);
+	writel(0x00000200, bar5+0x1FC);
+	ndelay(80);
+	//set the amplitude to 3.5%
+	writel(0x00000008, bar5+0xA0);
+	ndelay(80);
+	writel(0x11888EAE, bar5+0xA4);
+	ndelay(80);
+	//enable SSC
+	writel(0x00000004, bar5+0xA0);
+	ndelay(80);
+	writel(0x00009C4F, bar5+0xA4);
+	ndelay(80);
+}
+DECLARE_PCI_FIXUP_FINAL(0x1b4b, 0x9170, mv9170_non_spi_programming);
+#endif /* MY_ABC_HERE */
+
 /*
  * Realtek RTL8169 PCI Gigabit Ethernet Controller (rev 10)
  * Subsystem: Realtek RTL8169/8110 Family PCI Gigabit Ethernet NIC
@@ -3299,6 +3547,51 @@ DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_INTEL, 0x156d,
 			       quirk_apple_wait_for_thunderbolt);
 #endif
 
+#ifdef MY_DEF_HERE
+/*
+ * The XHCI of Denlow platform has some additional programming code in ACPI method _PS0,
+ * but this method doesn't execute during boot time at linux-3.10.x. This change lead to
+ * USB 2.0 devices can't be detected at USB 3.0 port. So we port _PS0 as a PCI quirks.
+ * It will be applied at boot time.
+ *
+ */
+static void intel_lynxpoint_xhci_quirk(struct pci_dev *dev)
+{
+	void __iomem *mmio_base;
+	u16 pm_ctrl;
+	u32 val;
+
+	if (!dev->pm_cap) {
+		dev_warn(&dev->dev, "Lynx Point XHCI quirks: Doesn't have PM capability\n");
+		return ;
+	}
+
+	//
+	// Switch to D0
+	//
+	dev_info(&dev->dev, "Lynx Point XHCI quirks: Set power state to D0\n");
+	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pm_ctrl);
+	pm_ctrl &= ~PCI_PM_CTRL_STATE_MASK;
+	pm_ctrl |= PCI_D0;
+	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, pm_ctrl);
+
+	//
+	// Set MMIO Offset 8154[31]
+	//
+	mmio_base = pci_ioremap_bar(dev, 0);
+	if (!mmio_base) {
+		dev_warn(&dev->dev, "Lynx Point XHCI quirks: Can't map mmio registers\n");
+		return ;
+	}
+
+	val = readl(mmio_base + 0x8154);
+	writel((val | 0x80000000), mmio_base + 0x8154);
+
+	pci_iounmap(dev, mmio_base);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x8c31, intel_lynxpoint_xhci_quirk);
+#endif /* MY_DEF_HERE */
+
 static void pci_do_fixups(struct pci_dev *dev, struct pci_fixup *f,
 			  struct pci_fixup *end)
 {
@@ -3463,7 +3756,9 @@ static int reset_intel_82599_sfp_virtfn(struct pci_dev *dev, int probe)
 	return 0;
 }
 
-#include "../gpu/drm/i915/i915_reg.h"
+#define SOUTH_CHICKEN2		0xc2004
+#define PCH_PP_STATUS		0xc7200
+#define PCH_PP_CONTROL		0xc7204
 #define MSG_CTL			0x45010
 #define NSDE_PWR_STATE		0xd0100
 #define IGD_OPERATION_TIMEOUT	10000     /* set timeout 10 seconds */
@@ -3693,6 +3988,15 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_TTI, 0x0645,
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_JMICRON,
 			 PCI_DEVICE_ID_JMICRON_JMB388_ESD,
 			 quirk_dma_func1_alias);
+#ifdef MY_ABC_HERE
+/* 88SE9235 has the same DMA alias issue with 88SE9230 */
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_MARVELL_EXT, 0x9235,
+			 quirk_dma_func1_alias);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_MARVELL_EXT, 0x9170,
+                         quirk_dma_func1_alias);
+#endif /* MY_ABC_HERE */
 
 /*
  * Some devices DMA with the wrong devfn, not just the wrong function.
@@ -3921,6 +4225,18 @@ static const u16 pci_quirk_intel_pch_acs_ids[] = {
 	0x8c90, 0x8c92, 0x8c94, 0x8c96, 0x8c98, 0x8c9a, 0x8c9c, 0x8c9e,
 };
 
+#if defined(MY_ABC_HERE)
+/*
+ * Some of Marvell's PCIe ports do not support ACS capability
+ * but also do not enable peer-to-peer transactions so allow them
+ * to safely use the ACS quirk
+ */
+static const u16 pci_quirk_marvell_acs_ids[] = {
+	/* Marvell CP-110 south bridge */
+	0x0110,
+};
+#endif /* MY_ABC_HERE */
+
 static bool pci_quirk_intel_pch_acs_match(struct pci_dev *dev)
 {
 	int i;
@@ -3948,6 +4264,23 @@ static int pci_quirk_intel_pch_acs(struct pci_dev *dev, u16 acs_flags)
 
 	return acs_flags & ~flags ? 0 : 1;
 }
+
+#if defined(MY_ABC_HERE)
+static int pci_quirk_marvell_acs(struct pci_dev *dev, u16 acs_flags)
+{
+	int i;
+
+	/* Filter out a few obvious non-matches first */
+	if (!pci_is_pcie(dev) || pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT)
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(pci_quirk_marvell_acs_ids); i++)
+		if (pci_quirk_marvell_acs_ids[i] == dev->device)
+			return true;
+
+	return false;
+}
+#endif /* MY_ABC_HERE */
 
 static int pci_quirk_mf_endpoint_acs(struct pci_dev *dev, u16 acs_flags)
 {
@@ -4039,6 +4372,10 @@ static const struct pci_dev_acs_enabled {
 	{ PCI_VENDOR_ID_INTEL, PCI_ANY_ID, pci_quirk_intel_pch_acs },
 	{ 0x19a2, 0x710, pci_quirk_mf_endpoint_acs }, /* Emulex BE3-R */
 	{ 0x10df, 0x720, pci_quirk_mf_endpoint_acs }, /* Emulex Skyhawk-R */
+#if defined(MY_ABC_HERE)
+	/* Marvell PCIe root port */
+	{ PCI_VENDOR_ID_MARVELL, PCI_ANY_ID, pci_quirk_marvell_acs },
+#endif /* MY_ABC_HERE */
 	{ 0 }
 };
 

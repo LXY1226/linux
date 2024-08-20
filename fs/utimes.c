@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/compiler.h>
 #include <linux/file.h>
 #include <linux/fs.h>
@@ -11,6 +14,9 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
+#ifdef MY_ABC_HERE
+#include "synoacl_int.h"
+#endif /* MY_ABC_HERE */
 #ifdef __ARCH_WANT_SYS_UTIME
 
 /*
@@ -90,9 +96,9 @@ static int utimes_common(struct path *path, struct timespec *times)
 		newattrs.ia_valid |= ATTR_TOUCH;
 	}
 retry_deleg:
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	error = notify_change(path->dentry, &newattrs, &delegated_inode);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	if (delegated_inode) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
@@ -219,3 +225,79 @@ SYSCALL_DEFINE2(utimes, char __user *, filename,
 {
 	return sys_futimesat(AT_FDCWD, filename, utimes);
 }
+
+#ifdef MY_ABC_HERE
+/**
+ * sys_syno_utime() is used to update create time.
+ *
+ * @param filename The file to be changed create time.
+ *        times    Create time should be stored in a ctime field.
+ *
+ * @return 0 success
+ *        !0 error
+ */
+SYSCALL_DEFINE2(syno_utime, const char __user *, filename, struct timespec __user *, ctime)
+{
+#ifdef MY_ABC_HERE
+	int error;
+	struct path path;
+	struct inode *inode = NULL;
+	struct timespec time;
+
+	if (!ctime) {
+		return -EINVAL;
+	}
+	error = copy_from_user(&time, ctime, sizeof(struct timespec));
+	if (error)
+		goto out;
+
+	error = user_path_at(AT_FDCWD, filename, LOOKUP_FOLLOW, &path);
+	if (error)
+		goto out;
+
+	error = mnt_want_write(path.mnt);
+	if (error)
+		goto dput_and_out;
+
+	inode = path.dentry->d_inode;
+	if (!inode_owner_or_capable(inode)) {
+#ifdef MY_ABC_HERE
+		if (IS_SYNOACL(path.dentry)) {
+			error = synoacl_op_perm(path.dentry, MAY_WRITE_ATTR | MAY_WRITE_EXT_ATTR);
+			if (error)
+				goto drop_write;
+		} else if (inode->i_op->syno_bypass_is_synoacl) {
+			/*
+			 * GlusterFS returns false for [IS|HAS]_SYNOACL, but ACL
+			 * attribute could be checked and got from GlusterFS xlator.
+			 */
+			error = inode->i_op->syno_bypass_is_synoacl(path.dentry,
+					                BYPASS_SYNOACL_SYNOUTIME, -EPERM);
+			if (error)
+				goto drop_write;
+		} else {
+#endif /* MY_ABC_HERE */
+		error = -EPERM;
+		goto drop_write;
+#ifdef MY_ABC_HERE
+		}
+#endif /* MY_ABC_HERE */
+	}
+
+	error = syno_op_set_crtime(path.dentry, &time);
+
+drop_write:
+	mnt_drop_write(path.mnt);
+dput_and_out:
+	path_put(&path);
+out:
+	return error;
+#else
+	return -EOPNOTSUPP;
+#endif /* MY_ABC_HERE */
+}
+SYSCALL_DEFINE2(SYNOUtime, const char __user *, filename, struct timespec __user *, ctime)
+{
+	return sys_syno_utime(filename, ctime);
+}
+#endif /* MY_ABC_HERE */

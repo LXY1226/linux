@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  scsi_error.c Copyright (C) 1997 Eric Youngdale
  *
@@ -43,8 +46,18 @@
 #include "scsi_priv.h"
 #include "scsi_logging.h"
 #include "scsi_transport_api.h"
+#if defined(MY_ABC_HERE)
+#include "libsyno_report.h"
+#endif /* MY_ABC_HERE */
 
 #include <trace/events/scsi.h>
+
+#ifdef MY_ABC_HERE
+#ifdef KERN_INFO
+#undef KERN_INFO
+#define KERN_INFO KERN_NOTICE
+#endif
+#endif /* MY_ABC_HERE */
 
 static void scsi_eh_done(struct scsi_cmnd *scmd);
 
@@ -257,6 +270,36 @@ int scsi_eh_scmd_add(struct scsi_cmnd *scmd, int eh_flag)
 	return ret;
 }
 
+#if defined(MY_ABC_HERE)
+static inline bool
+SynoTimeoutCmdNeedReport(unsigned char op)
+{
+	return op == READ_6  || op == WRITE_6 ||
+	       op == READ_10 || op == WRITE_10 ||
+	       op == READ_12 || op == WRITE_12 ||
+	       op == READ_16 || op == WRITE_16 ||
+		   SYNCHRONIZE_CACHE || SYNCHRONIZE_CACHE_16;
+}
+
+static void
+SynoScsiTimeout(struct scsi_cmnd *scsi_cmd)
+{
+	if (NULL == scsi_cmd || NULL == scsi_cmd->device
+		|| NULL == scsi_cmd->cmnd) {
+		printk(KERN_ERR "%s:%s(%d) Ivalid scsi_cmd format",
+				__FILE__, __FUNCTION__,  __LINE__);
+		goto END;
+	}
+	if (!SynoTimeoutCmdNeedReport(scsi_cmd->cmnd[0])) {
+		goto END;
+	}
+	SynoScsiTimeoutReport(scsi_cmd->device,
+		scsi_cmd->cmnd[0], scsi_cmd->retries);
+END:
+	return;
+}
+#endif /* MY_ABC_HERE */
+
 /**
  * scsi_times_out - Timeout function for normal scsi commands.
  * @req:	request that is timing out.
@@ -285,6 +328,9 @@ enum blk_eh_timer_return scsi_times_out(struct request *req)
 		rtn = host->hostt->eh_timed_out(scmd);
 
 	if (rtn == BLK_EH_NOT_HANDLED) {
+#if defined(MY_ABC_HERE)
+		SynoScsiTimeout(req->special);
+#endif /* MY_ABC_HERE */
 		if (!host->hostt->no_async_abort &&
 		    scsi_abort_command(scmd) == SUCCESS)
 			return BLK_EH_NOT_HANDLED;

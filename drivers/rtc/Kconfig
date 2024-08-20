@@ -1126,12 +1126,31 @@ config RTC_DRV_OPAL
 	  This driver can also be built as a module. If so, the module
 	  will be called rtc-opal.
 
+config RTC_DRV_RTD129X
+	tristate "Realtek RTD129X RTC"
+	depends on ARCH_RTD129X
+	help
+	  Realtek RTD129X RTC support.
+
 config RTC_DRV_ZYNQMP
 	tristate "Xilinx Zynq Ultrascale+ MPSoC RTC"
 	depends on OF
 	help
 	  If you say yes here you get support for the RTC controller found on
 	  Xilinx Zynq Ultrascale+ MPSoC.
+
+if SYNO_LSP_RTD1619
+config RTC_DRV_RTK
+    tristate "Realtek RTC"
+    depends on RTK_PLATFORM
+    help
+      Realtek  RTC support.
+
+config RTC_DRV_SW
+	tristate "Realtek SW RTC"
+	help
+	  Realtek SW RTC
+endif # SYNO_LSP_RTD1619
 
 comment "on-CPU RTC drivers"
 

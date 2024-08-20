@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Filesystem access notification for Linux
  *
@@ -101,6 +104,9 @@ struct fsnotify_ops {
 	void (*free_group_priv)(struct fsnotify_group *group);
 	void (*freeing_mark)(struct fsnotify_mark *mark, struct fsnotify_group *group);
 	void (*free_event)(struct fsnotify_event *event);
+#ifdef MY_ABC_HERE
+	int (*fetch_name)(struct fsnotify_event *event, struct fsnotify_group *group);
+#endif /* MY_ABC_HERE */
 };
 
 /*
@@ -173,6 +179,15 @@ struct fsnotify_group {
 			struct user_struct      *user;
 		} inotify_data;
 #endif
+#ifdef MY_ABC_HERE
+		struct synotify_group_private_data {
+			struct user_struct *user;
+			unsigned int max_watchers;
+			char *synotify_full_path_buf;
+			char *synotify_d_path_buf;
+			int event_version;
+		} synotify_data;
+#endif /* MY_ABC_HERE */
 #ifdef CONFIG_FANOTIFY
 		struct fanotify_group_private_data {
 #ifdef CONFIG_FANOTIFY_ACCESS_PERMISSIONS
@@ -193,6 +208,9 @@ struct fsnotify_group {
 #define FSNOTIFY_EVENT_NONE	0
 #define FSNOTIFY_EVENT_PATH	1
 #define FSNOTIFY_EVENT_INODE	2
+#ifdef MY_ABC_HERE
+#define FSNOTIFY_EVENT_SYNO	3
+#endif /* MY_ABC_HERE */
 
 /*
  * A mark is simply an object attached to an in core inode which allows an
@@ -252,6 +270,10 @@ extern int __fsnotify_parent(struct path *path, struct dentry *dentry, __u32 mas
 extern void __fsnotify_inode_delete(struct inode *inode);
 extern void __fsnotify_vfsmount_delete(struct vfsmount *mnt);
 extern u32 fsnotify_get_cookie(void);
+#ifdef MY_ABC_HERE
+extern int SYNOFsnotify(__u32 mask, void *data, int data_is,
+	     const unsigned char *file_name, u32 cookie);
+#endif /* MY_ABC_HERE */
 
 static inline int fsnotify_inode_watches_children(struct inode *inode)
 {

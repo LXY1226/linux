@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Toshiba TMIO NAND flash controller driver
  *
@@ -128,7 +131,11 @@ static void tmio_nand_hwcontrol(struct mtd_info *mtd, int cmd,
 				   unsigned int ctrl)
 {
 	struct tmio_nand *tmio = mtd_to_tmio(mtd);
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 	if (ctrl & NAND_CTRL_CHANGE) {
 		u8 mode;

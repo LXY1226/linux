@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
     Copyright (c) 1998 - 2002  Frodo Looijaard <frodol@dds.nl>,
     Philip Edelbrock <phil@netroedge.com>, and Mark D. Studebaker
@@ -64,6 +67,10 @@
  * Broxton (SOC)		0x5ad4	32	hard	yes	yes	yes
  * Lewisburg (PCH)		0xa1a3	32	hard	yes	yes	yes
  * Lewisburg Supersku (PCH)	0xa223	32	hard	yes	yes	yes
+ * Cannon Lake-H (PCH)		0xa323	32	hard	yes	yes	yes
+ * Cannon Lake-LP (PCH)		0x9da3	32	hard	yes	yes	yes
+ * Gemini Lake (SOC)       0x31d4  32  hard    yes yes yes
+ * Cedar Fork (PCH)		0x18df	32	hard	yes	yes	yes
  *
  * Features supported by this driver:
  * Software PEC				no
@@ -95,6 +102,11 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/itco_wdt.h>
 
+#ifdef MY_DEF_HERE
+#include <linux/seq_file.h>
+#include <linux/proc_fs.h>
+#endif /* MY_DEF_HERE */
+
 #if (defined CONFIG_I2C_MUX_GPIO || defined CONFIG_I2C_MUX_GPIO_MODULE) && \
 		defined CONFIG_DMI
 #include <linux/gpio.h>
@@ -113,6 +125,10 @@
 #define SMBAUXSTS(p)	(12 + (p)->smba)	/* ICH4 and later */
 #define SMBAUXCTL(p)	(13 + (p)->smba)	/* ICH4 and later */
 
+#ifdef MY_DEF_HERE
+// SMBUS_PIN_CTL Register (SMBC)—Offset Fh
+#define SMBPINCTL(p)    (15 + (p)->smba)
+#endif /* MY_DEF_HERE */
 /* PCI Address Constants */
 #define SMBBAR		4
 #define SMBPCICTL	0x004
@@ -140,6 +156,9 @@
 #define SMBHSTCFG_HST_EN	1
 #define SMBHSTCFG_SMB_SMI_EN	2
 #define SMBHSTCFG_I2C_EN	4
+#ifdef MY_DEF_HERE
+#define SMBHSTCFG_SSRESET	8
+#endif /* MY_DEF_HERE */
 
 /* TCO configuration bits for TCOCTL */
 #define TCOCTL_EN		0x0100
@@ -177,6 +196,13 @@
 #define SMBHSTSTS_INTR		0x02
 #define SMBHSTSTS_HOST_BUSY	0x01
 
+#ifdef MY_DEF_HERE
+/* I801 Pin Control register bits*/
+#define SMBPINCTL_SCL_CTL   0x04
+#define SMBPINCTL_SDATA_STS 0x02
+#define SMBPINCTL_SCL_STS   0x01
+#endif /* MY_DEF_HERE */
+
 #define STATUS_ERROR_FLAGS	(SMBHSTSTS_FAILED | SMBHSTSTS_BUS_ERR | \
 				 SMBHSTSTS_DEV_ERR)
 
@@ -186,6 +212,7 @@
 /* Older devices have their ID defined in <linux/pci_ids.h> */
 #define PCI_DEVICE_ID_INTEL_BAYTRAIL_SMBUS		0x0f12
 #define PCI_DEVICE_ID_INTEL_BRASWELL_SMBUS		0x2292
+#define PCI_DEVICE_ID_INTEL_CDF_SMBUS			0x18df
 #define PCI_DEVICE_ID_INTEL_COUGARPOINT_SMBUS		0x1c22
 #define PCI_DEVICE_ID_INTEL_PATSBURG_SMBUS		0x1d22
 /* Patsburg also has three 'Integrated Device Function' SMBus controllers */
@@ -196,6 +223,7 @@
 #define PCI_DEVICE_ID_INTEL_AVOTON_SMBUS		0x1f3c
 #define PCI_DEVICE_ID_INTEL_DH89XXCC_SMBUS		0x2330
 #define PCI_DEVICE_ID_INTEL_COLETOCREEK_SMBUS		0x23b0
+#define PCI_DEVICE_ID_INTEL_GEMINILAKE_SMBUS       0x31d4
 #define PCI_DEVICE_ID_INTEL_5_3400_SERIES_SMBUS		0x3b30
 #define PCI_DEVICE_ID_INTEL_LYNXPOINT_SMBUS		0x8c22
 #define PCI_DEVICE_ID_INTEL_WILDCATPOINT_SMBUS		0x8ca2
@@ -207,10 +235,12 @@
 #define PCI_DEVICE_ID_INTEL_WILDCATPOINT_LP_SMBUS	0x9ca2
 #define PCI_DEVICE_ID_INTEL_SUNRISEPOINT_H_SMBUS	0xa123
 #define PCI_DEVICE_ID_INTEL_SUNRISEPOINT_LP_SMBUS	0x9d23
+#define PCI_DEVICE_ID_INTEL_CANNONLAKE_LP_SMBUS		0x9da3
 #define PCI_DEVICE_ID_INTEL_DNV_SMBUS			0x19df
 #define PCI_DEVICE_ID_INTEL_BROXTON_SMBUS		0x5ad4
 #define PCI_DEVICE_ID_INTEL_LEWISBURG_SMBUS		0xa1a3
 #define PCI_DEVICE_ID_INTEL_LEWISBURG_SSKU_SMBUS	0xa223
+#define PCI_DEVICE_ID_INTEL_CANNONLAKE_H_SMBUS		0xa323
 
 struct i801_mux_config {
 	char *gpio_chip;
@@ -272,6 +302,7 @@ static const char *i801_feature_names[] = {
 };
 
 static unsigned int disable_features;
+
 module_param(disable_features, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_features, "Disable selected driver features:\n"
 	"\t\t  0x01  disable SMBus PEC\n"
@@ -279,6 +310,329 @@ MODULE_PARM_DESC(disable_features, "Disable selected driver features:\n"
 	"\t\t  0x08  disable the I2C block read functionality\n"
 	"\t\t  0x10  don't use interrupts ");
 
+#ifdef MY_DEF_HERE
+static int i801_i2c_get_sda(struct i2c_adapter *adap)
+{
+	struct i801_priv *priv = NULL;
+	int result = 0;
+	if (adap) {
+		priv = i2c_get_adapdata(adap);
+	} else {
+		printk("adap should not be null\n");
+		goto out;
+	}
+
+	if (priv) {
+		result = inb_p(SMBPINCTL(priv)) & SMBPINCTL_SDATA_STS;
+	} else {
+		printk("priv should not be null\n");
+		goto out;
+	}
+
+out:
+	return result;
+}
+
+static int i801_i2c_get_scl(struct i2c_adapter *adap)
+{
+	struct i801_priv *priv = NULL;
+	int result = 0;
+	if (adap) {
+		priv = i2c_get_adapdata(adap);
+	} else {
+		printk("adap should not be null\n");
+		goto out;
+	}
+
+	if (priv) {
+		result = inb_p(SMBPINCTL(priv)) & SMBPINCTL_SCL_STS;
+	} else {
+		printk("priv should not be null\n");
+		goto out;
+	}
+
+out:
+	return result;
+}
+
+static void i801_i2c_set_scl(struct i2c_adapter *adap, int val)
+{
+	struct i801_priv *priv = NULL;
+
+	if (adap) {
+		priv = i2c_get_adapdata(adap);
+	} else {
+		printk("adap should not be null\n");
+		goto out;
+	}
+
+	if (priv) {
+		if (val) {
+			outb_p(SMBPINCTL_SCL_CTL, SMBPINCTL(priv));
+		} else {
+			outb_p(0, SMBPINCTL(priv));
+		}
+	} else {
+		printk("priv should not be null\n");
+		goto out;
+	}
+
+out:
+	return;
+}
+
+#define SMB_CLK_DELAY_TIME_MS 42
+
+static int i801_delay_recovery(struct i2c_adapter *adap)
+{
+	int ret = -1;
+
+	if (NULL == adap) {
+		printk("adap should not be null\n");
+		goto out;
+	}
+
+	i801_i2c_set_scl(adap, 0);
+	mdelay(SMB_CLK_DELAY_TIME_MS);
+	i801_i2c_set_scl(adap, 1);
+
+	if (i801_i2c_get_sda(adap))
+		ret = 0;
+
+out:
+	return ret;
+}
+
+static unsigned long delay_try_cnt = 0;
+static unsigned long delay_suc_cnt = 0;
+static unsigned long pulse_try_cnt = 0;
+static unsigned long pulse_suc_cnt = 0;
+static unsigned long i801_reset_count = 0;
+static int i801_smbusbusy = 0;
+
+static int i801_recovery_proc_show(struct seq_file *m, void *v)
+{
+	struct i801_priv *priv = (struct i801_priv *)m->private;
+	
+	pulse_try_cnt++;
+	if (0 == i2c_recover_bus(&priv->adapter)) {
+		pulse_suc_cnt++;
+		printk("i2c recover work\n");
+		goto out;
+	} 
+
+	delay_try_cnt++;
+	if (0 == i801_delay_recovery(&priv->adapter)) {
+		delay_suc_cnt++;
+		printk("smbus recover work\n");
+		goto out;
+	}
+
+out:
+
+	seq_printf(m, "Force i2c recoery\n");
+
+	return 0;
+}
+
+static int i801_recovery_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, i801_recovery_proc_show, PDE_DATA(inode));
+}
+
+static const struct file_operations i801_recovery_proc_fops = {
+        .open           = i801_recovery_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+
+static int i801_recovery_cnt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "42ms delay try cnt : %lu\n", delay_try_cnt);
+	seq_printf(m, "42ms delay suc cnt : %lu\n", delay_suc_cnt);
+	seq_printf(m, "more pulse try cnt : %lu\n", pulse_try_cnt);
+	seq_printf(m, "more pulse suc cnt : %lu\n", pulse_suc_cnt);
+
+	return 0;
+}
+
+static int i801_recovery_cnt_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, i801_recovery_cnt_proc_show, PDE_DATA(inode));
+}
+
+static const struct file_operations i801_recovery_cnt_proc_fops = {
+        .open           = i801_recovery_cnt_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+
+static int proc_i801_recovery_cnt_init(struct i801_priv *priv)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("i801_recovery_cnt", 0, NULL, &i801_recovery_cnt_proc_fops, priv);
+	if (NULL == p) {
+		printk("Fail to cat i801_recovery_cnt proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+
+static int proc_i801_recovery_init(struct i801_priv *priv)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("i801_recovery", 0, NULL, &i801_recovery_proc_fops, priv);
+	if (NULL == p) {
+		printk("Fail to create i801_recovery proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+static struct i2c_bus_recovery_info i801_i2c_recovery_info = {
+	.recover_bus = i2c_generic_scl_recovery,
+	.get_scl = i801_i2c_get_scl,
+	.set_scl = i801_i2c_set_scl,
+	.get_sda = i801_i2c_get_sda,
+};
+
+#define BUS_BUSY_COUT_TO_RESET 3
+#define BUS_BUSY_TIMEWINDOW_TO_RESET 1 * HZ
+static void syno_i801_softreset(struct i801_priv *priv)
+{
+	static int smbus_busy_count = 1;
+	static unsigned long gulSmbus_busy_first_timestamp = 0;
+	unsigned char hostc;
+
+	if (time_before(jiffies, gulSmbus_busy_first_timestamp + BUS_BUSY_TIMEWINDOW_TO_RESET)) {
+		if (smbus_busy_count >= BUS_BUSY_COUT_TO_RESET) {
+			// Soft reset SMBus controller due to multiple BUSBUSY in a preiod of time
+			pci_read_config_byte(priv->pci_dev, SMBHSTCFG, &hostc);
+			pci_write_config_byte(priv->pci_dev, SMBHSTCFG,
+					      hostc | SMBHSTCFG_SSRESET);
+
+			printk("i801 softreset\n");
+			smbus_busy_count = 0;
+			i801_reset_count++;
+		} else {
+			smbus_busy_count++;
+		}
+	} else {
+		gulSmbus_busy_first_timestamp = jiffies;
+		smbus_busy_count = 1;
+	}
+}
+
+//
+// sysfs to i801 soft reset
+//
+static int i801_softreset_proc_show(struct seq_file *m, void *v)
+{
+	struct i801_priv *priv = (struct i801_priv *)m->private;
+	unsigned char hostc;
+
+	pci_read_config_byte(priv->pci_dev, SMBHSTCFG, &hostc);
+	pci_write_config_byte(priv->pci_dev, SMBHSTCFG,
+			hostc | SMBHSTCFG_SSRESET);
+
+	i801_reset_count++;
+	seq_printf(m, "i801 soft reset\n");
+
+	return 0;
+}
+static int i801_softreset_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, i801_softreset_proc_show, PDE_DATA(inode));
+}
+static const struct file_operations i801_softreset_proc_fops = {
+        .open           = i801_softreset_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+static int proc_i801_softreset_init(struct i801_priv *priv)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("i801_softreset", 0, NULL, &i801_softreset_proc_fops, priv);
+	if (NULL == p) {
+		printk("Fail to create i801_softreset proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+
+//
+// sysfs to print i801 soft reset count
+//
+static int i801_softreset_cnt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "i801 soft reset count: %lu\n", i801_reset_count);
+
+	return 0;
+}
+static int i801_softreset_cnt_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, i801_softreset_cnt_proc_show, PDE_DATA(inode));
+}
+static const struct file_operations i801_softreset_cnt_proc_fops = {
+        .open           = i801_softreset_cnt_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+static int proc_i801_softreset_cnt_init(struct i801_priv *priv)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("i801_softreset_cnt", 0, NULL, &i801_softreset_cnt_proc_fops, priv);
+	if (NULL == p) {
+		printk("Fail to create i801_softreset_cnt proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+
+//
+// sysfs to force smbus busy only once
+//
+static int i801_smbusbusy_proc_show(struct seq_file *m, void *v)
+{
+	i801_smbusbusy = 1;
+	seq_printf(m, "force i801 smbusbusy\n");
+
+	return 0;
+}
+static int i801_smbusbusy_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, i801_smbusbusy_proc_show, PDE_DATA(inode));
+}
+static const struct file_operations i801_smbusbusy_proc_fops = {
+        .open           = i801_smbusbusy_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+static int proc_i801_smbusbusy_init(struct i801_priv *priv)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("i801_smbusbusy", 0, NULL, &i801_smbusbusy_proc_fops, priv);
+	if (NULL == p) {
+		printk("Fail to create i801_smbusbusy proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+#endif /* MY_DEF_HERE */
 /* Make sure the SMBus host is ready to start transmitting.
    Return 0 if it is, -EBUSY if it is not. */
 static int i801_check_pre(struct i801_priv *priv)
@@ -286,7 +640,13 @@ static int i801_check_pre(struct i801_priv *priv)
 	int status;
 
 	status = inb_p(SMBHSTSTS(priv));
+#ifdef MY_DEF_HERE
+	if (i801_smbusbusy || (status & SMBHSTSTS_HOST_BUSY)) {
+		syno_i801_softreset(priv);
+		i801_smbusbusy = 0;
+#else
 	if (status & SMBHSTSTS_HOST_BUSY) {
+#endif /* MY_DEF_HERE */
 		dev_err(&priv->pci_dev->dev, "SMBus is busy, can't use it!\n");
 		return -EBUSY;
 	}
@@ -717,12 +1077,19 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
 	int block = 0;
 	int ret = 0, xact = 0;
 	struct i801_priv *priv = i2c_get_adapdata(adap);
+#ifdef MY_DEF_HERE
+	int iRunTimes = 0;
+#endif /* MY_DEF_HERE */
 
 	mutex_lock(&priv->acpi_lock);
 	if (priv->acpi_reserved) {
 		mutex_unlock(&priv->acpi_lock);
 		return -EBUSY;
 	}
+
+#ifdef MY_DEF_HERE
+redo:
+#endif /* MY_DEF_HERE */
 
 	hwpec = (priv->features & FEATURE_SMBUS_PEC) && (flags & I2C_CLIENT_PEC)
 		&& size != I2C_SMBUS_QUICK
@@ -822,6 +1189,31 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
 	}
 
 out:
+
+#ifdef MY_DEF_HERE
+	//Only first run and SDA low we do recover,
+	//We rum i2c recovery first, then SMBUS recover if needed
+	if ((-ENXIO == ret) && !(i801_i2c_get_sda(adap))) {
+		iRunTimes++;
+		delay_try_cnt++;
+		if ((10 >= iRunTimes) && (0 == i801_delay_recovery(adap))) {
+			delay_suc_cnt++;
+			goto redo;
+		}
+		pulse_try_cnt++;
+		if ((20 >= iRunTimes ) && (0 == i2c_recover_bus(adap))) {
+			pulse_suc_cnt++;
+			goto redo;
+		}
+
+		if (20 < iRunTimes) {
+			printk("Fail to recover i801 \n");
+		} else {
+			goto redo;
+		}
+	}
+#endif /* MY_DEF_HERE */
+
 	mutex_unlock(&priv->acpi_lock);
 	return ret;
 }
@@ -876,16 +1268,20 @@ static const struct pci_device_id i801_ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WELLSBURG_SMBUS_MS1) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WELLSBURG_SMBUS_MS2) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_COLETOCREEK_SMBUS) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_GEMINILAKE_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WILDCATPOINT_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_WILDCATPOINT_LP_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_BAYTRAIL_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_BRASWELL_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_SUNRISEPOINT_H_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_SUNRISEPOINT_LP_SMBUS) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CDF_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_DNV_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_BROXTON_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_LEWISBURG_SMBUS) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_LEWISBURG_SSKU_SMBUS) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CANNONLAKE_H_SMBUS) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CANNONLAKE_LP_SMBUS) },
 	{ 0, }
 };
 
@@ -1360,8 +1756,11 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	switch (dev->device) {
 	case PCI_DEVICE_ID_INTEL_SUNRISEPOINT_H_SMBUS:
 	case PCI_DEVICE_ID_INTEL_SUNRISEPOINT_LP_SMBUS:
+	case PCI_DEVICE_ID_INTEL_CANNONLAKE_H_SMBUS:
+	case PCI_DEVICE_ID_INTEL_CANNONLAKE_LP_SMBUS:
 	case PCI_DEVICE_ID_INTEL_LEWISBURG_SMBUS:
 	case PCI_DEVICE_ID_INTEL_LEWISBURG_SSKU_SMBUS:
+	case PCI_DEVICE_ID_INTEL_CDF_SMBUS:
 	case PCI_DEVICE_ID_INTEL_DNV_SMBUS:
 		priv->features |= FEATURE_I2C_BLOCK_READ;
 		priv->features |= FEATURE_IRQ;
@@ -1400,6 +1799,10 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				   i801_feature_names[i]);
 	}
 	priv->features &= ~disable_features;
+
+#ifdef MY_DEF_HERE
+	priv->features &= ~FEATURE_IRQ;
+#endif /* MY_DEF_HERE */
 
 	err = pcim_enable_device(dev);
 	if (err) {
@@ -1502,6 +1905,15 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	pci_set_drvdata(dev, priv);
 
+#ifdef MY_DEF_HERE
+	proc_i801_recovery_init(priv);
+	priv->adapter.bus_recovery_info = &i801_i2c_recovery_info;
+	proc_i801_recovery_cnt_init(priv);
+	proc_i801_softreset_init(priv);
+	proc_i801_softreset_cnt_init(priv);
+	proc_i801_smbusbusy_init(priv);
+#endif /* MY_DEF_HERE */
+
 	return 0;
 }
 
@@ -1516,6 +1928,13 @@ static void i801_remove(struct pci_dev *dev)
 
 	platform_device_unregister(priv->tco_pdev);
 
+#ifdef MY_DEF_HERE
+	remove_proc_entry("i801_recovery", NULL);
+	remove_proc_entry("i801_recovery_cnt", NULL);
+	remove_proc_entry("i801_smbusbusy", NULL);
+	remove_proc_entry("i801_softreset", NULL);
+	remove_proc_entry("i801_softreset_cnt", NULL);
+#endif /* MY_DEF_HERE */
 	/*
 	 * do not call pci_disable_device(dev) since it can cause hard hangs on
 	 * some systems during power-off (eg. Fujitsu-Siemens Lifebook E8010)

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -34,7 +37,11 @@ struct mdio_mux_child_bus {
 	struct mdio_mux_parent_bus *parent;
 	struct mdio_mux_child_bus *next;
 	int bus_number;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int phy_irq[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE */
 };
 
 /*
@@ -157,7 +164,11 @@ int mdio_mux_init(struct device *dev,
 			break;
 		}
 		cb->mii_bus->priv = cb;
+#if defined(MY_ABC_HERE)
+
+#else /* MY_ABC_HERE */
 		cb->mii_bus->irq = cb->phy_irq;
+#endif /* MY_ABC_HERE */
 		cb->mii_bus->name = "mdio_mux";
 		snprintf(cb->mii_bus->id, MII_BUS_ID_SIZE, "%x.%x",
 			 pb->parent_id, v);

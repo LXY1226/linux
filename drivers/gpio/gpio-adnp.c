@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2011-2012 Avionic Design GmbH
  *
@@ -47,7 +50,11 @@ static int adnp_read(struct adnp *adnp, unsigned offset, uint8_t *value)
 
 	err = i2c_smbus_read_byte_data(adnp->client, offset);
 	if (err < 0) {
+#if defined(MY_ABC_HERE)
+		dev_err(adnp->gpio.parent, "%s failed: %d\n",
+#else /* MY_ABC_HERE */
 		dev_err(adnp->gpio.dev, "%s failed: %d\n",
+#endif /* MY_ABC_HERE */
 			"i2c_smbus_read_byte_data()", err);
 		return err;
 	}
@@ -62,7 +69,11 @@ static int adnp_write(struct adnp *adnp, unsigned offset, uint8_t value)
 
 	err = i2c_smbus_write_byte_data(adnp->client, offset, value);
 	if (err < 0) {
+#if defined(MY_ABC_HERE)
+		dev_err(adnp->gpio.parent, "%s failed: %d\n",
+#else /* MY_ABC_HERE */
 		dev_err(adnp->gpio.dev, "%s failed: %d\n",
+#endif /* MY_ABC_HERE */
 			"i2c_smbus_write_byte_data()", err);
 		return err;
 	}
@@ -268,8 +279,13 @@ static int adnp_gpio_setup(struct adnp *adnp, unsigned int num_gpios)
 	chip->base = -1;
 	chip->ngpio = num_gpios;
 	chip->label = adnp->client->name;
+#if defined(MY_ABC_HERE)
+	chip->parent = &adnp->client->dev;
+	chip->of_node = chip->parent->of_node;
+#else /* MY_ABC_HERE */
 	chip->dev = &adnp->client->dev;
 	chip->of_node = chip->dev->of_node;
+#endif /* MY_ABC_HERE */
 	chip->owner = THIS_MODULE;
 
 	err = gpiochip_add(chip);
@@ -437,7 +453,12 @@ static int adnp_irq_setup(struct adnp *adnp)
 	 * is chosen to match the register layout of the hardware in that
 	 * each segment contains the corresponding bits for all interrupts.
 	 */
+#if defined(MY_ABC_HERE)
+	adnp->irq_enable = devm_kzalloc(chip->parent, num_regs * 6,
+					GFP_KERNEL);
+#else /* MY_ABC_HERE */
 	adnp->irq_enable = devm_kzalloc(chip->dev, num_regs * 6, GFP_KERNEL);
+#endif /* MY_ABC_HERE */
 	if (!adnp->irq_enable)
 		return -ENOMEM;
 
@@ -464,12 +485,23 @@ static int adnp_irq_setup(struct adnp *adnp)
 		adnp->irq_enable[i] = 0x00;
 	}
 
+#if defined(MY_ABC_HERE)
+	err = devm_request_threaded_irq(chip->parent, adnp->client->irq,
+					NULL, adnp_irq,
+					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					dev_name(chip->parent), adnp);
+#else /* MY_ABC_HERE */
 	err = devm_request_threaded_irq(chip->dev, adnp->client->irq,
 					NULL, adnp_irq,
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					dev_name(chip->dev), adnp);
+#endif /* MY_ABC_HERE */
 	if (err != 0) {
+#if defined(MY_ABC_HERE)
+		dev_err(chip->parent, "can't request IRQ#%d: %d\n",
+#else /* MY_ABC_HERE */
 		dev_err(chip->dev, "can't request IRQ#%d: %d\n",
+#endif /* MY_ABC_HERE */
 			adnp->client->irq, err);
 		return err;
 	}
@@ -480,7 +512,11 @@ static int adnp_irq_setup(struct adnp *adnp)
 				   handle_simple_irq,
 				   IRQ_TYPE_NONE);
 	if (err) {
+#if defined(MY_ABC_HERE)
+		dev_err(chip->parent,
+#else /* MY_ABC_HERE */
 		dev_err(chip->dev,
+#endif /* MY_ABC_HERE */
 			"could not connect irqchip to gpiochip\n");
 		return err;
 	}

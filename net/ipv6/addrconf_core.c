@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * IPv6 library code, needed by static components when full IPv6 support is
  * not configured or static.
@@ -7,6 +10,9 @@
 #include <net/ipv6.h>
 #include <net/addrconf.h>
 #include <net/ip.h>
+#ifdef MY_ABC_HERE
+#include <linux/module.h>
+#endif
 
 /* if ipv6 module registers this function is used by xfrm to force all
  * sockets to relookup their nodes - this is fairly expensive, be

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Driver for Aquantia PHY
  *
@@ -128,7 +131,11 @@ static struct phy_driver aquantia_driver[] = {
 	.config_intr	= aquantia_config_intr,
 	.ack_interrupt	= aquantia_ack_interrupt,
 	.read_status	= aquantia_read_status,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 },
 {
 	.phy_id		= PHY_ID_AQ2104,
@@ -141,7 +148,11 @@ static struct phy_driver aquantia_driver[] = {
 	.config_intr	= aquantia_config_intr,
 	.ack_interrupt	= aquantia_ack_interrupt,
 	.read_status	= aquantia_read_status,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 },
 {
 	.phy_id		= PHY_ID_AQR105,
@@ -154,7 +165,11 @@ static struct phy_driver aquantia_driver[] = {
 	.config_intr	= aquantia_config_intr,
 	.ack_interrupt	= aquantia_ack_interrupt,
 	.read_status	= aquantia_read_status,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 },
 {
 	.phy_id		= PHY_ID_AQR405,
@@ -167,7 +182,11 @@ static struct phy_driver aquantia_driver[] = {
 	.config_intr	= aquantia_config_intr,
 	.ack_interrupt	= aquantia_ack_interrupt,
 	.read_status	= aquantia_read_status,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 },
 };
 

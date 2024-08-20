@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Driver for pcf857x, pca857x, and pca967x I2C GPIO expanders
  *
@@ -293,7 +296,11 @@ static int pcf857x_probe(struct i2c_client *client,
 
 	gpio->chip.base			= pdata ? pdata->gpio_base : -1;
 	gpio->chip.can_sleep		= true;
+#if defined(MY_ABC_HERE)
+	gpio->chip.parent			= &client->dev;
+#else /* MY_ABC_HERE */
 	gpio->chip.dev			= &client->dev;
+#endif /* MY_ABC_HERE */
 	gpio->chip.owner		= THIS_MODULE;
 	gpio->chip.get			= pcf857x_get;
 	gpio->chip.set			= pcf857x_set;

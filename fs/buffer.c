@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/buffer.c
  *
@@ -137,10 +140,30 @@ static void buffer_io_error(struct buffer_head *bh, char *msg)
 	char b[BDEVNAME_SIZE];
 
 	if (!test_bit(BH_Quiet, &bh->b_state))
-		printk_ratelimited(KERN_ERR
+#ifdef MY_ABC_HERE
+	{
+		static unsigned long long b_blocknr_last = 0;
+
+		if (b_blocknr_last == (unsigned long long)bh->b_blocknr) {
+			printk_ratelimited(KERN_ERR
+					"Buffer I/O error on dev %s, logical block %llu%s\n",
+					bdevname(bh->b_bdev, b),
+					b_blocknr_last, msg);
+		} else {
+			b_blocknr_last = (unsigned long long)bh->b_blocknr;
+			printk_ratelimited(KERN_ERR
+					"Buffer I/O error on dev %s, logical block in range %llu + 0-2(%d) %s\n",
+					bdevname(bh->b_bdev, b),
+					(b_blocknr_last >> CONFIG_SYNO_IO_ERROR_LIMIT_MSG_SHIFT) << CONFIG_SYNO_IO_ERROR_LIMIT_MSG_SHIFT,
+					CONFIG_SYNO_IO_ERROR_LIMIT_MSG_SHIFT, msg);
+		}
+	}
+#else
+	printk_ratelimited(KERN_ERR
 			"Buffer I/O error on dev %s, logical block %llu%s\n",
 			bdevname(bh->b_bdev, b),
 			(unsigned long long)bh->b_blocknr, msg);
+#endif /* MY_ABC_HERE */
 }
 
 /*
@@ -3011,8 +3034,15 @@ static int submit_bh_wbc(int rw, struct buffer_head *bh,
 	BUG_ON(!buffer_locked(bh));
 	BUG_ON(!buffer_mapped(bh));
 	BUG_ON(!bh->b_end_io);
+#ifdef MY_ABC_HERE
+	if (WARN_ON(buffer_delay(bh)))
+		clear_buffer_delay(bh);
+	if (WARN_ON(buffer_unwritten(bh)))
+		clear_buffer_unwritten(bh);
+#else
 	BUG_ON(buffer_delay(bh));
 	BUG_ON(buffer_unwritten(bh));
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Only clear out a write error when rewriting

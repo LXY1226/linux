@@ -27,6 +27,12 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+
+#ifdef CONFIG_X86
+/* for art-tsc conversion */
+#include <asm/tsc.h>
+#endif
+
 #include <sound/core.h>
 #include <sound/initval.h>
 #include "hda_controller.h"
@@ -337,35 +343,63 @@ static snd_pcm_uframes_t azx_pcm_pointer(struct snd_pcm_substream *substream)
 			       azx_get_position(chip, azx_dev));
 }
 
-static int azx_get_time_info(struct snd_pcm_substream *substream,
-			struct timespec *system_ts, struct timespec *audio_ts,
-			struct snd_pcm_audio_tstamp_config *audio_tstamp_config,
-			struct snd_pcm_audio_tstamp_report *audio_tstamp_report)
+/*
+ * azx_scale64: Scale base by mult/div while not overflowing sanely
+ *
+ * Derived from scale64_check_overflow in kernel/time/timekeeping.c
+ *
+ * The tmestamps for a 48Khz stream can overflow after (2^64/10^9)/48K which
+ * is about 384307 ie ~4.5 days.
+ *
+ * This scales the calculation so that overflow will happen but after 2^64 /
+ * 48000 secs, which is pretty large!
+ *
+ * In caln below:
+ *	base may overflow, but since there isn’t any additional division
+ *	performed on base it’s OK
+ *	rem can’t overflow because both are 32-bit values
+ */
+
+static inline bool is_link_time_supported(struct snd_pcm_runtime *runtime,
+				struct snd_pcm_audio_tstamp_config *ts)
 {
-	struct azx_dev *azx_dev = get_azx_dev(substream);
-	u64 nsec;
+	if (runtime->hw.info & SNDRV_PCM_INFO_HAS_LINK_SYNCHRONIZED_ATIME)
+		if (ts->type_requested == SNDRV_PCM_AUDIO_TSTAMP_TYPE_LINK_SYNCHRONIZED)
+			return true;
 
-	if ((substream->runtime->hw.info & SNDRV_PCM_INFO_HAS_LINK_ATIME) &&
-		(audio_tstamp_config->type_requested == SNDRV_PCM_AUDIO_TSTAMP_TYPE_LINK)) {
-
-		snd_pcm_gettime(substream->runtime, system_ts);
-
-		nsec = timecounter_read(&azx_dev->core.tc);
-		nsec = div_u64(nsec, 3); /* can be optimized */
-		if (audio_tstamp_config->report_delay)
-			nsec = azx_adjust_codec_delay(substream, nsec);
-
-		*audio_ts = ns_to_timespec(nsec);
-
-		audio_tstamp_report->actual_type = SNDRV_PCM_AUDIO_TSTAMP_TYPE_LINK;
-		audio_tstamp_report->accuracy_report = 1; /* rest of structure is valid */
-		audio_tstamp_report->accuracy = 42; /* 24 MHz WallClock == 42ns resolution */
-
-	} else
-		audio_tstamp_report->actual_type = SNDRV_PCM_AUDIO_TSTAMP_TYPE_DEFAULT;
-
-	return 0;
+	return false;
 }
+
+static int azx_get_time_info(struct snd_pcm_substream *substream,
+                        struct timespec *system_ts, struct timespec *audio_ts,
+                        struct snd_pcm_audio_tstamp_config *audio_tstamp_config,
+                        struct snd_pcm_audio_tstamp_report *audio_tstamp_report)
+{
+        struct azx_dev *azx_dev = get_azx_dev(substream);
+        u64 nsec;
+
+        if ((substream->runtime->hw.info & SNDRV_PCM_INFO_HAS_LINK_ATIME) &&
+                (audio_tstamp_config->type_requested == SNDRV_PCM_AUDIO_TSTAMP_TYPE_LINK)) {
+
+                snd_pcm_gettime(substream->runtime, system_ts);
+
+                nsec = timecounter_read(&azx_dev->core.tc);
+                nsec = div_u64(nsec, 3); /* can be optimized */
+                if (audio_tstamp_config->report_delay)
+                        nsec = azx_adjust_codec_delay(substream, nsec);
+
+                *audio_ts = ns_to_timespec(nsec);
+
+                audio_tstamp_report->actual_type = SNDRV_PCM_AUDIO_TSTAMP_TYPE_LINK;
+                audio_tstamp_report->accuracy_report = 1; /* rest of structure is valid */
+                audio_tstamp_report->accuracy = 42; /* 24 MHz WallClock == 42ns resolution */
+
+        } else
+                audio_tstamp_report->actual_type = SNDRV_PCM_AUDIO_TSTAMP_TYPE_DEFAULT;
+
+        return 0;
+}
+
 
 static struct snd_pcm_hardware azx_pcm_hw = {
 	.info =			(SNDRV_PCM_INFO_MMAP |
@@ -412,6 +446,11 @@ static int azx_pcm_open(struct snd_pcm_substream *substream)
 		goto unlock;
 	}
 	runtime->private_data = azx_dev;
+
+	if (chip->gts_present)
+		azx_pcm_hw.info = azx_pcm_hw.info |
+			SNDRV_PCM_INFO_HAS_LINK_SYNCHRONIZED_ATIME;
+
 	runtime->hw = azx_pcm_hw;
 	runtime->hw.channels_min = hinfo->channels_min;
 	runtime->hw.channels_max = hinfo->channels_max;
@@ -495,7 +534,7 @@ static int azx_pcm_mmap(struct snd_pcm_substream *substream,
 	return snd_pcm_lib_default_mmap(substream, area);
 }
 
-static struct snd_pcm_ops azx_pcm_ops = {
+static const struct snd_pcm_ops azx_pcm_ops = {
 	.open = azx_pcm_open,
 	.close = azx_pcm_close,
 	.ioctl = snd_pcm_lib_ioctl,
@@ -661,6 +700,10 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 		 */
 		return -EIO;
 	}
+
+	/* no fallback mechanism? */
+	if (!chip->fallback_to_single_cmd)
+		return -EIO;
 
 	/* a fatal communication error; need either to reset or to fallback
 	 * to the single_cmd mode
@@ -935,6 +978,8 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 	struct azx *chip = dev_id;
 	struct hdac_bus *bus = azx_bus(chip);
 	u32 status;
+	bool active, handled = false;
+	int repeat = 0; /* count for avoiding endless loop */
 
 #ifdef CONFIG_PM
 	if (azx_has_pm_runtime(chip))
@@ -944,33 +989,36 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 
 	spin_lock(&bus->reg_lock);
 
-	if (chip->disabled) {
-		spin_unlock(&bus->reg_lock);
-		return IRQ_NONE;
-	}
+	if (chip->disabled)
+		goto unlock;
 
-	status = azx_readl(chip, INTSTS);
-	if (status == 0 || status == 0xffffffff) {
-		spin_unlock(&bus->reg_lock);
-		return IRQ_NONE;
-	}
+	do {
+		status = azx_readl(chip, INTSTS);
+		if (status == 0 || status == 0xffffffff)
+			break;
 
-	snd_hdac_bus_handle_stream_irq(bus, status, stream_update);
+		handled = true;
+		active = false;
+		if (snd_hdac_bus_handle_stream_irq(bus, status, stream_update))
+			active = true;
 
-	/* clear rirb int */
-	status = azx_readb(chip, RIRBSTS);
-	if (status & RIRB_INT_MASK) {
-		if (status & RIRB_INT_RESPONSE) {
-			if (chip->driver_caps & AZX_DCAPS_CTX_WORKAROUND)
-				udelay(80);
-			snd_hdac_bus_update_rirb(bus);
+		/* clear rirb int */
+		status = azx_readb(chip, RIRBSTS);
+		if (status & RIRB_INT_MASK) {
+			active = true;
+			if (status & RIRB_INT_RESPONSE) {
+				if (chip->driver_caps & AZX_DCAPS_CTX_WORKAROUND)
+					udelay(80);
+				snd_hdac_bus_update_rirb(bus);
+			}
+			azx_writeb(chip, RIRBSTS, RIRB_INT_MASK);
 		}
-		azx_writeb(chip, RIRBSTS, RIRB_INT_MASK);
-	}
+	} while (active && ++repeat < 10);
 
+ unlock:
 	spin_unlock(&bus->reg_lock);
 
-	return IRQ_HANDLED;
+	return IRQ_RETVAL(handled);
 }
 EXPORT_SYMBOL_GPL(azx_interrupt);
 
@@ -1055,8 +1103,7 @@ int azx_bus_init(struct azx *chip, const char *model,
 	if (chip->get_position[0] != azx_get_pos_lpib ||
 	    chip->get_position[1] != azx_get_pos_lpib)
 		bus->core.use_posbuf = true;
-	if (chip->bdl_pos_adj)
-		bus->core.bdl_pos_adj = chip->bdl_pos_adj[chip->dev_index];
+	bus->core.bdl_pos_adj = chip->bdl_pos_adj;
 	if (chip->driver_caps & AZX_DCAPS_CORBRP_SELF_CLEAR)
 		bus->core.corbrp_self_clear = true;
 
@@ -1141,6 +1188,9 @@ int azx_codec_configure(struct azx *chip)
 	list_for_each_codec_safe(codec, next, &chip->bus) {
 		snd_hda_codec_configure(codec);
 	}
+
+	if (!azx_bus(chip)->num_codecs)
+		return -ENODEV;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(azx_codec_configure);

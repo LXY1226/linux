@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * kernel/power/suspend.c - Suspend to RAM and standby functionality.
  *
@@ -31,6 +34,21 @@
 #include <linux/moduleparam.h>
 
 #include "power.h"
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_RTK_PLATFORM
+int RTK_PM_STATE;
+EXPORT_SYMBOL(RTK_PM_STATE);
+#endif/* CONFIG_RTK_PLATFORM */
+
+#ifdef CONFIG_AHCI_RTK
+extern struct task_struct *rtk_sata_dev_task;
+#endif
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
+
+#ifdef MY_DEF_HERE
+int RTK_PM_STATE;       //For RTD129x idle mode support.
+EXPORT_SYMBOL(RTK_PM_STATE);
+#endif /* MY_DEF_HERE */
 
 const char *pm_labels[] = { "mem", "standby", "freeze", NULL };
 const char *pm_states[PM_SUSPEND_MAX];
@@ -412,8 +430,16 @@ int suspend_devices_and_enter(suspend_state_t state)
 	if (error)
 		goto Close;
 
+#ifdef MY_DEF_HERE
+#else /* MY_DEF_HERE */
 	suspend_console();
+#endif /* MY_DEF_HERE */
 	suspend_test_start();
+
+#if defined(MY_DEF_HERE) || defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+	RTK_PM_STATE = state;
+#endif /* MY_DEF_HERE || CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
+
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
 		pr_err("PM: Some devices failed to suspend, or early wake event detected\n");
@@ -468,8 +494,32 @@ static void suspend_finish(void)
 static int enter_state(suspend_state_t state)
 {
 	int error;
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_AHCI_RTK
+	unsigned long timeout;
+#endif
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 	trace_suspend_resume(TPS("suspend_enter"), state, true);
+
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+#ifdef CONFIG_RTK_PLATFORM
+	if (state == PM_SUSPEND_STANDBY) {
+	}
+
+	if (state == PM_SUSPEND_MEM){
+		sys_sync();
+#ifdef CONFIG_AHCI_RTK
+		if (rtk_sata_dev_task != NULL) {
+			wake_up_process(rtk_sata_dev_task);
+			timeout = jiffies + msecs_to_jiffies(1000);
+			while(time_before(jiffies, timeout));
+		}
+#endif
+	}
+#endif /* CONFIG_RTK_PLATFORM */
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 	if (state == PM_SUSPEND_FREEZE) {
 #ifdef CONFIG_PM_DEBUG
 		if (pm_test_level != TEST_NONE && pm_test_level <= TEST_CPUS) {
@@ -498,6 +548,9 @@ static int enter_state(suspend_state_t state)
 	pr_debug("PM: Preparing system for sleep (%s)\n", pm_states[state]);
 	pm_suspend_clear_flags();
 	error = suspend_prepare(state);
+#ifdef MY_DEF_HERE
+	error = 0;
+#endif /* MY_DEF_HERE */
 	if (error)
 		goto Unlock;
 

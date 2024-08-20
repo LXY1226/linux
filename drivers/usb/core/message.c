@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * message.c - synchronous message handling
  */
@@ -1345,6 +1348,11 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	 * Make sure the interface endpoints are flushed before that
 	 */
 	usb_disable_interface(dev, iface, false);
+
+#ifdef MY_ABC_HERE
+	/* Cancel URBs */
+	usb_disable_interface(dev, iface, false);
+#endif /* MY_ABC_HERE */
 
 	/* Make sure we have enough bandwidth for this alternate interface.
 	 * Remove the current alt setting and add the new alt setting.

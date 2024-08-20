@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/bug.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -286,6 +289,17 @@ void __init kaiser_check_boottime_disable(void)
 	if (boot_cpu_has(X86_FEATURE_XENPV))
 		goto silent_disable;
 
+#ifdef MY_DEF_HERE
+	if (cmdline_find_option_bool(boot_command_line, "SpectreAll_on") ||
+		cmdline_find_option_bool(boot_command_line, "KPTI_on")) {
+		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
+			goto disable;
+		} else {
+			goto enable;
+		}
+	}
+#endif /* MY_DEF_HERE */
+
 	ret = cmdline_find_option(boot_command_line, "pti", arg, sizeof(arg));
 	if (ret > 0) {
 		if (!strncmp(arg, "on", 2))
@@ -297,10 +311,13 @@ void __init kaiser_check_boottime_disable(void)
 		if (!strncmp(arg, "auto", 4))
 			goto skip;
 	}
-
+#ifdef MY_DEF_HERE
+	goto disable;
+#else /* MY_DEF_HERE */
 	if (cmdline_find_option_bool(boot_command_line, "nopti") ||
 	    cpu_mitigations_off())
 		goto disable;
+#endif /* MY_DEF_HERE */
 
 skip:
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)

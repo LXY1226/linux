@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright 2011 Texas Instruments Inc.
  *
@@ -104,7 +107,11 @@ static int tps65912_gpio_probe(struct platform_device *pdev)
 
 	tps65912_gpio->tps65912 = tps65912;
 	tps65912_gpio->gpio_chip = template_chip;
+#if defined(MY_ABC_HERE)
+	tps65912_gpio->gpio_chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	tps65912_gpio->gpio_chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	if (pdata && pdata->gpio_base)
 		tps65912_gpio->gpio_chip.base = pdata->gpio_base;
 

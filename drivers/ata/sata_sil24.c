@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * sata_sil24.c - Driver for Silicon Image 3124/3132 SATA-2 controllers
  *
@@ -29,6 +32,9 @@
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/libata.h>
+#ifdef MY_DEF_HERE
+#include <linux/gpio.h>
+#endif /* MY_DEF_HERE */
 
 #define DRV_NAME	"sata_sil24"
 #define DRV_VERSION	"1.1"
@@ -356,6 +362,11 @@ static int sil24_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 #ifdef CONFIG_PM_SLEEP
 static int sil24_pci_device_resume(struct pci_dev *pdev);
 #endif
+
+#ifdef MY_ABC_HERE
+static inline void sil24_host_intr(struct ata_port *ap);
+#endif /* MY_ABC_HERE */
+
 #ifdef CONFIG_PM
 static int sil24_port_resume(struct ata_port *ap);
 #endif
@@ -372,16 +383,113 @@ static const struct pci_device_id sil24_pci_tbl[] = {
 	{ } /* terminate list */
 };
 
+#ifdef MY_ABC_HERE
+#ifdef MY_DEF_HERE
+#ifdef MY_DEF_HERE
+extern u32 syno_pch_lpc_gpio_pin(int pin, int *pValue, int isWrite);
+#endif /* MY_DEF_HERE */
+extern int grgPwrCtlPin[];
+static int syno_pulldown_eunit_gpio(struct ata_port *ap)
+{
+	int iRet = -1;
+	int iValue = 0;
+	int iPin = -1;
+
+	/* Due to EUnit is edge trigger, we have to pull the GPIO PIN to low before EUnit poweroff */
+	if (!(iPin = grgPwrCtlPin[ap->print_id])) { /* get pwrctl GPIO pin */
+		goto END;
+	}
+
+#ifdef MY_DEF_HERE
+	if (syno_pch_lpc_gpio_pin(iPin, &iValue, 1)) {
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	if (syno_gpio_value_set(iPin, iValue)) {
+		goto END;
+	}
+#endif /* MY_DEF_HERE */
+
+	mdelay(1000); /* HW say should delay >1.38ms and suggest 1s when trigger edge (0->1) */
+
+	iRet = 0;
+END:
+	return iRet;
+}
+#endif /* MY_DEF_HERE */
+
+extern int gSynoSystemShutdown;
+
+void sil24_pci_shutdown(struct pci_dev *pdev)
+{
+	int i;
+	struct ata_host *host = dev_get_drvdata(&pdev->dev);
+	struct Scsi_Host *shost;
+
+	if (NULL == host) {
+		goto END;
+	}
+
+	// gSynoSystemShutdown = 1 means the host is going to poweroff
+	if (1 == gSynoSystemShutdown) {
+		for (i = 0; i < host->n_ports; i++) {
+			shost = host->ports[i]->scsi_host;
+			if (shost->hostt->syno_host_poweroff_task) {
+				shost->hostt->syno_host_poweroff_task(shost);
+			}
+#ifdef MY_DEF_HERE
+			syno_pulldown_eunit_gpio(host->ports[i]);
+#endif /* MY_DEF_HERE */
+		}
+	}
+
+	if (pdev->irq >= 0) {
+		free_irq(pdev->irq, host);
+		pdev->irq = -1;
+	}
+END:
+	return;
+}
+#endif /* MY_ABC_HERE */
+
 static struct pci_driver sil24_pci_driver = {
 	.name			= DRV_NAME,
 	.id_table		= sil24_pci_tbl,
 	.probe			= sil24_init_one,
 	.remove			= ata_pci_remove_one,
+#ifdef MY_ABC_HERE
+	.shutdown		= sil24_pci_shutdown,
+#endif /* MY_ABC_HERE */
 #ifdef CONFIG_PM_SLEEP
 	.suspend		= ata_pci_device_suspend,
 	.resume			= sil24_pci_device_resume,
 #endif
 };
+
+#ifdef MY_ABC_HERE
+static struct device_attribute *sil24_shost_attrs[] = {
+#ifdef MY_ABC_HERE
+	&dev_attr_syno_manutil_power_disable,
+	&dev_attr_syno_pm_gpio,
+	&dev_attr_syno_pm_info,
+#ifdef MY_ABC_HERE
+	&dev_attr_syno_power_ctrl,
+	&dev_attr_syno_pm_control_support,
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	&dev_attr_syno_port_thaw,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	&dev_attr_syno_diskname_trans,
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	&dev_attr_syno_sata_disk_led_ctrl,
+#endif /* MY_ABC_HERE */
+	NULL
+};
+#endif /* MY_ABC_HERE */
 
 static struct scsi_host_template sil24_sht = {
 	ATA_NCQ_SHT(DRV_NAME),
@@ -389,6 +497,9 @@ static struct scsi_host_template sil24_sht = {
 	.sg_tablesize		= SIL24_MAX_SGE,
 	.dma_boundary		= ATA_DMA_BOUNDARY,
 	.tag_alloc_policy	= BLK_TAG_ALLOC_FIFO,
+#ifdef MY_ABC_HERE
+	.shost_attrs 		= sil24_shost_attrs,
+#endif /* MY_ABC_HERE */
 };
 
 static struct ata_port_operations sil24_ops = {
@@ -418,6 +529,9 @@ static struct ata_port_operations sil24_ops = {
 #ifdef CONFIG_PM
 	.port_resume		= sil24_port_resume,
 #endif
+#ifdef MY_ABC_HERE
+	.syno_force_intr	= sil24_host_intr,
+#endif /* MY_ABC_HERE */
 };
 
 static bool sata_sil24_msi;    /* Disable MSI */
@@ -678,6 +792,15 @@ static int sil24_softreset(struct ata_link *link, unsigned int *class,
 	ata_tf_init(link->device, &tf);	/* doesn't really matter */
 	rc = sil24_exec_polled_cmd(ap, pmp, &tf, 0, PRB_CTRL_SRST,
 				   timeout_msec);
+#ifdef MY_ABC_HERE
+	if (0 < ap->iFakeError) {
+		ata_link_printk(link, KERN_ERR, "generate fake softreset error, Fake count %d\n", ap->iFakeError);
+		if (SYNO_ERROR_MAX > ap->iFakeError) {
+			--(ap->iFakeError);
+		}
+		rc = -EBUSY;
+	}
+#endif /* MY_ABC_HERE */
 	if (rc == -EBUSY) {
 		reason = "timeout";
 		goto err;
@@ -694,6 +817,10 @@ static int sil24_softreset(struct ata_link *link, unsigned int *class,
 
  err:
 	ata_link_err(link, "softreset failed (%s)\n", reason);
+#ifdef MY_ABC_HERE
+	ata_link_printk(link, KERN_ERR, "softreset failed, set srst fail flag\n");
+	link->uiSflags |= ATA_SYNO_FLAG_SRST_FAIL;
+#endif /* MY_ABC_HERE */
 	return -EIO;
 }
 
@@ -829,7 +956,24 @@ static int sil24_qc_defer(struct ata_queued_cmd *qc)
 				return ATA_DEFER_PORT;
 			qc->flags |= ATA_QCFLAG_CLEAR_EXCL;
 		} else
+#ifdef MY_ABC_HERE
+		{
+			if (!ap->nr_active_links) {
+				/* Since we are here now, just preempt */
+				if (is_excl) {
+					ap->excl_link = link;
+					qc->flags |= ATA_QCFLAG_CLEAR_EXCL;
+				} else {
+					/* normal I/O should preempt in this situation */
+					ap->excl_link = NULL;
+				}
+			} else {
+				return ATA_DEFER_PORT;
+			}
+		}
+#else
 			return ATA_DEFER_PORT;
+#endif /* MY_ABC_HERE */
 	} else if (unlikely(is_excl)) {
 		ap->excl_link = link;
 		if (ap->nr_active_links)
@@ -996,6 +1140,46 @@ static void sil24_error_intr(struct ata_port *ap)
 	ehi = &link->eh_info;
 	ata_ehi_clear_desc(ehi);
 
+#ifdef MY_ABC_HERE
+	/* irq_off case */
+	if (ap->pflags & ATA_PFLAG_SYNO_IRQ_OFF) {
+		/* Only support deep sleep port, we can on ATA_PFLAG_SYNO_IRQ_OFF.
+		 * So if this case happened, we should BUG */
+		if (0 == iIsSynoDeepSleepSupport(ap) && !(ap->pflags & ATA_PFLAG_SYNO_DS_PWROFF)) {
+			printk("BUG!!! This port %d didn't support deep sleep\n", ap->print_id);
+			WARN_ON(1);
+			ap->pflags &= ~ATA_PFLAG_SYNO_IRQ_OFF;
+			ehi->action |= ATA_EH_RESET;
+		} else if (irq_stat & (PORT_IRQ_ERROR | PORT_IRQ_PHYRDY_CHG | PORT_IRQ_DEV_XCHG
+					| PORT_IRQ_8B10B | PORT_IRQ_SDB_NOTIFY)) {
+			/* if irq off, we must ignore interrupts in the following cases:
+			 * 1. PORT_IRQ_ERROR: Command Error
+			 * 2. PORT_IRQ_PHYRDY_CHG: PHY Ready Change
+			 * 3. PORT_IRQ_DEV_XCHG: XPHY Ready Change
+			 * 4. PORT_IRQ_8B10B: 8b/10b Decode Error Threshold
+			 * 5. PORT_IRQ_SDB_NOTIFY: when power off sil3132 will have this interrupt
+			 *						   "SDB notify" (Set Device Bits)
+			 * (details please see Port Interrupt Status) */
+
+			/* NOTE the caller must make sure, can on irq_off, so we just WARN_ON here. And still
+			 * let this interrupt ignore */
+			if (ap->nr_active_links && !(ap->pflags & ATA_PFLAG_SYNO_DS_PWROFF)) {
+				printk("WARNING: disk %d irq off but still have cmd. Reset now. irq_stat 0x%x\n",
+						ap->print_id, irq_stat);
+				ehi->action |= ATA_EH_RESET;
+			} else {
+				DBGMESG("disk %d irq off, ignore this interrupt, irq_stat 0x%x\n", ap->print_id, irq_stat);
+				return;
+			}
+		} else {
+			printk("WARNING: disk %d irq off but received un-wanted interrupts, reset now. irq_stat 0x%x\n",
+				ap->print_id, irq_stat);
+			WARN_ON(1);
+			ehi->action |= ATA_EH_RESET;
+		}
+	}
+#endif /* MY_ABC_HERE */
+
 	ata_ehi_push_desc(ehi, "irq_stat 0x%08x", irq_stat);
 
 	if (irq_stat & PORT_IRQ_SDB_NOTIFY) {
@@ -1003,7 +1187,25 @@ static void sil24_error_intr(struct ata_port *ap)
 		sata_async_notification(ap);
 	}
 
+#ifdef MY_ABC_HERE
+	if ((irq_stat & (PORT_IRQ_PHYRDY_CHG | PORT_IRQ_DEV_XCHG)) ||
+		(ap->uiSflags & ATA_SYNO_FLAG_FORCE_INTR)) {
+		if (ap->uiSflags & ATA_SYNO_FLAG_FORCE_INTR) {
+			ap->uiSflags &= ~ATA_SYNO_FLAG_FORCE_INTR;
+			DBGMESG("ata%u: clear ATA_SYNO_FLAG_FORCE_INTR\n", ap->print_id);
+		} else {
+			ap->iDetectStat = 1;
+			DBGMESG("ata%u: set detect stat check\n", ap->print_id);
+		}
+#else /* MY_ABC_HERE */
 	if (irq_stat & (PORT_IRQ_PHYRDY_CHG | PORT_IRQ_DEV_XCHG)) {
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		syno_ata_info_print(ap);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+		ap->pflags |= ATA_PFLAG_SYNO_BOOT_PROBE;
+#endif /* MY_ABC_HERE */
 		ata_ehi_hotplugged(ehi);
 		ata_ehi_push_desc(ehi, "%s",
 				  irq_stat & PORT_IRQ_PHYRDY_CHG ?
@@ -1122,7 +1324,11 @@ static inline void sil24_host_intr(struct ata_port *ap)
 
 	slot_stat = readl(port + PORT_SLOT_STAT);
 
+#ifdef MY_ABC_HERE
+	if (unlikely(slot_stat & HOST_SSTAT_ATTN) || (ap->uiSflags & ATA_SYNO_FLAG_FORCE_INTR)) {
+#else /* MY_ABC_HERE */
 	if (unlikely(slot_stat & HOST_SSTAT_ATTN)) {
+#endif /* MY_ABC_HERE */
 		sil24_error_intr(ap);
 		return;
 	}

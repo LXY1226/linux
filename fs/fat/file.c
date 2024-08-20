@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/fat/file.c
  *
@@ -20,9 +23,9 @@ static int fat_ioctl_get_attributes(struct inode *inode, u32 __user *user_attr)
 {
 	u32 attr;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	attr = fat_make_attrs(inode);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 
 	return put_user(attr, user_attr);
 }
@@ -43,7 +46,7 @@ static int fat_ioctl_set_attributes(struct file *file, u32 __user *user_attr)
 	err = mnt_want_write_file(file);
 	if (err)
 		goto out;
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	/*
 	 * ATTR_VOLUME and ATTR_DIR cannot be changed; this also
@@ -105,7 +108,7 @@ static int fat_ioctl_set_attributes(struct file *file, u32 __user *user_attr)
 	fat_save_attrs(inode, attr);
 	mark_inode_dirty(inode);
 out_unlock_inode:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	mnt_drop_write_file(file);
 out:
 	return err;
@@ -311,6 +314,9 @@ void fat_truncate_blocks(struct inode *inode, loff_t offset)
 
 int fat_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
 {
+#ifdef MY_ABC_HERE
+	int err = 0;
+#endif /* MY_ABC_HERE */
 	struct inode *inode = d_inode(dentry);
 	generic_fillattr(inode, stat);
 	stat->blksize = MSDOS_SB(inode->i_sb)->cluster_size;
@@ -319,6 +325,12 @@ int fat_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
 		/* Use i_pos for ino. This is used as fileid of nfs. */
 		stat->ino = fat_i_pos_read(MSDOS_SB(inode->i_sb), inode);
 	}
+#ifdef MY_ABC_HERE
+	err = syno_inode_keep_list_update(&(MSDOS_SB(inode->i_sb)->syno_inode_keep_list), inode);
+	if (err) {
+		fat_msg(inode->i_sb, KERN_INFO, "FAT failed to update inode keep err:%d", err);
+	}
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 EXPORT_SYMBOL_GPL(fat_getattr);

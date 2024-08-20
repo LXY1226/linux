@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/net/phy/cicada.c
  *
@@ -114,7 +117,11 @@ static struct phy_driver cis820x_driver[] = {
 	.read_status	= &genphy_read_status,
 	.ack_interrupt	= &cis820x_ack_interrupt,
 	.config_intr	= &cis820x_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id		= 0x000fc440,
 	.name		= "Cicada Cis8204",
@@ -126,7 +133,11 @@ static struct phy_driver cis820x_driver[] = {
 	.read_status	= &genphy_read_status,
 	.ack_interrupt	= &cis820x_ack_interrupt,
 	.config_intr	= &cis820x_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 } };
 
 module_phy_driver(cis820x_driver);

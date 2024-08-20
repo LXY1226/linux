@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Driver for (BCM4706)? GBit MAC core on BCMA bus.
  *
@@ -1482,7 +1485,11 @@ static int bgmac_mii_register(struct bgmac *bgmac)
 	struct mii_bus *mii_bus;
 	struct phy_device *phy_dev;
 	char bus_id[MII_BUS_ID_SIZE + 3];
+#if defined(MY_ABC_HERE)
+	int err = 0;
+#else /* MY_ABC_HERE */
 	int i, err = 0;
+#endif /* MY_ABC_HERE */
 
 	if (ci->id == BCMA_CHIP_ID_BCM4707 ||
 	    ci->id == BCMA_CHIP_ID_BCM53018)
@@ -1501,6 +1508,9 @@ static int bgmac_mii_register(struct bgmac *bgmac)
 	mii_bus->parent = &bgmac->core->dev;
 	mii_bus->phy_mask = ~(1 << bgmac->phyaddr);
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	mii_bus->irq = kmalloc_array(PHY_MAX_ADDR, sizeof(int), GFP_KERNEL);
 	if (!mii_bus->irq) {
 		err = -ENOMEM;
@@ -1509,10 +1519,15 @@ static int bgmac_mii_register(struct bgmac *bgmac)
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		mii_bus->irq[i] = PHY_POLL;
 
+#endif /* MY_ABC_HERE */
 	err = mdiobus_register(mii_bus);
 	if (err) {
 		bgmac_err(bgmac, "Registration of mii bus failed\n");
+#if defined(MY_ABC_HERE)
+		goto err_free_bus;
+#else /* MY_ABC_HERE */
 		goto err_free_irq;
+#endif /* MY_ABC_HERE */
 	}
 
 	bgmac->mii_bus = mii_bus;
@@ -1533,8 +1548,12 @@ static int bgmac_mii_register(struct bgmac *bgmac)
 
 err_unregister_bus:
 	mdiobus_unregister(mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 err_free_irq:
 	kfree(mii_bus->irq);
+#endif /* MY_ABC_HERE */
 err_free_bus:
 	mdiobus_free(mii_bus);
 	return err;
@@ -1545,7 +1564,11 @@ static void bgmac_mii_unregister(struct bgmac *bgmac)
 	struct mii_bus *mii_bus = bgmac->mii_bus;
 
 	mdiobus_unregister(mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(mii_bus->irq);
+#endif /* MY_ABC_HERE */
 	mdiobus_free(mii_bus);
 }
 

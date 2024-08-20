@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2013 NVIDIA CORPORATION.  All rights reserved.
  *
@@ -19,7 +22,11 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_composite(_hw) container_of(_hw, struct clk_composite, hw)
+#endif /* MY_ABC_HERE */
 
 static u8 clk_composite_get_parent(struct clk_hw *hw)
 {

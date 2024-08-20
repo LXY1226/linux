@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /**
  * eCryptfs: Linux filesystem encryption layer
  *
@@ -177,11 +180,40 @@ static int ecryptfs_show_options(struct seq_file *m, struct dentry *root)
 		seq_printf(m, ",ecryptfs_unlink_sigs");
 	if (mount_crypt_stat->flags & ECRYPTFS_GLOBAL_MOUNT_AUTH_TOK_ONLY)
 		seq_printf(m, ",ecryptfs_mount_auth_tok_only");
-
+#ifdef MY_ABC_HERE
+	if (!(mount_crypt_stat->flags & ECRYPTFS_GLOBAL_FAST_LOOKUP_ENABLED))
+		seq_printf(m, ",no_fast_lookup");
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 
+#ifdef MY_ABC_HERE
+static int ecryptfs_syno_get_sb_archive_ver(struct super_block *sb, u32 *archive_ver)
+{
+	struct super_block *lower_sb = ecryptfs_superblock_to_lower(sb);
+
+	if (!lower_sb->s_op->syno_get_sb_archive_ver)
+		return -EINVAL;
+
+	return lower_sb->s_op->syno_get_sb_archive_ver(lower_sb, archive_ver);
+}
+
+static int ecryptfs_syno_set_sb_archive_ver(struct super_block *sb, u32 archive_ver)
+{
+	struct super_block *lower_sb = ecryptfs_superblock_to_lower(sb);
+
+	if (!lower_sb->s_op->syno_set_sb_archive_ver)
+		return -EINVAL;
+
+	return lower_sb->s_op->syno_set_sb_archive_ver(lower_sb, archive_ver);
+}
+#endif /* MY_ABC_HERE */
+
 const struct super_operations ecryptfs_sops = {
+#ifdef MY_ABC_HERE
+	.syno_get_sb_archive_ver = ecryptfs_syno_get_sb_archive_ver,
+	.syno_set_sb_archive_ver = ecryptfs_syno_set_sb_archive_ver,
+#endif /* MY_ABC_HERE */
 	.alloc_inode = ecryptfs_alloc_inode,
 	.destroy_inode = ecryptfs_destroy_inode,
 	.statfs = ecryptfs_statfs,

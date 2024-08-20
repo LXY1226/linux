@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/include/linux/hfsplus_raw.h
  *
@@ -240,11 +243,19 @@ struct DInfo {
 } __packed;
 
 struct DXInfo {
+#ifdef MY_ABC_HERE
+	__be32 point;
+	__be32 date_added;
+	__be16 extended_flags;
+	__be16 reserved2;
+	__be32 reserved3;
+#else
 	struct hfsp_point frScroll;
 	__be32 frOpenChain;
 	__be16 frUnused;
 	__be16 frComment;
 	__be32 frPutAway;
+#endif /* MY_ABC_HERE */
 } __packed;
 
 /* HFS+ folder data (part of an hfsplus_cat_entry) */
@@ -275,10 +286,18 @@ struct FInfo {
 } __packed;
 
 struct FXInfo {
+#ifdef MY_ABC_HERE
+	__be32 reserved1;
+	__be32 date_added;
+	__be16 extended_flags;
+	__be16 reserved2;
+	__be32 reserved3;
+#else
 	__be16 fdIconID;
 	u8 fdUnused[8];
 	__be16 fdComment;
 	__be32 fdPutAway;
+#endif /* MY_ABC_HERE */
 } __packed;
 
 /* HFS+ file data (part of a cat_entry) */
@@ -347,6 +366,9 @@ struct hfsplus_ext_key {
 
 #define HFSPLUS_XATTR_FINDER_INFO_NAME "com.apple.FinderInfo"
 #define HFSPLUS_XATTR_ACL_NAME "com.apple.system.Security"
+#ifdef MY_ABC_HERE
+#define HFSPLUS_XATTR_RESOURCE_FORK_NAME "com.apple.ResourceFork"
+#endif /* MY_ABC_HERE */
 
 #define HFSPLUS_ATTR_INLINE_DATA 0x10
 #define HFSPLUS_ATTR_FORK_DATA   0x20
@@ -379,6 +401,28 @@ struct hfsplus_attr_extents {
 
 #define HFSPLUS_MAX_INLINE_DATA_SIZE 3802
 
+#ifdef MY_ABC_HERE
+/*
+ * Atrributes B-tree Data Record
+ *
+ * For small attributes, whose entire value is stored
+ * within a single B-tree record.
+ *
+ * !!! XNU kernel use the following define.
+ * inline structure is outdated & been replaced.
+ *
+ * If hfsplus_attr_data size is small,
+ * hfsplus_attr_tree_cachep will try to alloc more space.
+ *
+ */
+struct hfsplus_attr_data {
+	__be32 record_type;
+	__be32 reserved[2];
+	__be32 length;
+	__u8 raw_bytes[2];
+} __packed;
+#define hfsplus_attr_inline_data hfsplus_attr_data
+#else
 /* HFS+ attribute inline data */
 struct hfsplus_attr_inline_data {
 	__be32 record_type;
@@ -387,6 +431,7 @@ struct hfsplus_attr_inline_data {
 	__be16 length;
 	u8 raw_bytes[HFSPLUS_MAX_INLINE_DATA_SIZE];
 } __packed;
+#endif /* MY_ABC_HERE */
 
 /* A data record in the attributes tree */
 typedef union {

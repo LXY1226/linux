@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _RAID10_H
 #define _RAID10_H
 
@@ -59,6 +62,10 @@ struct r10conf {
 	 */
 	struct list_head	bio_end_io_list;
 
+#ifdef MY_ABC_HERE
+	spinlock_t          syno_self_heal_retry_list_lock;
+	struct list_head    syno_self_heal_retry_list;
+#endif /* MY_ABC_HERE */
 	/* queue pending writes and submit them on unplug */
 	struct bio_list		pending_bio_list;
 	int			pending_count;
@@ -77,6 +84,10 @@ struct r10conf {
 						   * replacement device.
 						   */
 	wait_queue_head_t	wait_barrier;
+
+#ifdef MY_ABC_HERE
+	int                     flush_threshold;
+#endif /* MY_ABC_HERE */
 
 	mempool_t		*r10bio_pool;
 	mempool_t		*r10buf_pool;
@@ -155,5 +166,8 @@ enum r10bio_state {
  * flag is set
  */
 	R10BIO_Previous,
+#ifdef MY_ABC_HERE
+	R10BIO_FIX_READ_ERROR,
+#endif /* MY_ABC_HERE */
 };
 #endif

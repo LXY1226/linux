@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2014 MediaTek Inc.
  * Author: James Liao <jamesjj.liao@mediatek.com>
@@ -29,7 +32,11 @@ struct mtk_clk_gate {
 	u8		bit;
 };
 
+#if defined(MY_ABC_HERE)
+static inline struct mtk_clk_gate *to_mtk_clk_gate(struct clk_hw *hw)
+#else /* MY_ABC_HERE */
 static inline struct mtk_clk_gate *to_clk_gate(struct clk_hw *hw)
+#endif /* MY_ABC_HERE */
 {
 	return container_of(hw, struct mtk_clk_gate, hw);
 }

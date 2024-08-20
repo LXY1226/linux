@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   fs/cifs/inode.c
  *
@@ -166,6 +169,9 @@ cifs_fattr_to_inode(struct inode *inode, struct cifs_fattr *fattr)
 	cifs_nlink_fattr_to_inode(inode, fattr);
 	inode->i_uid = fattr->cf_uid;
 	inode->i_gid = fattr->cf_gid;
+#ifdef MY_ABC_HERE
+	inode->i_create_time = cifs_NTtimeToUnix(cpu_to_le64(fattr->cf_createtime));
+#endif /* MY_ABC_HERE */
 
 	/* if dynperm is set, don't clobber existing mode */
 	if (inode->i_state & I_NEW ||
@@ -1679,8 +1685,16 @@ cifs_do_rename(const unsigned int xid, struct dentry *from_dentry,
 	tcon = tlink_tcon(tlink);
 	server = tcon->ses->server;
 
+#ifdef MY_ABC_HERE
+	// cifs_sb_tlink need cifs_put_tlink before return
+	if (!server->ops->rename) {
+		cifs_put_tlink(tlink);
+		return -ENOSYS;
+	}
+#else
 	if (!server->ops->rename)
 		return -ENOSYS;
+#endif /* MY_ABC_HERE */
 
 	/* try path-based rename first */
 	rc = server->ops->rename(xid, tcon, from_path, to_path, cifs_sb);

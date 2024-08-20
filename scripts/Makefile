@@ -10,6 +10,12 @@
 # check-lc_ctype: Used in Documentation/DocBook
 
 HOST_EXTRACFLAGS += -I$(srctree)/tools/include
+ifdef CONFIG_SYNO_RAMDISK_INTEGRITY_CHECK
+HOST_EXTRACFLAGS += -DCONFIG_SYNO_RAMDISK_INTEGRITY_CHECK
+endif
+ifdef CONFIG_SYNO_KEXEC_TEST
+HOST_EXTRACFLAGS += -DCONFIG_SYNO_KEXEC_TEST
+endif
 
 CRYPTO_LIBS = $(shell pkg-config --libs libcrypto 2> /dev/null || echo -lcrypto)
 CRYPTO_CFLAGS = $(shell pkg-config --cflags libcrypto 2> /dev/null)

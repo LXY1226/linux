@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * AppliedMicro X-Gene SoC GPIO Driver
  *
@@ -181,7 +184,11 @@ static int xgene_gpio_probe(struct platform_device *pdev)
 	gpio->chip.ngpio = XGENE_MAX_GPIOS;
 
 	spin_lock_init(&gpio->lock);
+#if defined(MY_ABC_HERE)
+	gpio->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	gpio->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	gpio->chip.direction_input = xgene_gpio_dir_in;
 	gpio->chip.direction_output = xgene_gpio_dir_out;
 	gpio->chip.get = xgene_gpio_get;

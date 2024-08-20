@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * MTD partitioning layer definitions
  *
@@ -56,6 +59,11 @@ struct device_node;
 /**
  * struct mtd_part_parser_data - used to pass data to MTD partition parsers.
  * @origin: for RedBoot, start address of MTD device
+ * (for armada37xx 16.12)
+ * @of_node: for OF parsers, device node containing partitioning information.
+ *           This field is deprecated, as the device node should simply be
+ *           assigned to the master struct device.
+ * (for others)
  * @of_node: for OF parsers, device node containing partitioning information
  */
 struct mtd_part_parser_data {
@@ -72,13 +80,45 @@ struct mtd_part_parser {
 	struct list_head list;
 	struct module *owner;
 	const char *name;
+#if defined(MY_DEF_HERE)
+	int (*parse_fn)(struct mtd_info *, const struct mtd_partition **,
+#else /* MY_DEF_HERE */
 	int (*parse_fn)(struct mtd_info *, struct mtd_partition **,
+#endif /* MY_DEF_HERE */
 			struct mtd_part_parser_data *);
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+	void (*cleanup)(const struct mtd_partition *pparts, int nr_parts);
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 };
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+/* Container for passing around a set of parsed partitions */
+struct mtd_partitions {
+	const struct mtd_partition *parts;
+	int nr_parts;
+	const struct mtd_part_parser *parser;
+};
+
+extern int __register_mtd_parser(struct mtd_part_parser *parser,
+				 struct module *owner);
+#define register_mtd_parser(parser) __register_mtd_parser(parser, THIS_MODULE)
+
+#else /* CONFIG_SYNO_LSP_RTD1619 */
 extern void register_mtd_parser(struct mtd_part_parser *parser);
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 extern void deregister_mtd_parser(struct mtd_part_parser *parser);
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+/*
+ * module_mtd_part_parser() - Helper macro for MTD partition parsers that don't
+ * do anything special in module init/exit. Each driver may only use this macro
+ * once, and calling it replaces module_init() and module_exit().
+ */
+#define module_mtd_part_parser(__mtd_part_parser) \
+	module_driver(__mtd_part_parser, register_mtd_parser, \
+		      deregister_mtd_parser)
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 int mtd_is_partition(const struct mtd_info *mtd);
 int mtd_add_partition(struct mtd_info *master, const char *name,
 		      long long offset, long long length);

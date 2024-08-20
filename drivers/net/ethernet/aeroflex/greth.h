@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef GRETH_H
 #define GRETH_H
 
@@ -125,7 +128,11 @@ struct greth_private {
 
 	struct phy_device *phy;
 	struct mii_bus *mdio;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int mdio_irqs[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE */
 	unsigned int link;
 	unsigned int speed;
 	unsigned int duplex;

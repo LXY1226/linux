@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/kernel/reboot.c
  *
@@ -16,6 +19,32 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+#include <linux/tty.h>
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+#include <linux/gpio.h>
+#include <linux/delay.h>
+#ifdef MY_DEF_HERE
+#include <linux/of.h>
+#include <linux/synolib.h>
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+extern u32 syno_pch_lpc_gpio_pin(int pin, int *pValue, int isWrite);
+#endif /* MY_DEF_HERE */
+extern char gSynoUsbVbusHostAddr[CONFIG_SYNO_USB_VBUS_NUM_GPIO][13];
+extern int gSynoUsbVbusPort[CONFIG_SYNO_USB_VBUS_NUM_GPIO];
+extern unsigned gSynoUsbVbusGpp[CONFIG_SYNO_USB_VBUS_NUM_GPIO];
+extern unsigned gSynoUsbVbusGppPol[CONFIG_SYNO_USB_VBUS_NUM_GPIO];
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#include <linux/syno_gpio.h>
+#endif /* defined(MY_ABC_HERE) || defined(MY_DEF_HERE) */
+#ifdef MY_ABC_HERE
+extern SYNO_GPIO syno_gpio;
+extern void SYNO_GPIO_WRITE(int pin, int pValue);
+#endif /* MY_ABC_HERE */
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -65,12 +94,136 @@ void emergency_restart(void)
 }
 EXPORT_SYMBOL_GPL(emergency_restart);
 
+#ifdef MY_ABC_HERE
+static void syno_turnoff_usb_vbus_gpio(const unsigned vbus_gpio_pin, const unsigned vbus_gpio_polarity)
+{
+	int gpio_off_value = 0;
+	if (UINT_MAX == vbus_gpio_pin || UINT_MAX == vbus_gpio_polarity) {
+		return;
+	}
+#ifdef MY_DEF_HERE
+	gpio_off_value = !(gpio_off_value ^ vbus_gpio_polarity);
+	syno_pch_lpc_gpio_pin(vbus_gpio_pin, &gpio_off_value, 1);
+#elif defined(MY_ABC_HERE)
+	SYNO_GPIO_WRITE(vbus_gpio_pin, !(gpio_off_value ^ vbus_gpio_polarity));
+#endif /* MY_DEF_HERE / MY_ABC_HERE */
+	msleep(500);
+	printk(KERN_INFO "Turned off USB vbus gpio %u (%s)\n", vbus_gpio_pin,
+		vbus_gpio_polarity ? "ACTIVE_HIGH" : "ACTIVE_LOW");
+	return;
+}
+
+static void syno_turnoff_all_usb_vbus_gpio(void)
+{
+#ifdef MY_DEF_HERE
+		int index;
+		struct device_node *pUSBNode = NULL, *pVbusNode = NULL;
+		u32 vbusGpioPin = U32_MAX, vbusGpioPolarity = U32_MAX;
+		for_each_child_of_node(of_root, pUSBNode) {
+			// TODO: corrently the index of usb is not well defined, so the index is read but not used.
+			// get index number of usb_slot, e.g. /usb_slot@4 --> 4
+			if (pUSBNode->full_name && 1 == sscanf(pUSBNode->full_name, "/"DT_USB_SLOT"@%d", &index)) {
+
+				pVbusNode = of_get_child_by_name(pUSBNode, DT_VBUS);
+				if (NULL == pVbusNode) {
+					goto USB_PUT_NODE;
+				}
+
+				if (0 != of_property_read_u32_index(pVbusNode, DT_SYNO_GPIO, SYNO_GPIO_PIN, &vbusGpioPin)) {
+					printk(KERN_ERR "%s reading vbus vbusGpioPin failed.\n", __func__);
+					goto USB_PUT_NODE;
+				}
+				if (0 != of_property_read_u32_index(pVbusNode, DT_SYNO_GPIO, SYNO_POLARITY_PIN, &vbusGpioPolarity)) {
+					printk(KERN_ERR "%s reading vbus vbusGpioPolarity failed.\n", __func__);
+					goto USB_PUT_NODE;
+				}
+
+				syno_turnoff_usb_vbus_gpio(vbusGpioPin, vbusGpioPolarity);
+USB_PUT_NODE:
+				if (pVbusNode) {
+					of_node_put(pVbusNode);
+				}
+			}
+		}
+
+		for_each_child_of_node(of_root, pUSBNode) {
+			// TODO: corrently the index of usb is not well defined, so the index is read but not used.
+			// get index number of usb_slot, e.g. /usb_slot@4 --> 4
+			if (pUSBNode->full_name && 1 == sscanf(pUSBNode->full_name, "/"DT_HUB_SLOT"@%d", &index)) {
+
+				pVbusNode = of_get_child_by_name(pUSBNode, DT_VBUS);
+				if (NULL == pVbusNode) {
+					goto HUB_PUT_NODE;
+				}
+
+				if (0 != of_property_read_u32_index(pVbusNode, DT_SYNO_GPIO, SYNO_GPIO_PIN, &vbusGpioPin)) {
+					printk(KERN_ERR "%s reading vbus vbusGpioPin failed.\n", __func__);
+					goto HUB_PUT_NODE;
+				}
+				if (0 != of_property_read_u32_index(pVbusNode, DT_SYNO_GPIO, SYNO_POLARITY_PIN, &vbusGpioPolarity)) {
+					printk(KERN_ERR "%s reading vbus vbusGpioPolarity failed.\n", __func__);
+					goto HUB_PUT_NODE;
+				}
+
+				syno_turnoff_usb_vbus_gpio(vbusGpioPin, vbusGpioPolarity);
+HUB_PUT_NODE:
+				if (pVbusNode) {
+					of_node_put(pVbusNode);
+				}
+			}
+		}
+#else
+		int i = 0;
+		for (i = 0; i < CONFIG_SYNO_USB_VBUS_NUM_GPIO; i++) {
+			if (UINT_MAX != gSynoUsbVbusGpp[i]) {
+				syno_turnoff_usb_vbus_gpio(gSynoUsbVbusGpp[i], gSynoUsbVbusGppPol[i]);
+			}
+		}
+#endif /* MY_DEF_HERE */
+#ifdef CONFIG_SYNO_USB_POWER_OFF_TIME
+	mdelay(CONFIG_SYNO_USB_POWER_OFF_TIME);
+#endif /* CONFIG_SYNO_USB_POWER_OFF_TIME */
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+static void syno_turnoff_all_disk_enable_gpio(void)
+{
+	int index;
+	struct device_node *pInterNode = NULL;
+	u32 EnableGpioPin = U32_MAX, EnableGpioPolarity = U32_MAX;
+
+	for_each_child_of_node(of_root, pInterNode) {
+		if (pInterNode->full_name && 1 == sscanf(pInterNode->full_name, "/"DT_INTERNAL_SLOT"@%d", &index)) {
+			if (0 != of_property_read_u32_index(pInterNode, DT_POWER_PIN_GPIO, SYNO_GPIO_PIN, &EnableGpioPin)) {
+				printk(KERN_ERR "%s reading EnableGpioPin failed.\n", __func__);
+				continue;
+			}
+			if (0 != of_property_read_u32_index(pInterNode, DT_POWER_PIN_GPIO, SYNO_POLARITY_PIN, &EnableGpioPolarity)) {
+				printk(KERN_ERR "%s reading EnableGpioPolarity failed.\n", __func__);
+				continue;
+			}
+			SYNO_GPIO_WRITE(EnableGpioPin, (ACTIVE_HIGH == EnableGpioPolarity) ? 0 : 1);
+			msleep(500);
+			printk(KERN_INFO "Turned off slot %d enable gpio %u (%s)\n", index, EnableGpioPin,(ACTIVE_HIGH == EnableGpioPolarity) ? "ACTIVE_HIGH" : "ACTIVE_LOW");
+		}
+	}
+}
+#endif /* MY_DEF_HERE */
+
 void kernel_restart_prepare(char *cmd)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
 	usermodehelper_disable();
 	device_shutdown();
+#ifdef MY_ABC_HERE
+	if (SYSTEM_RESTART == system_state)
+		syno_turnoff_all_usb_vbus_gpio();
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	syno_turnoff_all_disk_enable_gpio();
+#endif /* MY_DEF_HERE */
 }
 
 /**
@@ -225,13 +378,47 @@ void kernel_restart(char *cmd)
 }
 EXPORT_SYMBOL_GPL(kernel_restart);
 
+#ifdef MY_ABC_HERE
+extern int gSynoSystemShutdown;
+#endif /* MY_ABC_HERE */
 static void kernel_shutdown_prepare(enum system_states state)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list,
 		(state == SYSTEM_HALT) ? SYS_HALT : SYS_POWER_OFF, NULL);
 	system_state = state;
+#ifdef MY_DEF_HERE
+	if (state != SYSTEM_POWER_OFF)
+		usermodehelper_disable();
+#else /* MY_DEF_HERE */
 	usermodehelper_disable();
+#endif /* MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+	gSynoSystemShutdown = 1;
+#endif /* MY_ABC_HERE */
+
+#if defined(CONFIG_ARCH_RTD129X) && defined(MY_DEF_HERE)
+	if (state != SYSTEM_POWER_OFF)
+		device_shutdown();
+#else
 	device_shutdown();
+#endif
+#ifdef MY_ABC_HERE
+	if (SYSTEM_POWER_OFF == system_state)
+		syno_turnoff_all_usb_vbus_gpio();
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	syno_turnoff_all_disk_enable_gpio();
+#endif /* MY_DEF_HERE */
+#if defined(MY_ABC_HERE) && defined(MY_ABC_HERE)
+	/* When WOL is set, CPLD will light on phy led as boot if this pin is high, before BIOS initialization. */
+	if (syno_is_hw_version(HW_DS718p) \
+		|| syno_is_hw_version(HW_DS218p) \
+		|| syno_is_hw_version(HW_DS220p) \
+		|| syno_is_hw_version(HW_DS224p)) {
+
+		SYNO_GPIO_WRITE (PHY_LED_CTRL_PIN(), 0);
+	}
+#endif /* MY_ABC_HERE && MY_ABC_HERE */
 }
 /**
  *	kernel_halt - halt the system
@@ -254,9 +441,15 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  *
  *	Shutdown everything and perform a clean system power_off.
  */
+#ifdef MY_DEF_HERE
+extern int syno_schedule_power_on_prepare(void);
+#endif /* MY_DEF_HERE */
 void kernel_power_off(void)
 {
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
+#ifdef MY_DEF_HERE 
+	syno_schedule_power_on_prepare();
+#endif /* MY_DEF_HERE */
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();
 	migrate_to_reboot_cpu();
@@ -266,6 +459,13 @@ void kernel_power_off(void)
 	machine_power_off();
 }
 EXPORT_SYMBOL_GPL(kernel_power_off);
+
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+#define UART_TTYS_INDEX 1
+
+#define UART_CMD_REBOOT 67 // "C"
+#define UART_CMD_POWEROFF 49 // "1"
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 
 static DEFINE_MUTEX(reboot_mutex);
 
@@ -283,6 +483,9 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	struct pid_namespace *pid_ns = task_active_pid_ns(current);
 	char buffer[256];
 	int ret = 0;
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+	char szBuf[2];
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 
 	/* We only trust the superuser with rebooting the system. */
 	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
@@ -314,6 +517,11 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	mutex_lock(&reboot_mutex);
 	switch (cmd) {
 	case LINUX_REBOOT_CMD_RESTART:
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+		szBuf[0] = UART_CMD_REBOOT;
+		szBuf[1] = '\0';
+		syno_ttys_write(UART_TTYS_INDEX, szBuf);
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 		kernel_restart(NULL);
 		break;
 
@@ -331,7 +539,16 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		panic("cannot halt");
 
 	case LINUX_REBOOT_CMD_POWER_OFF:
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+		szBuf[0] = UART_CMD_POWEROFF;
+		szBuf[1] = '\0';
+		syno_ttys_write(UART_TTYS_INDEX, szBuf);
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 		kernel_power_off();
+#ifdef MY_ABC_HERE
+		// We trigger poweroff via uP, so we don't need to enter do_exit()
+		while(1);
+#endif /* MY_ABC_HERE */
 		do_exit(0);
 		break;
 

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Digital Audio (PCM) abstract layer / OSS compatible
  *  Copyright (c) by Jaroslav Kysela <perex@perex.cz>
@@ -727,6 +730,11 @@ static int snd_pcm_oss_period_size(struct snd_pcm_substream *substream,
 	if (oss_buffer_size <= 0)
 		return -EINVAL;
 	oss_buffer_size = rounddown_pow_of_two(oss_buffer_size);
+#if defined(MY_ABC_HERE)
+	if (oss_buffer_size > 65536) {
+		oss_buffer_size = 65536;
+	}
+#endif /* MY_ABC_HERE */
 	if (atomic_read(&substream->mmap_count)) {
 		if (oss_buffer_size > runtime->oss.mmap_bytes)
 			oss_buffer_size = runtime->oss.mmap_bytes;

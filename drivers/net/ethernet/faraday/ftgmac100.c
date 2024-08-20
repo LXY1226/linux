@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Faraday FTGMAC100 Gigabit Ethernet
  *
@@ -72,7 +75,11 @@ struct ftgmac100 {
 	struct napi_struct napi;
 
 	struct mii_bus *mii_bus;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int phy_irq[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE */
 	struct phy_device *phydev;
 	int old_speed;
 };
@@ -841,7 +848,11 @@ static int ftgmac100_mii_probe(struct ftgmac100 *priv)
 
 	/* search for connect PHY device */
 	for (i = 0; i < PHY_MAX_ADDR; i++) {
+#if defined(MY_ABC_HERE)
+		struct phy_device *tmp = mdiobus_get_phy(priv->mii_bus, i);
+#else /* MY_ABC_HERE */
 		struct phy_device *tmp = priv->mii_bus->phy_map[i];
+#endif /* MY_ABC_HERE */
 
 		if (tmp) {
 			phydev = tmp;
@@ -855,7 +866,11 @@ static int ftgmac100_mii_probe(struct ftgmac100 *priv)
 		return -ENODEV;
 	}
 
+#if defined(MY_ABC_HERE)
+	phydev = phy_connect(netdev, phydev_name(phydev),
+#else /* MY_ABC_HERE */
 	phydev = phy_connect(netdev, dev_name(&phydev->dev),
+#endif /* MY_ABC_HERE */
 			     &ftgmac100_adjust_link, PHY_INTERFACE_MODE_GMII);
 
 	if (IS_ERR(phydev)) {
@@ -1189,7 +1204,11 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	struct net_device *netdev;
 	struct ftgmac100 *priv;
 	int err;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int i;
+#endif /* MY_ABC_HERE */
 
 	if (!pdev)
 		return -ENODEV;
@@ -1258,10 +1277,14 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	priv->mii_bus->priv = netdev;
 	priv->mii_bus->read = ftgmac100_mdiobus_read;
 	priv->mii_bus->write = ftgmac100_mdiobus_write;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	priv->mii_bus->irq = priv->phy_irq;
 
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		priv->mii_bus->irq[i] = PHY_POLL;
+#endif /* MY_ABC_HERE */
 
 	err = mdiobus_register(priv->mii_bus);
 	if (err) {

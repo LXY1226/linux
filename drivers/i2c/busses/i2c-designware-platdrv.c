@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Synopsys DesignWare I2C adapter driver (master only).
  *
@@ -36,11 +39,21 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <linux/platform_data/i2c-designware.h>
 #include "i2c-designware-core.h"
+#ifdef MY_DEF_HERE
+#include <linux/synobios.h>
+#endif /* MY_DEF_HERE */
+#if defined(MY_DEF_HERE)
+#include <linux/seq_file.h>
+#include <linux/proc_fs.h>
+#include <linux/syno_gpio.h>
+#include <linux/synolib.h>
+#endif /* MY_DEF_HERE */
 
 static u32 i2c_dw_get_clk_rate_khz(struct dw_i2c_dev *dev)
 {
@@ -122,6 +135,9 @@ static const struct acpi_device_id dw_i2c_acpi_match[] = {
 	{ "80860F41", 0 },
 	{ "808622C1", 0 },
 	{ "AMD0010", ACCESS_INTR_MASK },
+	{ "AMDI0010", ACCESS_INTR_MASK },
+	{ "AMDI0510", 0 },
+	{ "APMC0D0F", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, dw_i2c_acpi_match);
@@ -132,12 +148,123 @@ static inline int dw_i2c_acpi_configure(struct platform_device *pdev)
 }
 #endif
 
+#if defined(MY_DEF_HERE)
+static int syno_dw_recovery_proc_show(struct seq_file *m, void *v)
+{
+	struct dw_i2c_dev *dev = (struct dw_i2c_dev *)m->private;
+	u8 iomux_val = 0;
+
+	// record iomux value of scl_gpio before setting to gpio 
+	iomux_val = readb(dev->iomux_base + dev->rinfo.scl_gpio);
+	
+	//set scl_gpio to gpio mode
+	writeb(0x2, dev->iomux_base + dev->rinfo.scl_gpio);
+
+	pulse_try_cnt++;
+	if (0 == i2c_recover_bus(&dev->adapter)) {
+		pulse_suc_cnt++;
+		printk("i2c recover work\n");
+	} 
+
+	delay_try_cnt++;
+	if (0 == syno_dw_delay_recovery(&dev->adapter)) {
+		delay_suc_cnt++;
+		printk("smbus recover work\n");
+	}
+
+	seq_printf(m, "Force i2c recovery\n");
+	
+	// restore iomux value of scl_gpio
+	writeb(iomux_val, dev->iomux_base + dev->rinfo.scl_gpio);
+	return 0;
+}
+
+static int syno_dw_recovery_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, syno_dw_recovery_proc_show, PDE_DATA(inode));
+}
+
+static const struct file_operations syno_dw_recovery_proc_fops = {
+        .open           = syno_dw_recovery_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+
+static int syno_dw_recovery_cnt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "42ms delay try cnt : %lu\n", delay_try_cnt);
+	seq_printf(m, "42ms delay suc cnt : %lu\n", delay_suc_cnt);
+	seq_printf(m, "more pulse try cnt : %lu\n", pulse_try_cnt);
+	seq_printf(m, "more pulse suc cnt : %lu\n", pulse_suc_cnt);
+
+	return 0;
+}
+
+static int syno_dw_recovery_cnt_proc_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, syno_dw_recovery_cnt_proc_show, PDE_DATA(inode));
+}
+
+static const struct file_operations syno_dw_recovery_cnt_proc_fops = {
+        .open           = syno_dw_recovery_cnt_proc_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = single_release,
+};
+
+static int proc_syno_dw_recovery_cnt_init(struct dw_i2c_dev *dev, struct proc_dir_entry* parent)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("syno_dw_recovery_cnt", 0, parent, &syno_dw_recovery_cnt_proc_fops, dev);
+	if (NULL == p) {
+		printk("Fail to cat syno_dw_recovery_cnt proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+
+static int proc_syno_dw_recovery_init(struct dw_i2c_dev *dev, struct proc_dir_entry* parent)
+{
+	int iResult = 0;
+	struct proc_dir_entry *p;
+	p = proc_create_data("syno_dw_recovery", 0, parent, &syno_dw_recovery_proc_fops, dev);
+	if (NULL == p) {
+		printk("Fail to create syno_dw_recovery proc\n");
+		iResult = -1;
+	}
+
+	return iResult;
+}
+
+static int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev)
+{
+	struct i2c_bus_recovery_info *rinfo = &dev->rinfo;
+	struct i2c_adapter *adap = &dev->adapter;
+
+	// FIXME: customized for AMD V/R1000 i2c3 ONLY
+	rinfo->scl_gpio = 19;
+	rinfo->sda_gpio = 20;
+	rinfo->recover_bus = i2c_generic_scl_recovery;
+
+	rinfo->set_scl = syno_dw_i2c_set_scl;
+	rinfo->get_scl = syno_dw_i2c_get_scl;
+	rinfo->get_sda = syno_dw_i2c_get_sda;
+
+	adap->bus_recovery_info = rinfo;
+
+	return 0;
+}
+#endif /* MY_DEF_HERE */
+
 static int dw_i2c_plat_probe(struct platform_device *pdev)
 {
+	struct dw_i2c_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct dw_i2c_dev *dev;
 	struct i2c_adapter *adap;
 	struct resource *mem;
-	struct dw_i2c_platform_data *pdata;
 	int irq, r;
 	u32 clk_freq, ht = 0;
 
@@ -159,35 +286,44 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 
 	/* fast mode by default because of legacy reasons */
-	clk_freq = 400000;
-
-	if (has_acpi_companion(&pdev->dev)) {
-		dw_i2c_acpi_configure(pdev);
-	} else if (pdev->dev.of_node) {
-		of_property_read_u32(pdev->dev.of_node,
-					"i2c-sda-hold-time-ns", &ht);
-
-		of_property_read_u32(pdev->dev.of_node,
-				     "i2c-sda-falling-time-ns",
-				     &dev->sda_falling_time);
-		of_property_read_u32(pdev->dev.of_node,
-				     "i2c-scl-falling-time-ns",
-				     &dev->scl_falling_time);
-
-		of_property_read_u32(pdev->dev.of_node, "clock-frequency",
-				     &clk_freq);
-
-		/* Only standard mode at 100kHz and fast mode at 400kHz
-		 * are supported.
-		 */
-		if (clk_freq != 100000 && clk_freq != 400000) {
-			dev_err(&pdev->dev, "Only 100kHz and 400kHz supported");
-			return -EINVAL;
-		}
+#ifdef MY_DEF_HERE
+	if (syno_is_hw_version(HW_DS1621p) || syno_is_hw_version(HW_DS1821p)) {
+		clk_freq = 400000;
 	} else {
-		pdata = dev_get_platdata(&pdev->dev);
-		if (pdata)
-			clk_freq = pdata->i2c_scl_freq;
+		clk_freq = 100000;
+	}
+#else /* MY_DEF_HERE */
+	clk_freq = 400000;
+#endif /* MY_DEF_HERE */
+
+	if (pdata) {
+		clk_freq = pdata->i2c_scl_freq;
+	} else {
+#ifdef MY_DEF_HERE
+		if (syno_is_hw_version(HW_RS822p) || syno_is_hw_version(HW_RS822rpp)) {
+			ht = 100;
+		}
+#else /* MY_DEF_HERE */
+		device_property_read_u32(&pdev->dev, "i2c-sda-hold-time-ns",
+					 &ht);
+#endif /* MY_DEF_HERE */
+		device_property_read_u32(&pdev->dev, "i2c-sda-falling-time-ns",
+					 &dev->sda_falling_time);
+		device_property_read_u32(&pdev->dev, "i2c-scl-falling-time-ns",
+					 &dev->scl_falling_time);
+		device_property_read_u32(&pdev->dev, "clock-frequency",
+					 &clk_freq);
+	}
+
+	if (has_acpi_companion(&pdev->dev))
+		dw_i2c_acpi_configure(pdev);
+
+	/*
+	 * Only standard mode at 100kHz and fast mode at 400kHz are supported.
+	 */
+	if (clk_freq != 100000 && clk_freq != 400000) {
+		dev_err(&pdev->dev, "Only 100kHz and 400kHz supported");
+		return -EINVAL;
 	}
 
 	r = i2c_dw_eval_lock_support(dev);
@@ -231,7 +367,11 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 
 	adap = &dev->adapter;
 	adap->owner = THIS_MODULE;
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+	adap->class = I2C_CLASS_HWMON | I2C_CLASS_SPD;
+#else /* MY_DEF_HERE || MY_DEF_HERE || MY_DEF_HERE */
 	adap->class = I2C_CLASS_DEPRECATED;
+#endif /* MY_DEF_HERE || MY_DEF_HERE || MY_DEF_HERE */
 	ACPI_COMPANION_SET(&adap->dev, ACPI_COMPANION(&pdev->dev));
 	adap->dev.of_node = pdev->dev.of_node;
 
@@ -245,6 +385,21 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	}
 
 	r = i2c_dw_probe(dev);
+
+#if defined(MY_DEF_HERE)
+	if (syno_is_hw_version(HW_RS422p) && 1 == adap->nr) {
+		dev->gpio_base = ioremap(AMD_GPIO_BASE, AMD_GPIO_BASE_SIZE);
+		dev->iomux_base = ioremap(AMD_IOMUX_BASE, AMD_IOMUX_BASE_SIZE);
+		r = i2c_dw_init_recovery_info(dev);
+
+		snprintf(dev->proc_dir_name, sizeof(dev->proc_dir_name), "syno-dw-i2c-%d", adap->nr);
+		dev->i2c_proc_dir = proc_mkdir(dev->proc_dir_name, NULL);
+
+		proc_syno_dw_recovery_init(dev, dev->i2c_proc_dir);
+		proc_syno_dw_recovery_cnt_init(dev, dev->i2c_proc_dir);
+	}
+#endif /* MY_DEF_HERE */
+
 	if (r && !dev->pm_runtime_disabled)
 		pm_runtime_disable(&pdev->dev);
 
@@ -256,6 +411,21 @@ static int dw_i2c_plat_remove(struct platform_device *pdev)
 	struct dw_i2c_dev *dev = platform_get_drvdata(pdev);
 
 	pm_runtime_get_sync(&pdev->dev);
+
+#if defined(MY_DEF_HERE)
+	if (syno_is_hw_version(HW_RS422p) && 1 == dev->adapter.nr) {
+		remove_proc_entry("syno_dw_recovery", dev->i2c_proc_dir);
+		remove_proc_entry("syno_dw_recovery_cnt", dev->i2c_proc_dir);
+		remove_proc_entry(dev->proc_dir_name, NULL);
+
+		if (dev->iomux_base) {
+			iounmap(dev->iomux_base);
+		}
+		if (dev->gpio_base) {
+			iounmap(dev->gpio_base);
+		}
+	}
+#endif /* MY_DEF_HERE */
 
 	i2c_del_adapter(&dev->adapter);
 

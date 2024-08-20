@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * PCI Express Hot Plug Controller Driver
  *
@@ -120,6 +123,9 @@ static int init_slot(struct controller *ctrl)
 	if (ATTN_LED(ctrl)) {
 		ops->get_attention_status = get_attention_status;
 		ops->set_attention_status = set_attention_status;
+	} else if (ctrl->pcie->port->hotplug_user_indicators) {
+		ops->get_attention_status = pciehp_get_raw_indicator_status;
+		ops->set_attention_status = pciehp_set_raw_indicator_status;
 	}
 
 	/* register this slot with the hotplug pci core */
@@ -214,12 +220,18 @@ static int reset_slot(struct hotplug_slot *hotplug_slot, int probe)
 	return pciehp_reset_slot(slot, probe);
 }
 
+#ifdef MY_DEF_HERE
+extern int syno_pciehp_force_check(const char * name);
+#endif /* MY_DEF_HERE */
 static int pciehp_probe(struct pcie_device *dev)
 {
 	int rc;
 	struct controller *ctrl;
 	struct slot *slot;
 	u8 occupied, poweron;
+#ifdef MY_DEF_HERE
+	int syno_force = syno_pciehp_force_check(kobject_name(&dev->device.kobj));
+#endif /* MY_DEF_HERE */
 
 	/* If this is not a "hotplug" service, we have no business here. */
 	if (dev->service != PCIE_PORT_SERVICE_HP)
@@ -260,7 +272,11 @@ static int pciehp_probe(struct pcie_device *dev)
 	slot = ctrl->slot;
 	pciehp_get_adapter_status(slot, &occupied);
 	pciehp_get_power_status(slot, &poweron);
+#ifdef MY_DEF_HERE
+	if (occupied && (pciehp_force || syno_force)) {
+#else /* MY_DEF_HERE */
 	if (occupied && pciehp_force) {
+#endif /* MY_DEF_HERE */
 		mutex_lock(&slot->hotplug_lock);
 		pciehp_enable_slot(slot);
 		mutex_unlock(&slot->hotplug_lock);

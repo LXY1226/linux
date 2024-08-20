@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Device Tree support for Armada 370 and XP platforms.
  *
@@ -34,6 +37,9 @@
 #include "coherency.h"
 #include "mvebu-soc-id.h"
 
+#if defined(MY_ABC_HERE)
+#define SCU_CTRL		0x00
+#endif /* MY_ABC_HERE */
 static void __iomem *scu_base;
 
 /*
@@ -42,10 +48,24 @@ static void __iomem *scu_base;
  */
 static void __init mvebu_scu_enable(void)
 {
+#if defined(MY_ABC_HERE)
+	u32 scu_ctrl;
+#endif /* MY_ABC_HERE */
 	struct device_node *np =
 		of_find_compatible_node(NULL, NULL, "arm,cortex-a9-scu");
 	if (np) {
 		scu_base = of_iomap(np, 0);
+
+#if defined(MY_ABC_HERE)
+		scu_ctrl = readl_relaxed(scu_base + SCU_CTRL);
+		/* already enabled? */
+		if (!(scu_ctrl & 1)) {
+			/* Enable SCU Speculative linefills to L2 */
+			scu_ctrl |= (1 << 3);
+			writel_relaxed(scu_ctrl, scu_base + SCU_CTRL);
+		}
+#endif /* MY_ABC_HERE */
+
 		scu_enable(scu_base);
 		of_node_put(np);
 	}
@@ -104,13 +124,75 @@ static void __init mvebu_memblock_reserve(void)
 static void __init mvebu_memblock_reserve(void) {}
 #endif
 
+#if defined(MY_ABC_HERE)
+void __init mvebu_l2_optimizations(void)
+{
+	void __iomem *l2x0_base;
+	struct device_node *np;
+	unsigned int val;
+
+	np = of_find_compatible_node(NULL, NULL, "arm,pl310-cache");
+	if (!np)
+		return;
+
+	l2x0_base = of_iomap(np, 0);
+	if (!l2x0_base) {
+		of_node_put(np);
+		return;
+	}
+
+	/* Configure the L2 PREFETCH and POWER registers */
+	val = 0x58800000;
+	/*
+	*  Support the following configuration:
+	*  Incr double linefill enable
+	*  Data prefetch enable
+	*  Double linefill enable
+	*  Double linefill on WRAP disable
+	*  NO prefetch drop enable
+	 */
+	writel_relaxed(val, l2x0_base + L310_PREFETCH_CTRL);
+	val = L310_DYNAMIC_CLK_GATING_EN;
+	writel_relaxed(val, l2x0_base + L310_POWER_CTRL);
+
+	iounmap(l2x0_base);
+	of_node_put(np);
+}
+#endif /* MY_ABC_HERE */
+
 static void __init mvebu_init_irq(void)
 {
+#if defined(MY_ABC_HERE)
+	mvebu_l2_optimizations();
+#endif /* MY_ABC_HERE */
 	irqchip_init();
 	mvebu_scu_enable();
 	coherency_init();
+#if defined(MY_ABC_HERE)
+
+	/* In case we are running from MSYS, skip mbus initialization. The
+	 * mvebu_mbus_dt_init was executed earlier in msys_irqchip_init. This
+	 * was required by switch interrupt driver (marvell,swic), which had
+	 * to have access to switch region (decoding windows had to be opened).
+	 */
+	if (!(of_machine_is_compatible("marvell,msys")))
+		BUG_ON(mvebu_mbus_dt_init(coherency_available()));
+#else /* MY_ABC_HERE */
 	BUG_ON(mvebu_mbus_dt_init(coherency_available()));
+#endif /* MY_ABC_HERE */
 }
+
+#if defined(MY_ABC_HERE)
+static void __init msys_irqchip_init(void)
+{
+	/* Because the switch interrupt driver (marvell,swic) uses register from
+	* the switch region space, the decoding window for switch must be
+	* initialized, before calling interrupt drivers.
+	*/
+	BUG_ON(mvebu_mbus_dt_init(coherency_available()));
+	mvebu_init_irq();
+}
+#endif /* MY_ABC_HERE */
 
 static void __init i2c_quirk(void)
 {
@@ -194,6 +276,9 @@ DT_MACHINE_START(ARMADA_38X_DT, "Marvell Armada 380/385 (Device Tree)")
 	.l2c_aux_mask	= ~0,
 	.init_irq       = mvebu_init_irq,
 	.restart	= mvebu_restart,
+#if defined(MY_ABC_HERE)
+	.reserve        = mvebu_memblock_reserve,
+#endif /* MY_ABC_HERE */
 	.dt_compat	= armada_38x_dt_compat,
 MACHINE_END
 
@@ -210,3 +295,27 @@ DT_MACHINE_START(ARMADA_39X_DT, "Marvell Armada 39x (Device Tree)")
 	.restart	= mvebu_restart,
 	.dt_compat	= armada_39x_dt_compat,
 MACHINE_END
+
+#if defined(MY_ABC_HERE)
+static const char * const msys_dt_compat[] __initconst = {
+	"marvell,msys",
+	NULL,
+};
+
+
+DT_MACHINE_START(MSYS_DT, "Marvell SYS (Device Tree)")
+	.l2c_aux_val	= 0,
+	.l2c_aux_mask	= ~0,
+/*
+ * The following field (.smp) is still needed to ensure backward
+ * compatibility with old Device Trees that were not specifying the
+ * cpus enable-method property.
+ */
+	.smp		= smp_ops(armada_xp_smp_ops),
+	.init_machine	= mvebu_dt_init,
+	.init_irq       = msys_irqchip_init,
+	.restart	= mvebu_restart,
+	.reserve        = mvebu_memblock_reserve,
+	.dt_compat	= msys_dt_compat,
+MACHINE_END
+#endif /* MY_ABC_HERE */

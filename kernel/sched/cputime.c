@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/export.h>
 #include <linux/sched.h>
 #include <linux/tsacct_kern.h>
@@ -6,6 +9,9 @@
 #include <linux/context_tracking.h>
 #include "sched.h"
 
+#ifdef MY_ABC_HERE
+#include <linux/workqueue.h>
+#endif /* MY_ABC_HERE */
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 
@@ -480,8 +486,17 @@ void account_process_tick(struct task_struct *p, int user_tick)
 	if (user_tick)
 		account_user_time(p, cputime_one_jiffy, one_jiffy_scaled);
 	else if ((p != rq->idle) || (irq_count() != HARDIRQ_OFFSET))
+#ifdef MY_ABC_HERE
+	{
+#endif /* MY_ABC_HERE */
 		account_system_time(p, HARDIRQ_OFFSET, cputime_one_jiffy,
 				    one_jiffy_scaled);
+#ifdef MY_ABC_HERE
+		if (p->workacct)
+			account_workqueue_time(p, cputime_to_usecs(cputime_one_jiffy),
+					       GFP_NOWAIT);
+	}
+#endif /* MY_ABC_HERE */
 	else
 		account_idle_time(cputime_one_jiffy);
 }

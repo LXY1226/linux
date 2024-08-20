@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  compress_params.h - codec types and parameters for compressed data
  *  streaming interface
@@ -73,7 +76,26 @@
 #define SND_AUDIOCODEC_IEC61937              ((__u32) 0x0000000B)
 #define SND_AUDIOCODEC_G723_1                ((__u32) 0x0000000C)
 #define SND_AUDIOCODEC_G729                  ((__u32) 0x0000000D)
+#ifdef MY_DEF_HERE
+#define SND_AUDIOCODEC_EAC3                  ((__u32) 0x0000000E)
+#define SND_AUDIOCODEC_DTS                   ((__u32) 0x0000000F)
+#define SND_AUDIOCODEC_DTS_HD                ((__u32) 0x00000010)
+#define SND_AUDIOCODEC_TRUEHD                ((__u32) 0x00000011)
+#define SND_AUDIOCODEC_AC3                   ((__u32) 0x00000012)
+#define SND_AUDIOCODEC_MAX                   SND_AUDIOCODEC_AC3
+#else /* MY_DEF_HERE */
 #define SND_AUDIOCODEC_MAX                   SND_AUDIOCODEC_G729
+#endif /* MY_DEF_HERE */
+
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+/* Rtk begin */
+#define SND_AUDIOCODEC_EAC3                  ((__u32) 0x0000000F)
+#define SND_AUDIOCODEC_DTS                   ((__u32) 0x00000010)
+#define SND_AUDIOCODEC_DTS_HD                ((__u32) 0x00000011)
+#define SND_AUDIOCODEC_TRUEHD                ((__u32) 0x00000012)
+#define SND_AUDIOCODEC_AC3                   ((__u32) 0x00000013)
+/* Rtk end */
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 
 /*
  * Profile and modes are listed with bit masks. This allows for a

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef __LINUX_USB_H
 #define __LINUX_USB_H
 
@@ -633,6 +636,12 @@ struct usb_device {
 	int maxchild;
 
 	u32 quirks;
+#ifdef MY_ABC_HERE
+	char *syno_old_serial;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	u32 syno_quirks;
+#endif /* MY_ABC_HERE */
 	atomic_t urbnum;
 
 	unsigned long active_duration;
@@ -1234,6 +1243,10 @@ extern void usb_deregister_device_driver(struct usb_device_driver *);
 
 extern int usb_register_dev(struct usb_interface *intf,
 			    struct usb_class_driver *class_driver);
+#ifdef MY_ABC_HERE
+extern int usb_register_dev1(struct usb_interface *intf,
+				struct usb_class_driver *class_driver, int minor_offset);
+#endif /* MY_ABC_HERE */
 extern void usb_deregister_dev(struct usb_interface *intf,
 			       struct usb_class_driver *class_driver);
 
@@ -1937,6 +1950,10 @@ extern void usb_led_activity(enum usb_led_event ev);
 #else
 static inline void usb_led_activity(enum usb_led_event ev) {}
 #endif
+
+#ifdef MY_ABC_HERE
+#define IS_SYNO_FLASH(VENDOR, PROD) ((0xf400 == VENDOR && 0xf400 == PROD) || (0xf401 == VENDOR && 0xf401 == PROD))
+#endif /* MY_ABC_HERE */
 
 #endif  /* __KERNEL__ */
 

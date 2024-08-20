@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * originally based on the dummy device.
  *
@@ -159,7 +162,7 @@ module_param(min_links, int, 0);
 MODULE_PARM_DESC(min_links, "Minimum number of available links before turning on carrier");
 
 module_param(xmit_hash_policy, charp, 0);
-MODULE_PARM_DESC(xmit_hash_policy, "balance-xor and 802.3ad hashing method; "
+MODULE_PARM_DESC(xmit_hash_policy, "balance-alb, balance-tlb, balance-xor, 802.3ad hashing method; "
 				   "0 for layer 2 (default), 1 for layer 3+4, "
 				   "2 for layer 2+3, 3 for encap layer 2+3, "
 				   "4 for encap layer 3+4");
@@ -334,6 +337,20 @@ static int bond_vlan_rx_kill_vid(struct net_device *bond_dev,
 
 /*------------------------------- Link status -------------------------------*/
 
+#if defined(MY_ABC_HERE)
+static void default_operstate(struct net_device *dev)
+{
+	if (!netif_carrier_ok(dev)) {
+		dev->operstate = (dev->ifindex != dev_get_iflink(dev) ?
+			IF_OPER_LOWERLAYERDOWN : IF_OPER_DOWN);
+	} else if (netif_dormant(dev)) {
+		dev->operstate = IF_OPER_DORMANT;
+	} else {
+		dev->operstate = IF_OPER_UP;
+	}
+}
+#endif /* MY_ABC_HERE */
+
 /* Set the carrier state for the master according to the state of its
  * slaves.  If any slaves are up, the master is up.  In 802.3ad mode,
  * do special 802.3ad magic.
@@ -374,6 +391,37 @@ down:
  * values are invalid, set speed and duplex to -1,
  * and return.
  */
+#if defined(MY_ABC_HERE)
+static void bond_update_speed_duplex(struct slave *slave)
+{
+	struct net_device *slave_dev = slave->dev;
+	struct ethtool_link_ksettings ecmd;
+	int res;
+
+	slave->speed = SPEED_UNKNOWN;
+	slave->duplex = DUPLEX_UNKNOWN;
+
+	res = __ethtool_get_link_ksettings(slave_dev, &ecmd);
+	if (res < 0)
+		return;
+
+	if (ecmd.base.speed == 0 || ecmd.base.speed == ((__u32)-1))
+		return;
+
+	switch (ecmd.base.duplex) {
+	case DUPLEX_FULL:
+	case DUPLEX_HALF:
+		break;
+	default:
+		return;
+	}
+
+	slave->speed = ecmd.base.speed;
+	slave->duplex = ecmd.base.duplex;
+
+	return;
+}
+#else /* MY_ABC_HERE */
 static void bond_update_speed_duplex(struct slave *slave)
 {
 	struct net_device *slave_dev = slave->dev;
@@ -405,6 +453,7 @@ static void bond_update_speed_duplex(struct slave *slave)
 
 	return;
 }
+#endif /* MY_ABC_HERE */
 
 const char *bond_slave_link_status(s8 link)
 {
@@ -621,9 +670,30 @@ static void bond_hw_addr_swap(struct bonding *bond, struct slave *new_active,
 static void bond_set_dev_addr(struct net_device *bond_dev,
 			      struct net_device *slave_dev)
 {
+#ifdef MY_ABC_HERE
+	unsigned char szMac[MAX_ADDR_LEN];
+	memset(szMac, 0, sizeof(szMac));
+#endif /* MY_ABC_HERE */
 	netdev_dbg(bond_dev, "bond_dev=%p slave_dev=%p slave_dev->addr_len=%d\n",
 		   bond_dev, slave_dev, slave_dev->addr_len);
+#ifdef MY_ABC_HERE
+	if (syno_get_dev_vendor_mac(slave_dev->name, szMac, sizeof(szMac))) {
+		printk("%s:%s(%d) dev:[%s] get vendor mac fail\n",
+				__FILE__, __FUNCTION__, __LINE__, slave_dev->name);
+		/**
+		 *  Cannot get SYNO's vendor mac, possibly because
+		 *  - mac not written to onboard flash, or
+		 *  - this eth is on addon card rather than on mainboard.
+		 *  Fallback to perm_hwaddr.
+		 */
+		memcpy(bond_dev->dev_addr, slave_dev->dev_addr, slave_dev->addr_len);
+	} else {
+		/* Normal case: set to syno vendor mac */
+		memcpy(bond_dev->dev_addr, szMac, ETH_ALEN);
+	}
+#else /* MY_ABC_HERE */
 	memcpy(bond_dev->dev_addr, slave_dev->dev_addr, slave_dev->addr_len);
+#endif /* MY_ABC_HERE */
 	bond_dev->addr_assign_type = NET_ADDR_STOLEN;
 	call_netdevice_notifiers(NETDEV_CHANGEADDR, bond_dev);
 }
@@ -1330,6 +1400,9 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 	struct sockaddr addr;
 	int link_reporting;
 	int res = 0, i;
+#ifdef MY_ABC_HERE
+	unsigned char szMac[MAX_ADDR_LEN] = {0};
+#endif /* MY_ABC_HERE */
 
 	if (!bond->params.use_carrier &&
 	    slave_dev->ethtool_ops->get_link == NULL &&
@@ -1470,7 +1543,26 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 	 * that need it, and for restoring it upon release, and then
 	 * set it to the master's address
 	 */
+#ifdef MY_ABC_HERE
+	memset(szMac, 0, sizeof(szMac));
+
+	if (syno_get_dev_vendor_mac(slave_dev->name, szMac, sizeof(szMac))) {
+		netdev_info(bond_dev, "%s:%s(%d) dev:[%s] get vendor mac fail\n",
+				__FILE__, __FUNCTION__, __LINE__, slave_dev->name);
+		/**
+		 * Cannot get SYNO's vendor mac, possibly because
+		 *	- mac not written to onboard flash, or
+		 *	- this eth is on addon card rather than on mainboard.
+		 *	Fallback to perm_hwaddr.
+		 */
+		ether_addr_copy(new_slave->perm_hwaddr, slave_dev->dev_addr);
+	} else {
+		/* Normal case: set to syno vendor mac */
+		ether_addr_copy(new_slave->perm_hwaddr, szMac);
+	}
+#else /* MY_ABC_HERE */
 	ether_addr_copy(new_slave->perm_hwaddr, slave_dev->dev_addr);
+#endif /* MY_ABC_HERE */
 
 	if (!bond->params.fail_over_mac ||
 	    BOND_MODE(bond) != BOND_MODE_ACTIVEBACKUP) {
@@ -1701,6 +1793,9 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 	bond->slave_cnt++;
 	bond_compute_features(bond);
 	bond_set_carrier(bond);
+#if defined(MY_ABC_HERE)
+	default_operstate(bond->dev);
+#endif /* MY_ABC_HERE */
 
 	if (bond_uses_primary(bond)) {
 		block_netpoll_tx();
@@ -1708,7 +1803,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 		unblock_netpoll_tx();
 	}
 
-	if (bond_mode_uses_xmit_hash(bond))
+	if (bond_mode_can_use_xmit_hash(bond))
 		bond_update_slave_arr(bond, NULL);
 
 	netdev_info(bond_dev, "Enslaving %s as %s interface with %s link\n",
@@ -1839,7 +1934,7 @@ static int __bond_release_one(struct net_device *bond_dev,
 	if (BOND_MODE(bond) == BOND_MODE_8023AD)
 		bond_3ad_unbind_slave(slave);
 
-	if (bond_mode_uses_xmit_hash(bond))
+	if (bond_mode_can_use_xmit_hash(bond))
 		bond_update_slave_arr(bond, slave);
 
 	netdev_info(bond_dev, "Releasing %s interface %s\n",
@@ -2135,6 +2230,26 @@ static void bond_miimon_commit(struct bonding *bond)
 			} else if (slave != primary) {
 				/* prevent it from being the active one */
 				bond_set_backup_slave(slave);
+#if defined(MY_ABC_HERE)
+				/* While keep changing the MTU of a bonding interface in active backup mode,
+				 * there is a chance that
+				 * (1) the speed of the current active slave remains unknown, or
+				 * (2) the current active slave is not actived
+				 * Either case causes the speed of the current active slave remains unknown.
+				 * If the speed of a bonding interface is unknown, its MTU can not
+				 * be changed again using synonet tool.
+				 * To solve the problem, this workaround changes the current active slave to
+				 * the next upped NIC slave with correct speed. */
+				block_netpoll_tx();
+				if ((NULL != bond->curr_active_slave) &&
+					(slave != bond->curr_active_slave) &&
+					(((SPEED_UNKNOWN == bond->curr_active_slave->speed) &&
+					  (SPEED_UNKNOWN != slave->speed)) ||
+					 (!bond_is_active_slave(bond->curr_active_slave)))) {
+					bond_change_active_slave(bond, slave);
+				}
+				unblock_netpoll_tx();
+#endif /* MY_ABC_HERE */
 			}
 
 			netdev_info(bond->dev, "link status definitely up for interface %s, %u Mbps %s duplex\n",
@@ -3036,7 +3151,7 @@ static int bond_slave_netdev_event(unsigned long event,
 		 * events. If these (miimon/arpmon) parameters are configured
 		 * then array gets refreshed twice and that should be fine!
 		 */
-		if (bond_mode_uses_xmit_hash(bond))
+		if (bond_mode_can_use_xmit_hash(bond))
 			bond_update_slave_arr(bond, NULL);
 		break;
 	case NETDEV_CHANGEMTU:
@@ -3265,7 +3380,7 @@ static int bond_open(struct net_device *bond_dev)
 		 */
 		if (bond_alb_initialize(bond, (BOND_MODE(bond) == BOND_MODE_ALB)))
 			return -ENOMEM;
-		if (bond->params.tlb_dynamic_lb)
+		if (bond->params.tlb_dynamic_lb || BOND_MODE(bond) == BOND_MODE_ALB)
 			queue_delayed_work(bond->wq, &bond->alb_work, 0);
 	}
 
@@ -3284,7 +3399,7 @@ static int bond_open(struct net_device *bond_dev)
 		bond_3ad_initiate_agg_selection(bond, 1);
 	}
 
-	if (bond_mode_uses_xmit_hash(bond))
+	if (bond_mode_can_use_xmit_hash(bond))
 		bond_update_slave_arr(bond, NULL);
 
 	return 0;
@@ -3845,7 +3960,7 @@ err:
  * to determine the slave interface -
  * (a) BOND_MODE_8023AD
  * (b) BOND_MODE_XOR
- * (c) BOND_MODE_TLB && tlb_dynamic_lb == 0
+ * (c) (BOND_MODE_TLB || BOND_MODE_ALB) && tlb_dynamic_lb == 0
  *
  * The caller is expected to hold RTNL only and NO other lock!
  */
@@ -3898,6 +4013,11 @@ int bond_update_slave_arr(struct bonding *bond, struct slave *skipslave)
 			continue;
 		if (skipslave == slave)
 			continue;
+
+		netdev_dbg(bond->dev,
+			   "Adding slave dev %s to tx hash array[%d]\n",
+			   slave->dev->name, new_arr->count);
+
 		new_arr->arr[new_arr->count++] = slave;
 	}
 
@@ -4288,9 +4408,9 @@ static int bond_check_params(struct bond_params *params)
 	}
 
 	if (xmit_hash_policy) {
-		if ((bond_mode != BOND_MODE_XOR) &&
-		    (bond_mode != BOND_MODE_8023AD) &&
-		    (bond_mode != BOND_MODE_TLB)) {
+		if (bond_mode == BOND_MODE_ROUNDROBIN ||
+		    bond_mode == BOND_MODE_ACTIVEBACKUP ||
+		    bond_mode == BOND_MODE_BROADCAST) {
 			pr_info("xmit_hash_policy param is irrelevant in mode %s\n",
 				bond_mode_name(bond_mode));
 		} else {

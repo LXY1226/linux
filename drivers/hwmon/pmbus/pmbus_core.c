@@ -34,6 +34,10 @@
 #include <linux/regulator/machine.h>
 #include "pmbus.h"
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#include <linux/synobios.h>
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
+
 /*
  * Number of additional attribute pointers to allocate
  * with each call to krealloc
@@ -394,9 +398,15 @@ static struct pmbus_data *pmbus_update_device(struct device *dev)
 		int i, j;
 
 		for (i = 0; i < info->pages; i++) {
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+			data->status[PB_STATUS_BASE + i]
+				= _pmbus_read_word_data(client, i,
+						data->status_register);
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 			data->status[PB_STATUS_BASE + i]
 			    = _pmbus_read_byte_data(client, i,
 						    data->status_register);
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 			for (j = 0; j < ARRAY_SIZE(pmbus_status); j++) {
 				struct _pmbus_status *s = &pmbus_status[j];
 
@@ -691,6 +701,8 @@ static u16 pmbus_data2reg(struct pmbus_data *data,
 	return regval;
 }
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 /*
  * Return boolean calculated from converted data.
  * <index> defines a status register index and mask.
@@ -762,6 +774,7 @@ static ssize_t pmbus_show_boolean(struct device *dev,
 		return val;
 	return snprintf(buf, PAGE_SIZE, "%d\n", val);
 }
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 static ssize_t pmbus_show_sensor(struct device *dev,
 				 struct device_attribute *devattr, char *buf)
@@ -771,6 +784,12 @@ static ssize_t pmbus_show_sensor(struct device *dev,
 
 	if (sensor->data < 0)
 		return sensor->data;
+
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+	if (sensor->class == PSC_STATUS) {
+		return snprintf(buf, PAGE_SIZE, "%d\n", sensor->data);
+	}
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 	return snprintf(buf, PAGE_SIZE, "%ld\n", pmbus_reg2data(data, sensor));
 }
@@ -801,6 +820,8 @@ static ssize_t pmbus_set_sensor(struct device *dev,
 	return rv;
 }
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else/* CONFIG_SYNO_PMBUS_FEATURES */
 static ssize_t pmbus_show_label(struct device *dev,
 				struct device_attribute *da, char *buf)
 {
@@ -808,6 +829,7 @@ static ssize_t pmbus_show_label(struct device *dev,
 
 	return snprintf(buf, PAGE_SIZE, "%s\n", label->label);
 }
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 static int pmbus_add_attribute(struct pmbus_data *data, struct attribute *attr)
 {
@@ -844,6 +866,9 @@ static void pmbus_dev_attr_init(struct device_attribute *dev_attr,
 	dev_attr->store = store;
 }
 
+
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 static void pmbus_attr_init(struct sensor_device_attribute *a,
 			    const char *name,
 			    umode_t mode,
@@ -883,6 +908,7 @@ static int pmbus_add_boolean(struct pmbus_data *data,
 
 	return pmbus_add_attribute(data, &a->dev_attr.attr);
 }
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 static struct pmbus_sensor *pmbus_add_sensor(struct pmbus_data *data,
 					     const char *name, const char *type,
@@ -898,8 +924,12 @@ static struct pmbus_sensor *pmbus_add_sensor(struct pmbus_data *data,
 		return NULL;
 	a = &sensor->attribute;
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+	snprintf(sensor->name, sizeof(sensor->name), "%s",name);
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 	snprintf(sensor->name, sizeof(sensor->name), "%s%d_%s",
 		 name, seq, type);
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 	sensor->page = page;
 	sensor->reg = reg;
 	sensor->class = class;
@@ -917,6 +947,8 @@ static struct pmbus_sensor *pmbus_add_sensor(struct pmbus_data *data,
 	return sensor;
 }
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 static int pmbus_add_label(struct pmbus_data *data,
 			   const char *name, int seq,
 			   const char *lstring, int index)
@@ -940,6 +972,7 @@ static int pmbus_add_label(struct pmbus_data *data,
 	pmbus_dev_attr_init(a, label->name, S_IRUGO, pmbus_show_label, NULL);
 	return pmbus_add_attribute(data, &a->attr);
 }
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 /*
  * Search for attributes. Allocate sensors, booleans, and labels as needed.
@@ -978,6 +1011,8 @@ struct pmbus_sensor_attr {
 	const struct pmbus_limit_attr *limit;/* limit registers */
 };
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 /*
  * Add a set of limit attributes and, if supported, the associated
  * alarm attributes.
@@ -1022,6 +1057,7 @@ static int pmbus_add_limit_attrs(struct i2c_client *client,
 	}
 	return have_alarm;
 }
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 static int pmbus_add_sensor_attrs_one(struct i2c_client *client,
 				      struct pmbus_data *data,
@@ -1032,8 +1068,18 @@ static int pmbus_add_sensor_attrs_one(struct i2c_client *client,
 				      bool paged)
 {
 	struct pmbus_sensor *base;
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 	int ret;
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+	if (attr->label) {
+		base = pmbus_add_sensor(data, attr->label , "input", index, page, attr->reg, attr->class, true, true);
+	} else {
+		base = pmbus_add_sensor(data, name, "input", index, page, attr->reg, attr->class, true, true);
+	}
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 	if (attr->label) {
 		ret = pmbus_add_label(data, name, index, attr->label,
 				      paged ? page + 1 : 0);
@@ -1042,8 +1088,11 @@ static int pmbus_add_sensor_attrs_one(struct i2c_client *client,
 	}
 	base = pmbus_add_sensor(data, name, "input", index, page, attr->reg,
 				attr->class, true, true);
+#endif /* ONFIG_SYNO_PMBUS_FEATURES */
 	if (!base)
 		return -ENOMEM;
+#ifdef CONFIG_SYNO_PMBUS_SKIP_CHECK
+#else /* CONFIG_SYNO_PMBUS_SKIP_CHECK */
 	if (attr->sfunc) {
 		ret = pmbus_add_limit_attrs(client, data, info, name,
 					    index, page, base, attr);
@@ -1065,6 +1114,7 @@ static int pmbus_add_sensor_attrs_one(struct i2c_client *client,
 				return ret;
 		}
 	}
+#endif /* CONFIG_SYNO_PMBUS_SKIP_CHECK */
 	return 0;
 }
 
@@ -1622,7 +1672,10 @@ static int pmbus_add_fan_attributes(struct i2c_client *client,
 	const struct pmbus_driver_info *info = data->info;
 	int index = 1;
 	int page;
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 	int ret;
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 	for (page = 0; page < info->pages; page++) {
 		int f;
@@ -1633,10 +1686,13 @@ static int pmbus_add_fan_attributes(struct i2c_client *client,
 			if (!(info->func[page] & pmbus_fan_flags[f]))
 				break;
 
+#ifdef CONFIG_SYNO_PMBUS_SKIP_CHECK
+#else /* CONFIG_SYNO_PMBUS_SKIP_CHECK */
 			if (!pmbus_check_word_register(client, page,
 						       pmbus_fan_registers[f]))
 				break;
 
+#endif /* CONFIG_SYNO_PMBUS_SKIP_CHECK */
 			/*
 			 * Skip fan if not installed.
 			 * Each fan configuration register covers multiple fans,
@@ -1666,6 +1722,8 @@ static int pmbus_add_fan_attributes(struct i2c_client *client,
 					base = PB_STATUS_FAN34_BASE + page;
 				else
 					base = PB_STATUS_FAN_BASE + page;
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 				ret = pmbus_add_boolean(data, "fan",
 					"alarm", index, NULL, NULL, base,
 					PB_FAN_FAN1_WARNING >> (f & 1));
@@ -1676,6 +1734,7 @@ static int pmbus_add_fan_attributes(struct i2c_client *client,
 					PB_FAN_FAN1_FAULT >> (f & 1));
 				if (ret)
 					return ret;
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 			}
 			index++;
 		}
@@ -1687,6 +1746,9 @@ static int pmbus_find_attributes(struct i2c_client *client,
 				 struct pmbus_data *data)
 {
 	int ret;
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+	struct pmbus_sensor *status;
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 	/* Voltage sensors */
 	ret = pmbus_add_sensor_attrs(client, data, "in", voltage_attributes,
@@ -1714,6 +1776,14 @@ static int pmbus_find_attributes(struct i2c_client *client,
 
 	/* Fans */
 	ret = pmbus_add_fan_attributes(client, data);
+
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+	/* Status Word */
+	status = pmbus_add_sensor(data, "Status", "word", 0, 0, PMBUS_STATUS_WORD, PSC_STATUS, true, true);
+	if(!status)
+		return -ENOMEM;
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
+
 	return ret;
 }
 
@@ -1769,6 +1839,16 @@ static int pmbus_init_common(struct i2c_client *client, struct pmbus_data *data,
 	 * to use PMBUS_STATUS_WORD instead if that is the case.
 	 * Bail out if both registers are not supported.
 	 */
+
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+	/* Read STATUS_WORD directly */
+	data->status_register = PMBUS_STATUS_WORD;
+	ret = i2c_smbus_read_word_data(client, PMBUS_STATUS_WORD);
+	if (ret < 0 || ret == 0xffff) {
+		dev_err(dev, "PMBus status register not found\n");
+		return -ENODEV;
+	}
+#else /* CONFIG_SYNO_PMBUS_FEATURES */
 	data->status_register = PMBUS_STATUS_BYTE;
 	ret = i2c_smbus_read_byte_data(client, PMBUS_STATUS_BYTE);
 	if (ret < 0 || ret == 0xff) {
@@ -1779,6 +1859,7 @@ static int pmbus_init_common(struct i2c_client *client, struct pmbus_data *data,
 			return -ENODEV;
 		}
 	}
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
 
 	/* Enable PEC if the controller supports it */
 	ret = i2c_smbus_read_byte_data(client, PMBUS_CAPABILITY);
@@ -1891,6 +1972,52 @@ static int pmbus_regulator_register(struct pmbus_data *data)
 }
 #endif
 
+#ifdef CONFIG_SYNO_PMBUS_FEATURES
+int syno_get_pmbus_status(struct _SYNO_HWMON_SENSOR_TYPE *PsuStatus, int psu_no)
+{
+	struct i2c_client *client;
+	struct pmbus_data *data;
+	struct pmbus_sensor *sensor;
+	int ret = -1;
+	int i = 0;
+
+	if (NULL == PsuStatus){
+		return -ENODEV;
+	}
+
+
+	for (i = 0 ; i < psu_no ; i++) {
+		client = syno_find_pmbus_client(i+1);
+
+		if (NULL == client) {
+			printk("pmbus: client not found.\n");
+			return -ENODEV;
+		}
+
+		data = i2c_get_clientdata(client);
+		for (sensor = data->sensors; sensor; sensor = sensor->next) {
+			if (!data->valid || sensor->update) {
+				sensor->data= _pmbus_read_word_data(client, sensor->page,sensor->reg);
+				if (!strcmp(sensor->name, "pin")) {
+					snprintf(PsuStatus[i].sensor[0].value, MAX_SENSOR_VALUE, "%ld", pmbus_reg2data(data, sensor)/1000000);
+				} else if (!strcmp(sensor->name, "pout")) {
+					snprintf(PsuStatus[i].sensor[1].value, MAX_SENSOR_VALUE, "%ld", pmbus_reg2data(data, sensor)/1000000);
+				} else if (!strcmp(sensor->name, "temp")) {
+					snprintf(PsuStatus[i].sensor[2].value, MAX_SENSOR_VALUE, "%ld", pmbus_reg2data(data, sensor)/1000);
+				} else if (!strcmp(sensor->name, "fan")) {
+					snprintf(PsuStatus[i].sensor[3].value, MAX_SENSOR_VALUE, "%ld", pmbus_reg2data(data, sensor));
+				} else if (!strcmp(sensor->name, "Status")) {
+					snprintf(PsuStatus[i].sensor[4].value, MAX_SENSOR_VALUE, "0x%x", sensor->data);
+				}
+			}
+		}
+	}
+	ret = 0;
+
+	return ret;
+}
+#endif /* CONFIG_SYNO_PMBUS_FEATURES */
+
 int pmbus_do_probe(struct i2c_client *client, const struct i2c_device_id *id,
 		   struct pmbus_driver_info *info)
 {
@@ -1968,6 +2095,7 @@ int pmbus_do_remove(struct i2c_client *client)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pmbus_do_remove);
+EXPORT_SYMBOL(syno_get_pmbus_status);
 
 MODULE_AUTHOR("Guenter Roeck");
 MODULE_DESCRIPTION("PMBus core driver");

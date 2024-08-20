@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/read_write.c
  *
@@ -16,10 +19,23 @@
 #include <linux/pagemap.h>
 #include <linux/splice.h>
 #include <linux/compat.h>
+#include <linux/mount.h>
 #include "internal.h"
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
+#ifdef CONFIG_SENDFILE_PATCH
+    #include <net/sock.h>
+#endif /* CONFIG_SENDFILE_PATCH */
+
+#ifdef MY_ABC_HERE
+#include <linux/synolib.h>
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#include <linux/backing-dev.h>
+DEFINE_SPINLOCK(aggregate_lock);
+#endif /* MY_ABC_HERE */
 
 typedef ssize_t (*io_fn_t)(struct file *, char __user *, size_t, loff_t *);
 typedef ssize_t (*iter_fn_t)(struct kiocb *, struct iov_iter *);
@@ -198,7 +214,7 @@ loff_t default_llseek(struct file *file, loff_t offset, int whence)
 	struct inode *inode = file_inode(file);
 	loff_t retval;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	switch (whence) {
 		case SEEK_END:
 			offset += i_size_read(inode);
@@ -243,7 +259,7 @@ loff_t default_llseek(struct file *file, loff_t offset, int whence)
 		retval = offset;
 	}
 out:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return retval;
 }
 EXPORT_SYMBOL(default_llseek);
@@ -397,9 +413,8 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 	}
 
 	if (unlikely(inode->i_flctx && mandatory_lock(inode))) {
-		retval = locks_mandatory_area(
-			read_write == READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
-			inode, file, pos, count);
+		retval = locks_mandatory_area(inode, file, pos, pos + count - 1,
+				read_write == READ ? F_RDLCK : F_WRLCK);
 		if (retval < 0)
 			return retval;
 	}
@@ -496,6 +511,34 @@ ssize_t __vfs_write(struct file *file, const char __user *p, size_t count,
 }
 EXPORT_SYMBOL(__vfs_write);
 
+#ifdef CONFIG_AUFS_FHSM
+vfs_readf_t vfs_readf(struct file *file)
+{
+	const struct file_operations *fop = file->f_op;
+
+	if (fop->read)
+		return fop->read;
+	if (fop->read_iter)
+		return new_sync_read;
+	return ERR_PTR(-ENOSYS);
+}
+EXPORT_SYMBOL_GPL(vfs_readf);
+#endif /* CONFIG_AUFS_FHSM */
+
+#ifdef CONFIG_AUFS_FHSM
+vfs_writef_t vfs_writef(struct file *file)
+{
+	const struct file_operations *fop = file->f_op;
+
+	if (fop->write)
+		return fop->write;
+	if (fop->write_iter)
+		return new_sync_write;
+	return ERR_PTR(-ENOSYS);
+}
+EXPORT_SYMBOL_GPL(vfs_writef);
+#endif /* CONFIG_AUFS_FHSM */
+
 ssize_t __kernel_write(struct file *file, const char *buf, size_t count, loff_t *pos)
 {
 	mm_segment_t old_fs;
@@ -567,6 +610,12 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 	struct fd f = fdget_pos(fd);
 	ssize_t ret = -EBADF;
 
+#ifdef MY_ABC_HERE
+	if (0 < gSynoHibernationLogLevel) {
+		syno_do_hibernation_fd_log(fd);
+	}
+#endif /* MY_ABC_HERE */
+
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
 		ret = vfs_read(f.file, buf, count, &pos);
@@ -582,6 +631,12 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 {
 	struct fd f = fdget_pos(fd);
 	ssize_t ret = -EBADF;
+
+#ifdef MY_ABC_HERE
+	if (0 < gSynoHibernationLogLevel) {
+		syno_do_hibernation_fd_log(fd);
+	}
+#endif /* MY_ABC_HERE */
 
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
@@ -1155,6 +1210,10 @@ COMPAT_SYSCALL_DEFINE5(pwritev, compat_ulong_t, fd,
 }
 #endif
 
+#ifdef CONFIG_SENDFILE_PATCH
+extern ssize_t generic_splice_from_socket(struct file *file, struct socket *sock,
+                                    loff_t *ppos, size_t count, bool ppage);
+#endif
 static ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos,
 		  	   size_t count, loff_t max)
 {
@@ -1164,6 +1223,36 @@ static ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos,
 	loff_t out_pos;
 	ssize_t retval;
 	int fl;
+
+#ifdef CONFIG_SENDFILE_PATCH
+	/* check if in_fd is a socket */
+	int error;
+	struct socket *sock = NULL;
+
+	error = -EBADF;
+	sock = sockfd_lookup(in_fd, &error);
+	if (sock) {
+		if (!sock->sk)
+			goto done;
+		out = fdget(out_fd);
+
+		if (out.file) {
+			if (!(out.file->f_mode & FMODE_WRITE))
+				goto done;
+			// Default to use generic splice
+			if (out.file->f_op->splice_from_socket)
+				error = (int)out.file->f_op->splice_from_socket(out.file, sock, ppos, count, false);
+			else
+				//goto done;
+				error = (int)generic_splice_from_socket(out.file, sock, ppos, count, true);
+		}
+done:
+		if(out.file)
+			fdput(out);
+		fput(sock->file);
+		return (ssize_t)error;
+	}
+#endif
 
 	/*
 	 * Get input file, and verify that it is ok..
@@ -1330,3 +1419,540 @@ COMPAT_SYSCALL_DEFINE4(sendfile64, int, out_fd, int, in_fd,
 	return do_sendfile(out_fd, in_fd, NULL, count, 0);
 }
 #endif
+
+#ifdef MY_ABC_HERE
+#ifdef MY_ABC_HERE
+int aggregate_fd = -1;
+atomic_t syno_aggregate_recvfile_count = ATOMIC_INIT(0);
+
+static bool should_do_aggregate(struct file *file, int fd, loff_t pos, loff_t next_offset)
+{
+	struct file *aggregate_file;
+	struct inode *inode = file_inode(file);
+	static struct file *last_file = NULL;
+
+	if (0 == strcmp("glusterfs", inode->i_sb->s_subtype))
+		return false;
+
+	spin_lock(&aggregate_lock);
+	if (0 == atomic_read(&syno_aggregate_recvfile_count)) {
+	// aggregate_recvfile() is available.
+		if (aggregate_fd == -1 || (fd == aggregate_fd && pos == next_offset && file == last_file)) {
+			// aggregate_fd == -1: there is no data to be flush.
+			// (fd == aggregate_fd && pos == next_offset): keep writing last time.
+			// (file == last_file): fd may be close and assign to another file.
+			aggregate_fd = fd;
+			last_file = file;
+			atomic_inc(&syno_aggregate_recvfile_count);
+			inode->aggregate_flag |= AGGREGATE_RECVFILE_DOING;
+			spin_unlock(&aggregate_lock);
+			return true;
+		}
+		// data in aggregate_recvfile need to be flush, flush it.
+		aggregate_file = fget(aggregate_fd);
+		// fd may be changed after close_fd, check aggregate_write_end() here.
+		if (aggregate_file) {
+			if (last_file == aggregate_file) {
+				atomic_inc(&syno_aggregate_recvfile_count);
+				spin_unlock(&aggregate_lock);
+				aggregate_recvfile_flush_only(aggregate_file);
+				atomic_dec(&syno_aggregate_recvfile_count);
+				spin_lock(&aggregate_lock);
+			}
+			fput(aggregate_file);
+		}
+		// after flush, try again.
+		if (0 == atomic_read(&syno_aggregate_recvfile_count) && aggregate_fd == -1) {
+			aggregate_fd = fd;
+			last_file = file;
+			atomic_inc(&syno_aggregate_recvfile_count);
+			inode->aggregate_flag |= AGGREGATE_RECVFILE_DOING;
+			spin_unlock(&aggregate_lock);
+			return true;
+		}
+	}
+	spin_unlock(&aggregate_lock);
+	if (inode->aggregate_flag & AGGREGATE_RECVFILE_DOING)
+		flush_aggregate_recvfile(fd);
+	return false;
+}
+
+static ssize_t generic_write_init_and_checks(struct file* filp, loff_t pos, size_t count)
+{
+	struct iovec iov = { .iov_base = NULL, .iov_len = count};
+	struct kiocb kiocb;
+	struct iov_iter iter;
+
+	init_sync_kiocb(&kiocb, filp);
+	kiocb.ki_pos = pos;
+	iov_iter_init(&iter, WRITE, &iov, 1, count);
+
+	return generic_write_checks(&kiocb, &iter);
+}
+
+ssize_t aggregate_recvfile(int fd, struct file *file, struct socket *sock,
+		loff_t pos, size_t count, size_t *received, size_t *written)
+{
+	ssize_t ret;
+	static loff_t next_offset = 0;
+	bool aggregate;
+	struct inode *inode = file_inode(file);
+
+	ret = file_update_time(file);
+	if (ret)
+		return ret;
+
+	aggregate = should_do_aggregate(file, fd, pos, next_offset);
+	do {
+		size_t bytes_received = 0;
+		size_t bytes_written = 0;
+
+		if (aggregate) {
+			ret = do_aggregate_recvfile(file, sock, pos, (count >= MAX_RECVFILE_BUF) ?
+						MAX_RECVFILE_BUF : count, &bytes_received, &bytes_written, 0);
+			// trans aggregate_recvfile() to normal if it is flushing.
+			if (inode->aggregate_flag & AGGREGATE_RECVFILE_FLUSH &&
+			      !(inode->aggregate_flag & AGGREGATE_RECVFILE_DOING)) {
+				next_offset = pos;
+				atomic_dec(&syno_aggregate_recvfile_count);
+				aggregate = false;
+			}
+		} else {
+			ret = do_recvfile(file, sock, pos, (count > MAX_RECVFILE_BUF) ?
+					   MAX_RECVFILE_BUF : count, &bytes_received, &bytes_written);
+		}
+		*received += bytes_received;
+		*written += bytes_written;
+		if (ret <= 0)
+			break;
+		count -= bytes_written;
+		pos += bytes_written;
+	} while (count > 0);
+
+	if (aggregate) {
+		next_offset = pos;
+		atomic_dec(&syno_aggregate_recvfile_count);
+	}
+	return ret < 0 ? ret : *written;
+}
+EXPORT_SYMBOL(aggregate_recvfile);
+
+ssize_t default_recvfile(struct file *file, struct socket *sock,
+		loff_t pos, size_t count, size_t *received, size_t *written)
+{
+	ssize_t ret;
+
+	ret = file_update_time(file);
+	if (ret)
+		return ret;
+
+	do {
+		size_t bytes_received = 0;
+		size_t bytes_written = 0;
+
+		ret = do_recvfile(file, sock, pos, (count > (MAX_RECVFILE_BUF - (pos & (PAGE_CACHE_SIZE - 1)))) ?
+			   (MAX_RECVFILE_BUF - (pos & (PAGE_CACHE_SIZE - 1))) : count, &bytes_received, &bytes_written);
+		*received += bytes_received;
+		*written += bytes_written;
+		if (ret <= 0)
+			break;
+		count -= bytes_written;
+		pos += bytes_written;
+	} while (count > 0);
+	return ret < 0 ? ret : *written;
+}
+
+ssize_t vfs_recvfile(int fd, struct file *file, struct socket *sock,
+		loff_t pos, size_t count, size_t *received, size_t *written)
+{
+	ssize_t ret;
+	struct inode *inode = file_inode(file);
+
+	if (!(file->f_mode & FMODE_WRITE))
+		return -EBADF;
+	if (!S_ISREG(inode->i_mode))
+		return -EINVAL;
+	file_start_write(file);
+	mutex_lock(&inode->i_mutex);
+	/*
+	 * We can write back this queue in page reclaim
+	 */
+	current->backing_dev_info = inode_to_bdi(inode);
+	ret = generic_write_init_and_checks(file, pos, count);
+	if (ret <= 0)
+		goto out;
+	ret = file_remove_privs(file);
+	if (ret)
+		goto out;
+
+	if (file->f_op->syno_recvfile) {
+		ret = file->f_op->syno_recvfile(fd, file, sock, pos, count, received, written);
+	} else {
+		ret = default_recvfile(file, sock, pos, count, received, written);
+	}
+	if (ret > 0)
+		fsnotify_modify(file);
+out:
+	current->backing_dev_info = NULL;
+	mutex_unlock(&inode->i_mutex);
+	file_end_write(file);
+	return ret;
+}
+EXPORT_SYMBOL(vfs_recvfile);
+
+SYSCALL_DEFINE5(syno_recv_file, int, fd, int, s, loff_t *, offset, size_t, count, size_t *, rwbytes)
+{
+	ssize_t ret;
+	int err;
+	loff_t pos;
+	size_t received = 0;
+	size_t written = 0;
+	struct file *file;
+	struct socket *sock;
+
+	if (!offset)
+		return -EINVAL;
+	if (!count)
+		return 0;
+	if (copy_from_user(&pos, offset, sizeof(loff_t)))
+		return -EFAULT;
+	file = fget(fd);
+	if (!file)
+		return -EBADF;
+
+	sock = sockfd_lookup(s, &err);
+	if (!sock) {
+		fput(file);
+		return err;
+	}
+	if (!sock->sk) {
+		/* not a socket */
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = vfs_recvfile(fd, file, sock, pos, count, &received, &written);
+	if (ret < 0 && rwbytes) {
+		if (copy_to_user(&rwbytes[0], &received, sizeof(size_t))) {
+			ret = -EFAULT;
+			goto out;
+		}
+		if (copy_to_user(&rwbytes[1], &written, sizeof(size_t))) {
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+	pos += written;
+	if (unlikely(put_user(pos, offset))) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+out:
+	fput(file);
+	sockfd_put(sock);
+	return ret;
+}
+SYSCALL_DEFINE5(recvfile, int, fd, int, s, loff_t *, offset, size_t, count, size_t *, rwbytes)
+{
+	return sys_syno_recv_file(fd, s, offset, count, rwbytes);
+}
+
+SYSCALL_DEFINE1(syno_flush_aggregate, int, fd)
+{
+	return flush_aggregate_recvfile(fd);
+}
+SYSCALL_DEFINE1(SYNOFlushAggregate, int, fd)
+{
+	return sys_syno_flush_aggregate(fd);
+}
+#else
+SYSCALL_DEFINE5(syno_recv_file, int, fd, int, s, loff_t *, offset, size_t, count, size_t *, rwbytes)
+{
+	return -EOPNOTSUPP;
+}
+SYSCALL_DEFINE5(recvfile, int, fd, int, s, loff_t *, offset, size_t, count, size_t *, rwbytes)
+{
+	return sys_syno_recv_file(fd, s, offset, count, rwbytes);
+}
+SYSCALL_DEFINE1(syno_flush_aggregate, int, fd)
+{
+	return -EOPNOTSUPP;
+}
+SYSCALL_DEFINE1(SYNOFlushAggregate, int, fd)
+{
+	return sys_syno_flush_aggregate(fd);
+}
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
+
+/*
+ * copy_file_range() differs from regular file read and write in that it
+ * specifically allows return partial success.  When it does so is up to
+ * the copy_file_range method.
+ */
+ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
+			    struct file *file_out, loff_t pos_out,
+			    size_t len, unsigned int flags)
+{
+	struct inode *inode_in = file_inode(file_in);
+	struct inode *inode_out = file_inode(file_out);
+	ssize_t ret;
+
+	if (flags != 0)
+		return -EINVAL;
+
+	/* copy_file_range allows full ssize_t len, ignoring MAX_RW_COUNT  */
+	ret = rw_verify_area(READ, file_in, &pos_in, len);
+	if (ret >= 0)
+		ret = rw_verify_area(WRITE, file_out, &pos_out, len);
+	if (ret < 0)
+		return ret;
+
+	if (!(file_in->f_mode & FMODE_READ) ||
+	    !(file_out->f_mode & FMODE_WRITE) ||
+	    (file_out->f_flags & O_APPEND))
+		return -EBADF;
+
+	/* this could be relaxed once a method supports cross-fs copies */
+	if (inode_in->i_sb != inode_out->i_sb)
+		return -EXDEV;
+
+	if (len == 0)
+		return 0;
+
+	sb_start_write(inode_out->i_sb);
+
+	/*
+	 * Try cloning first, this is supported by more file systems, and
+	 * more efficient if both clone and copy are supported (e.g. NFS).
+	 */
+	if (file_in->f_op->clone_file_range) {
+#ifdef MY_DEF_HERE
+		if (file_in->f_op->clone_check_compr) {
+			ret = file_in->f_op->clone_check_compr(file_in, file_out);
+			if (ret) {
+				goto skip_clone;
+			}
+		}
+#endif /* MY_DEF_HERE */
+
+		ret = file_in->f_op->clone_file_range(file_in, pos_in,
+				file_out, pos_out, len);
+		if (ret == 0) {
+			ret = len;
+			goto done;
+		}
+	}
+#ifdef MY_DEF_HERE
+skip_clone:
+#endif /* MY_DEF_HERE */
+
+	if (file_out->f_op->copy_file_range) {
+		ret = file_out->f_op->copy_file_range(file_in, pos_in, file_out,
+						      pos_out, len, flags);
+		if (ret != -EOPNOTSUPP)
+			goto done;
+	}
+
+	ret = do_splice_direct(file_in, &pos_in, file_out, &pos_out,
+			len > MAX_RW_COUNT ? MAX_RW_COUNT : len, 0);
+
+done:
+	if (ret > 0) {
+		fsnotify_access(file_in);
+		add_rchar(current, ret);
+		fsnotify_modify(file_out);
+		add_wchar(current, ret);
+	}
+
+	inc_syscr(current);
+	inc_syscw(current);
+
+	sb_end_write(inode_out->i_sb);
+
+	return ret;
+}
+EXPORT_SYMBOL(vfs_copy_file_range);
+
+SYSCALL_DEFINE6(copy_file_range, int, fd_in, loff_t __user *, off_in,
+		int, fd_out, loff_t __user *, off_out,
+		size_t, len, unsigned int, flags)
+{
+	loff_t pos_in;
+	loff_t pos_out;
+	struct fd f_in;
+	struct fd f_out;
+	ssize_t ret = -EBADF;
+
+	f_in = fdget(fd_in);
+	if (!f_in.file)
+		goto out2;
+
+	f_out = fdget(fd_out);
+	if (!f_out.file)
+		goto out1;
+
+	ret = -EFAULT;
+	if (off_in) {
+		if (copy_from_user(&pos_in, off_in, sizeof(loff_t)))
+			goto out;
+	} else {
+		pos_in = f_in.file->f_pos;
+	}
+
+	if (off_out) {
+		if (copy_from_user(&pos_out, off_out, sizeof(loff_t)))
+			goto out;
+	} else {
+		pos_out = f_out.file->f_pos;
+	}
+
+	ret = vfs_copy_file_range(f_in.file, pos_in, f_out.file, pos_out, len,
+				  flags);
+	if (ret > 0) {
+		pos_in += ret;
+		pos_out += ret;
+
+		if (off_in) {
+			if (copy_to_user(off_in, &pos_in, sizeof(loff_t)))
+				ret = -EFAULT;
+		} else {
+			f_in.file->f_pos = pos_in;
+		}
+
+		if (off_out) {
+			if (copy_to_user(off_out, &pos_out, sizeof(loff_t)))
+				ret = -EFAULT;
+		} else {
+			f_out.file->f_pos = pos_out;
+		}
+	}
+
+out:
+	fdput(f_out);
+out1:
+	fdput(f_in);
+out2:
+	return ret;
+}
+
+static int clone_verify_area(struct file *file, loff_t pos, u64 len, bool write)
+{
+	struct inode *inode = file_inode(file);
+
+	if (unlikely(pos < 0))
+		return -EINVAL;
+
+	 if (unlikely((loff_t) (pos + len) < 0))
+		return -EINVAL;
+
+	if (unlikely(inode->i_flctx && mandatory_lock(inode))) {
+		loff_t end = len ? pos + len - 1 : OFFSET_MAX;
+		int retval;
+
+		retval = locks_mandatory_area(inode, file, pos, end,
+				write ? F_WRLCK : F_RDLCK);
+		if (retval < 0)
+			return retval;
+	}
+
+	return security_file_permission(file, write ? MAY_WRITE : MAY_READ);
+}
+
+#ifdef MY_DEF_HERE
+int vfs_clone_file_range(struct file *file_in, loff_t pos_in,
+		struct file *file_out, loff_t pos_out, u64 len, int check_compr)
+#else
+int vfs_clone_file_range(struct file *file_in, loff_t pos_in,
+		struct file *file_out, loff_t pos_out, u64 len)
+#endif /* MY_DEF_HERE */
+{
+	struct inode *inode_in = file_inode(file_in);
+	struct inode *inode_out = file_inode(file_out);
+	int ret;
+
+	if (S_ISDIR(inode_in->i_mode) || S_ISDIR(inode_out->i_mode))
+		return -EISDIR;
+	if (!S_ISREG(inode_in->i_mode) || !S_ISREG(inode_out->i_mode))
+		return -EINVAL;
+
+	/*
+	 * FICLONE/FICLONERANGE ioctls enforce that src and dest files are on
+	 * the same mount. Practically, they only need to be on the same file
+	 * system.
+	 */
+	if (inode_in->i_sb != inode_out->i_sb)
+		return -EXDEV;
+
+	if (!(file_in->f_mode & FMODE_READ) ||
+	    !(file_out->f_mode & FMODE_WRITE) ||
+	    (file_out->f_flags & O_APPEND))
+		return -EBADF;
+
+	if (!file_in->f_op->clone_file_range)
+		return -EOPNOTSUPP;
+
+	ret = clone_verify_area(file_in, pos_in, len, false);
+	if (ret)
+		return ret;
+
+	ret = clone_verify_area(file_out, pos_out, len, true);
+	if (ret)
+		return ret;
+
+	if (pos_in + len > i_size_read(inode_in))
+		return -EINVAL;
+
+#ifdef MY_DEF_HERE
+	if (check_compr && file_in->f_op->clone_check_compr) {
+		ret = file_in->f_op->clone_check_compr(file_in, file_out);
+		if (ret) {
+			return ret;
+		}
+	}
+#endif /* MY_DEF_HERE */
+
+	ret = file_in->f_op->clone_file_range(file_in, pos_in,
+			file_out, pos_out, len);
+	if (!ret) {
+		fsnotify_access(file_in);
+		fsnotify_modify(file_out);
+	}
+
+	return ret;
+}
+
+#ifdef MY_ABC_HERE
+extern int gSynoPatternCheckCharacter;
+int syno_page_pattern_check(struct inode *inode, struct page *page, size_t offset, size_t bytes, int type)
+{
+	int ret = 0;
+	char *kaddr;
+	void *find = NULL;
+	char type_string[20] = {'\0'};
+
+	switch (type) {
+		case SYNO_PATTERN_CHECK_CACHE_PAGES:
+			snprintf(type_string, sizeof(type_string), "%s", "Cache Pages");
+			break;
+		case SYNO_PATTERN_CHECK_BIO:
+			snprintf(type_string, sizeof(type_string), "%s", "Bio");
+			break;
+		default:
+			snprintf(type_string, sizeof(type_string), "%s", "Unknown");
+                        break;
+	}
+
+	kaddr = kmap(page);
+	find = memchr_inv(kaddr + offset, gSynoPatternCheckCharacter, bytes);
+	kunmap(page);
+	if (find) {
+		printk("Syno Pattern Check: %s:%d data err none 0xFF, type:%s, inode:%lu, file offset:%lld, page->index:%lu, offset:%zu, len:%zu\n", __FUNCTION__, __LINE__, type_string, inode ? inode->i_ino : 0, page_file_offset(page) + offset, page->index, offset, bytes);
+		ret = -1;
+	}
+	return ret;
+}
+#endif /* MY_ABC_HERE */
+
+EXPORT_SYMBOL(vfs_clone_file_range);

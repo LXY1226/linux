@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *	Driver for Broadcom 63xx SOCs integrated PHYs
  *
@@ -73,7 +76,11 @@ static struct phy_driver bcm63xx_driver[] = {
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm_phy_ack_intr,
 	.config_intr	= bcm63xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE },
+#endif /* MY_ABC_HERE */
 }, {
 	/* same phy as above, with just a different OUI */
 	.phy_id		= 0x002bdc00,
@@ -86,7 +93,11 @@ static struct phy_driver bcm63xx_driver[] = {
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm_phy_ack_intr,
 	.config_intr	= bcm63xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE },
+#endif /* MY_ABC_HERE */
 } };
 
 module_phy_driver(bcm63xx_driver);

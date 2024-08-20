@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Framework and drivers for configuring and reading different PHYs
  * Based on code in sungem_phy.c and gianfar_phy.c
@@ -16,8 +19,14 @@
 #ifndef __PHY_H
 #define __PHY_H
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#include <linux/compiler.h>
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 #include <linux/spinlock.h>
 #include <linux/ethtool.h>
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#include <linux/mdio.h>
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 #include <linux/mii.h>
 #include <linux/module.h>
 #include <linux/timer.h>
@@ -58,6 +67,9 @@
 #define PHY_HAS_INTERRUPT	0x00000001
 #define PHY_HAS_MAGICANEG	0x00000002
 #define PHY_IS_INTERNAL		0x00000004
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#define MDIO_DEVICE_IS_PHY	0x80000000
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 /* Interface Mode definitions */
 typedef enum {
@@ -75,8 +87,22 @@ typedef enum {
 	PHY_INTERFACE_MODE_RTBI,
 	PHY_INTERFACE_MODE_SMII,
 	PHY_INTERFACE_MODE_XGMII,
+#if defined(MY_ABC_HERE)
+	PHY_INTERFACE_MODE_1000BASEX,
+#endif /* MY_ABC_HERE */
 	PHY_INTERFACE_MODE_MOCA,
 	PHY_INTERFACE_MODE_QSGMII,
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	PHY_INTERFACE_MODE_XAUI,
+	PHY_INTERFACE_MODE_RXAUI,
+	PHY_INTERFACE_MODE_SFI,
+	PHY_INTERFACE_MODE_XFI,
+#endif /* MY_ABC_HERE || defined(MY_DEF_HERE) */
+#if defined(MY_ABC_HERE)
+	PHY_INTERFACE_MODE_KR,
+#elif defined(MY_DEF_HERE)
+	PHY_INTERFACE_MODE_10GKR,
+#endif /* MY_ABC_HERE */
 	PHY_INTERFACE_MODE_MAX,
 } phy_interface_t;
 
@@ -116,10 +142,31 @@ static inline const char *phy_modes(phy_interface_t interface)
 		return "smii";
 	case PHY_INTERFACE_MODE_XGMII:
 		return "xgmii";
+#if defined(MY_ABC_HERE)
+	case PHY_INTERFACE_MODE_1000BASEX:
+		return "1000base-x";
+#endif /* MY_ABC_HERE */
 	case PHY_INTERFACE_MODE_MOCA:
 		return "moca";
 	case PHY_INTERFACE_MODE_QSGMII:
 		return "qsgmii";
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	case PHY_INTERFACE_MODE_XAUI:
+		return "xaui";
+	case PHY_INTERFACE_MODE_RXAUI:
+		return "rxaui";
+	case PHY_INTERFACE_MODE_SFI:
+		return "sfi";
+	case PHY_INTERFACE_MODE_XFI:
+		return "xfi";
+#endif /* MY_ABC_HERE || defined(MY_DEF_HERE) */
+#if defined(MY_ABC_HERE)
+	case PHY_INTERFACE_MODE_KR:
+		return "kr";
+#elif defined(MY_DEF_HERE)
+	case PHY_INTERFACE_MODE_10GKR:
+		return "10gbase-kr";
+#endif /* MY_ABC_HERE */
 	default:
 		return "unknown";
 	}
@@ -154,8 +201,13 @@ struct mii_bus {
 	const char *name;
 	char id[MII_BUS_ID_SIZE];
 	void *priv;
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	int (*read)(struct mii_bus *bus, int addr, int regnum);
+	int (*write)(struct mii_bus *bus, int addr, int regnum, u16 val);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	int (*read)(struct mii_bus *bus, int phy_id, int regnum);
 	int (*write)(struct mii_bus *bus, int phy_id, int regnum, u16 val);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	int (*reset)(struct mii_bus *bus);
 
 	/*
@@ -174,7 +226,11 @@ struct mii_bus {
 	struct device dev;
 
 	/* list of all PHYs on bus */
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct mdio_device *mdio_map[PHY_MAX_ADDR];
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct phy_device *phy_map[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	/* PHY addresses to be ignored when probing */
 	u32 phy_mask;
@@ -182,11 +238,19 @@ struct mii_bus {
 	/* PHY addresses to ignore the TA/read failure */
 	u32 phy_ignore_ta_mask;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	/*
+	 * An array of interrupts, each PHY's interrupt at the index
+	 * matching its address
+	 */
+	int irq[PHY_MAX_ADDR];
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	/*
 	 * Pointer to an array of interrupts, each PHY's
 	 * interrupt at the index matching its address
 	 */
 	int *irq;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 };
 #define to_mii_bus(d) container_of(d, struct mii_bus, dev)
 
@@ -208,10 +272,14 @@ static inline struct mii_bus *devm_mdiobus_alloc(struct device *dev)
 
 void devm_mdiobus_free(struct device *dev, struct mii_bus *bus);
 struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr);
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+//do nothing
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 int mdiobus_read(struct mii_bus *bus, int addr, u32 regnum);
 int mdiobus_read_nested(struct mii_bus *bus, int addr, u32 regnum);
 int mdiobus_write(struct mii_bus *bus, int addr, u32 regnum, u16 val);
 int mdiobus_write_nested(struct mii_bus *bus, int addr, u32 regnum, u16 val);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 
 #define PHY_INTERRUPT_DISABLED	0x0
@@ -325,8 +393,8 @@ struct phy_c45_device_ids {
 /* phy_device: An instance of a PHY
  *
  * drv: Pointer to the driver for this PHY instance
- * bus: Pointer to the bus this PHY is on
- * dev: driver model device structure for this PHY
+ * bus: Pointer to the bus this PHY is on (not armada37xx 16.12)
+ * dev: driver model device structure for this PHY (not armada37xx 16.12)
  * phy_id: UID for this device found during discovery
  * c45_ids: 802.3-c45 Device Identifers if is_c45.
  * is_c45:  Set to true if this phy uses clause 45 addressing.
@@ -336,7 +404,7 @@ struct phy_c45_device_ids {
  * suspended: Set to true if this phy has been suspended successfully.
  * state: state of the PHY for management purposes
  * dev_flags: Device-specific flags used by the PHY driver.
- * addr: Bus address of PHY
+ * addr: Bus address of PHY (not armada37xx 16.12)
  * link_timeout: The number of timer firings to wait before the
  * giving up on the current attempt at acquiring a link
  * irq: IRQ number of the PHY's interrupt (-1 if none)
@@ -357,13 +425,21 @@ struct phy_c45_device_ids {
  * handling, as well as handling shifts in PHY hardware state
  */
 struct phy_device {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct mdio_device mdio;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
+
 	/* Information about the PHY type */
 	/* And management functions */
 	struct phy_driver *drv;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+//do nothing
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct mii_bus *bus;
 
 	struct device dev;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	u32 phy_id;
 
@@ -380,8 +456,12 @@ struct phy_device {
 
 	phy_interface_t interface;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+//do nothing
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	/* Bus address of the PHY (0-31) */
 	int addr;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 	/*
 	 * forced speed & duplex (no autoneg)
@@ -431,10 +511,16 @@ struct phy_device {
 
 	void (*adjust_link)(struct net_device *dev);
 };
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#define to_phy_device(d) container_of(to_mdio_device(d), \
+				      struct phy_device, mdio)
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 #define to_phy_device(d) container_of(d, struct phy_device, dev)
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 /* struct phy_driver: Driver structure for a particular PHY type
  *
+ * driver_data: static driver data
  * phy_id: The result of reading the UID registers of this PHY
  *   type, and ANDing them with the phy_id_mask.  This driver
  *   only works for PHYs with IDs which match this field
@@ -444,7 +530,6 @@ struct phy_device {
  *   by this PHY
  * flags: A bitfield defining certain other features this PHY
  *   supports (like interrupts)
- * driver_data: static driver data
  *
  * The drivers must implement config_aneg and read_status.  All
  * other functions are optional. Note that none of these
@@ -455,6 +540,9 @@ struct phy_device {
  * supported in the driver).
  */
 struct phy_driver {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	struct mdio_driver_common mdiodrv;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 	u32 phy_id;
 	char *name;
 	unsigned int phy_id_mask;
@@ -585,9 +673,22 @@ struct phy_driver {
 	int (*module_eeprom)(struct phy_device *dev,
 			     struct ethtool_eeprom *ee, u8 *data);
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	/* Get statistics from the phy using ethtool */
+	int (*get_sset_count)(struct phy_device *dev);
+	void (*get_strings)(struct phy_device *dev, u8 *data);
+	void (*get_stats)(struct phy_device *dev,
+			  struct ethtool_stats *stats, u64 *data);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	struct device_driver driver;
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 };
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
+				      struct phy_driver, mdiodrv)
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 #define to_phy_driver(d) container_of(d, struct phy_driver, driver)
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 #define PHY_ANY_ID "MATCH ANY PHY"
 #define PHY_ANY_UID 0xffffffff
@@ -615,10 +716,27 @@ static inline int phy_read_mmd(struct phy_device *phydev, int devad, u32 regnum)
 	if (!phydev->is_c45)
 		return -EOPNOTSUPP;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	return mdiobus_read(phydev->mdio.bus, phydev->mdio.addr,
+			    MII_ADDR_C45 | (devad << 16) | (regnum & 0xffff));
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	return mdiobus_read(phydev->bus, phydev->addr,
 			    MII_ADDR_C45 | (devad << 16) | (regnum & 0xffff));
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 }
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+/**
+ * phy_read_mmd_indirect - reads data from the MMD registers
+ * @phydev: The PHY device bus
+ * @prtad: MMD Address
+ * @devad: MMD DEVAD
+ *
+ * Description: it reads data from the MMD registers (clause 22 to access to
+ * clause 45) of the specified phy address.
+ */
+int phy_read_mmd_indirect(struct phy_device *phydev, int prtad, int devad);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 /**
  * phy_read_mmd_indirect - reads data from the MMD registers
  * @phydev: The PHY device bus
@@ -631,6 +749,7 @@ static inline int phy_read_mmd(struct phy_device *phydev, int devad, u32 regnum)
  */
 int phy_read_mmd_indirect(struct phy_device *phydev, int prtad,
 			  int devad, int addr);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 /**
  * phy_read - Convenience function for reading a given PHY register
@@ -643,7 +762,11 @@ int phy_read_mmd_indirect(struct phy_device *phydev, int prtad,
  */
 static inline int phy_read(struct phy_device *phydev, u32 regnum)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	return mdiobus_read(phydev->mdio.bus, phydev->mdio.addr, regnum);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	return mdiobus_read(phydev->bus, phydev->addr, regnum);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 }
 
 /**
@@ -658,7 +781,11 @@ static inline int phy_read(struct phy_device *phydev, u32 regnum)
  */
 static inline int phy_write(struct phy_device *phydev, u32 regnum, u16 val)
 {
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	return mdiobus_write(phydev->mdio.bus, phydev->mdio.addr, regnum, val);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	return mdiobus_write(phydev->bus, phydev->addr, regnum, val);
+#endif /* MY_ABC_HERE || MY_DEF_HERE  */
 }
 
 /**
@@ -732,9 +859,27 @@ static inline int phy_write_mmd(struct phy_device *phydev, int devad,
 
 	regnum = MII_ADDR_C45 | ((devad & 0x1f) << 16) | (regnum & 0xffff);
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	return mdiobus_write(phydev->mdio.bus, phydev->mdio.addr, regnum, val);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 	return mdiobus_write(phydev->bus, phydev->addr, regnum, val);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 }
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+/**
+ * phy_write_mmd_indirect - writes data to the MMD registers
+ * @phydev: The PHY device
+ * @prtad: MMD Address
+ * @devad: MMD DEVAD
+ * @data: data to write in the MMD register
+ *
+ * Description: Write data from the MMD registers of the specified
+ * phy address.
+ */
+void phy_write_mmd_indirect(struct phy_device *phydev, int prtad,
+			    int devad, u32 data);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 /**
  * phy_write_mmd_indirect - writes data to the MMD registers
  * @phydev: The PHY device
@@ -748,6 +893,7 @@ static inline int phy_write_mmd(struct phy_device *phydev, int devad,
  */
 void phy_write_mmd_indirect(struct phy_device *phydev, int prtad,
 			    int devad, int addr, u32 data);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 struct phy_device *phy_device_create(struct mii_bus *bus, int addr, int phy_id,
 				     bool is_c45,
@@ -774,6 +920,9 @@ void phy_detach(struct phy_device *phydev);
 void phy_start(struct phy_device *phydev);
 void phy_stop(struct phy_device *phydev);
 int phy_start_aneg(struct phy_device *phydev);
+#ifdef MY_DEF_HERE
+int phy_aneg_done(struct phy_device *phydev);
+#endif /* MY_DEF_HERE */
 
 int phy_stop_interrupts(struct phy_device *phydev);
 
@@ -782,6 +931,26 @@ static inline int phy_read_status(struct phy_device *phydev)
 	return phydev->drv->read_status(phydev);
 }
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#define phydev_err(_phydev, format, args...)	\
+	dev_err(&_phydev->mdio.dev, format, ##args)
+
+#define phydev_dbg(_phydev, format, args...)	\
+	dev_dbg(&_phydev->mdio.dev, format, ##args);
+
+static inline const char *phydev_name(const struct phy_device *phydev)
+{
+	return dev_name(&phydev->mdio.dev);
+}
+
+void phy_attached_print(struct phy_device *phydev, const char *fmt, ...)
+	__printf(2, 3);
+void phy_attached_info(struct phy_device *phydev);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+/* Clause 22 PHY */
+#endif /* MY_DEF_HERE */
 int genphy_config_init(struct phy_device *phydev);
 int genphy_setup_forced(struct phy_device *phydev);
 int genphy_restart_aneg(struct phy_device *phydev);
@@ -796,10 +965,28 @@ static inline int genphy_no_soft_reset(struct phy_device *phydev)
 {
 	return 0;
 }
+
+#ifdef MY_DEF_HERE
+/* Clause 45 PHY */
+int genphy_c45_restart_aneg(struct phy_device *phydev);
+int genphy_c45_aneg_done(struct phy_device *phydev);
+int genphy_c45_read_link(struct phy_device *phydev, u32 mmd_mask);
+int genphy_c45_read_lpa(struct phy_device *phydev);
+int genphy_c45_read_pma(struct phy_device *phydev);
+int genphy_c45_pma_setup_forced(struct phy_device *phydev);
+int genphy_c45_an_disable_aneg(struct phy_device *phydev);
+#endif /* MY_DEF_HERE */
+
 void phy_driver_unregister(struct phy_driver *drv);
 void phy_drivers_unregister(struct phy_driver *drv, int n);
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+int phy_driver_register(struct phy_driver *new_driver, struct module *owner);
+int phy_drivers_register(struct phy_driver *new_driver, int n,
+			 struct module *owner);
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 int phy_driver_register(struct phy_driver *new_driver);
 int phy_drivers_register(struct phy_driver *new_driver, int n);
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 void phy_state_machine(struct work_struct *work);
 void phy_change(struct work_struct *work);
 void phy_mac_interrupt(struct phy_device *phydev, int new_link);
@@ -833,6 +1020,10 @@ void mdio_bus_exit(void);
 
 extern struct bus_type mdio_bus_type;
 
+#ifdef MY_ABC_HERE
+int syno_m88e151X_led_init(struct phy_device *phydev);
+#endif /* MY_ABC_HERE */
+
 /**
  * module_phy_driver() - Helper macro for registering PHY drivers
  * @__phy_drivers: array of PHY drivers to register
@@ -841,6 +1032,22 @@ extern struct bus_type mdio_bus_type;
  * init/exit. Each module may only use this macro once, and calling it
  * replaces module_init() and module_exit().
  */
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#define phy_module_driver(__phy_drivers, __count)			\
+static int __init phy_module_init(void)					\
+{									\
+	return phy_drivers_register(__phy_drivers, __count, THIS_MODULE); \
+}									\
+module_init(phy_module_init);						\
+static void __exit phy_module_exit(void)				\
+{									\
+	phy_drivers_unregister(__phy_drivers, __count);			\
+}									\
+module_exit(phy_module_exit)
+
+#define module_phy_driver(__phy_drivers)				\
+	phy_module_driver(__phy_drivers, ARRAY_SIZE(__phy_drivers))
+#else /* MY_ABC_HERE || MY_DEF_HERE */
 #define phy_module_driver(__phy_drivers, __count)			\
 static int __init phy_module_init(void)					\
 {									\
@@ -855,5 +1062,6 @@ module_exit(phy_module_exit)
 
 #define module_phy_driver(__phy_drivers)				\
 	phy_module_driver(__phy_drivers, ARRAY_SIZE(__phy_drivers))
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 #endif /* __PHY_H */

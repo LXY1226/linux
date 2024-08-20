@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/mtd/nand/gpio.c
  *
@@ -209,7 +212,11 @@ static int gpio_nand_probe(struct platform_device *pdev)
 	struct gpiomtd *gpiomtd;
 	struct nand_chip *chip;
 	struct resource *res;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	struct mtd_part_parser_data ppdata = {};
+#endif /* MY_ABC_HERE */
 	int ret = 0;
 
 	if (!pdev->dev.of_node && !dev_get_platdata(&pdev->dev))
@@ -268,6 +275,9 @@ static int gpio_nand_probe(struct platform_device *pdev)
 		chip->dev_ready = gpio_nand_devready;
 	}
 
+#if defined(MY_ABC_HERE)
+	nand_set_flash_node(chip, pdev->dev.of_node);
+#endif /* MY_ABC_HERE */
 	chip->IO_ADDR_W		= chip->IO_ADDR_R;
 	chip->ecc.mode		= NAND_ECC_SOFT;
 	chip->options		= gpiomtd->plat.options;
@@ -291,10 +301,15 @@ static int gpio_nand_probe(struct platform_device *pdev)
 		gpiomtd->plat.adjust_parts(&gpiomtd->plat,
 					   gpiomtd->mtd_info.size);
 
+#if defined(MY_ABC_HERE)
+	ret = mtd_device_register(&gpiomtd->mtd_info, gpiomtd->plat.parts,
+				  gpiomtd->plat.num_parts);
+#else /* MY_ABC_HERE */
 	ppdata.of_node = pdev->dev.of_node;
 	ret = mtd_device_parse_register(&gpiomtd->mtd_info, NULL, &ppdata,
 					gpiomtd->plat.parts,
 					gpiomtd->plat.num_parts);
+#endif /* MY_ABC_HERE */
 	if (!ret)
 		return 0;
 

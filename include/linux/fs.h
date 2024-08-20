@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_FS_H
 #define _LINUX_FS_H
 
@@ -32,6 +35,16 @@
 #include <linux/workqueue.h>
 #include <linux/percpu-rwsem.h>
 
+#ifdef MY_ABC_HERE
+#include <linux/net.h>
+#endif /* MY_ABC_HERE */
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+#include <linux/time.h>
+#endif /* MY_ABC_HERE || MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#include <linux/sched.h>
+#endif /* MY_ABC_HERE */
+
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
 
@@ -52,6 +65,14 @@ struct swap_info_struct;
 struct seq_file;
 struct workqueue_struct;
 struct iov_iter;
+#ifdef CONFIG_SENDFILE_PATCH
+struct socket;
+#endif
+#if defined(MY_ABC_HERE)
+#ifdef CONFIG_SPLICE_FROM_SOCKET
+struct socket;
+#endif
+#endif /* MY_ABC_HERE */
 
 extern void __init inode_init(void);
 extern void __init inode_init_early(void);
@@ -75,12 +96,43 @@ typedef void (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 			ssize_t bytes, void *private);
 typedef void (dax_iodone_t)(struct buffer_head *bh_map, int uptodate);
 
+#ifdef MY_ABC_HERE
+/*
+   Note!!!!! It should be consistent with SYNO_ACL_MAY_XXXXX in <linux/syno_acl_xattr_ds.h>
+*/
+#define MAY_EXEC		(0x0001)
+#define MAY_WRITE		(0x0002)
+#define MAY_READ		(0x0004)
+#define MAY_APPEND		(0x0008)
+#define MAY_ACCESS 		(0x0010)
+#define MAY_OPEN 		(0x0020)
+#define MAY_READ_EXT_ATTR	(0x0040)
+#define MAY_READ_PERMISSION	(0x0080)
+#define MAY_READ_ATTR		(0x0100)
+#define MAY_WRITE_ATTR		(0x0200)
+#define MAY_WRITE_EXT_ATTR	(0x0400)
+#define MAY_WRITE_PERMISSION	(0x0800)
+#define MAY_DEL			(0x1000)
+#define MAY_DEL_CHILD		(0x2000)
+#define MAY_GET_OWNER_SHIP	(0x4000)
+
+#define MASK_RDONLY_CHECK (MAY_WRITE|MAY_APPEND|MAY_WRITE_ATTR|MAY_WRITE_EXT_ATTR|MAY_WRITE_PERMISSION|MAY_DEL|MAY_DEL_CHILD|MAY_GET_OWNER_SHIP)
+
+enum bypass_synoacl_type {
+	BYPASS_SYNOACL_SYNOUTIME,
+	BYPASS_SYNOACL_SYNOARCHIVE_OVERWRITE,
+	BYPASS_SYNOACL_SYNOARCHIVE_OVERWRITE_ACL,
+	BYPASS_SYNOACL_SYNOACL_XATTR,
+	BYPASS_SYNOACL_MAX
+};
+#else /* MY_ABC_HERE */
 #define MAY_EXEC		0x00000001
 #define MAY_WRITE		0x00000002
 #define MAY_READ		0x00000004
 #define MAY_APPEND		0x00000008
 #define MAY_ACCESS		0x00000010
 #define MAY_OPEN		0x00000020
+#endif /* MY_ABC_HERE */
 #define MAY_CHDIR		0x00000040
 /* called from RCU mode, don't block */
 #define MAY_NOT_BLOCK		0x00000080
@@ -278,7 +330,7 @@ struct iattr {
  */
 #define FILESYSTEM_MAX_STACK_DEPTH 2
 
-/** 
+/**
  * enum positive_aop_returns - aop return codes with specific semantics
  *
  * @AOP_WRITEPAGE_ACTIVATE: Informs the caller that page writeback has
@@ -288,7 +340,7 @@ struct iattr {
  * 			    be a candidate for writeback again in the near
  * 			    future.  Other callers must be careful to unlock
  * 			    the page if they get this return.  Returned by
- * 			    writepage(); 
+ * 			    writepage();
  *
  * @AOP_TRUNCATED_PAGE: The AOP method that was handed a locked page has
  *  			unlocked it and the page might have been truncated.
@@ -314,6 +366,11 @@ enum positive_aop_returns {
 #define AOP_FLAG_NOFS			0x0004 /* used by filesystem to direct
 						* helper code (eg buffer layer)
 						* to clear GFP_FS from alloc */
+#ifdef MY_ABC_HERE
+#define AOP_FLAG_RECVFILE		0x0008
+#define AOP_FLAG_RECVFILE_NONDA		0x0010
+#define AOP_FLAG_RECVFILE_ECRYPTFS_NO_TRUNCATE		0x0020
+#endif /* MY_ABC_HERE */
 
 /*
  * oh the beauties of C type declarations.
@@ -390,6 +447,11 @@ struct address_space_operations {
 	int (*write_end)(struct file *, struct address_space *mapping,
 				loff_t pos, unsigned len, unsigned copied,
 				struct page *page, void *fsdata);
+#ifdef MY_ABC_HERE
+	int (*aggregate_write_end)(struct file *, struct address_space *mapping,
+				loff_t pos, unsigned len, unsigned copied,
+				struct page **page, void *fsdata, unsigned page_num);
+#endif /* MY_ABC_HERE */
 
 	/* Unfortunately this kludge is needed for FIBMAP. Don't use it */
 	sector_t (*bmap)(struct address_space *, sector_t);
@@ -413,6 +475,9 @@ struct address_space_operations {
 	int (*swap_activate)(struct swap_info_struct *sis, struct file *file,
 				sector_t *span);
 	void (*swap_deactivate)(struct file *file);
+#ifdef MY_ABC_HERE
+	int (*recvfile_da_check)(struct super_block *sb);
+#endif /* MY_ABC_HERE */
 };
 
 extern const struct address_space_operations empty_aops;
@@ -475,6 +540,7 @@ struct block_device {
 	int			bd_invalidated;
 	struct gendisk *	bd_disk;
 	struct request_queue *  bd_queue;
+	struct backing_dev_info *bd_bdi;
 	struct list_head	bd_list;
 	/*
 	 * Private data.  You must have bd_claim'ed the block_device
@@ -488,6 +554,9 @@ struct block_device {
 	int			bd_fsfreeze_count;
 	/* Mutex for freeze */
 	struct mutex		bd_fsfreeze_mutex;
+#ifdef CONFIG_FS_DAX
+	int			bd_map_count;
+#endif
 };
 
 /*
@@ -576,11 +645,17 @@ static inline void mapping_allow_writable(struct address_space *mapping)
 #endif
 
 struct posix_acl;
+#ifdef MY_ABC_HERE
+struct syno_acl;
+#endif /* MY_ABC_HERE */
 #define ACL_NOT_CACHED ((void *)(-1))
 
 #define IOP_FASTPERM	0x0001
 #define IOP_LOOKUP	0x0002
 #define IOP_NOFOLLOW	0x0004
+#ifdef MY_ABC_HERE
+#define IOP_ECRYPTFS_LOWER_INIT	0x0040
+#endif /* MY_ABC_HERE */
 
 /*
  * Keep mostly read-only and often accessed (especially for
@@ -659,6 +734,16 @@ struct inode {
 	};
 	u64			i_version;
 	atomic64_t		i_sequence; /* see futex */
+#ifdef MY_ABC_HERE
+	__u32			i_archive_bit;
+	struct mutex		i_syno_mutex;   /* i_archive_bit */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	__u32			i_archive_version;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	struct timespec		i_create_time;
+#endif /* MY_ABC_HERE */
 	atomic_t		i_count;
 	atomic_t		i_dio_count;
 	atomic_t		i_writecount;
@@ -683,9 +768,19 @@ struct inode {
 	struct hlist_head	i_fsnotify_marks;
 #endif
 
+#ifdef MY_ABC_HERE
+	struct syno_acl		*i_syno_acl;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	u8	aggregate_flag;
+#endif /* MY_ABC_HERE */
 	void			*i_private; /* fs or device private pointer */
 };
 
+#ifdef MY_ABC_HERE
+#define AGGREGATE_RECVFILE_DOING 1
+#define AGGREGATE_RECVFILE_FLUSH 2
+#endif /* MY_ABC_HERE */
 static inline unsigned int i_blocksize(const struct inode *node)
 {
 	return (1 << node->i_blkbits);
@@ -875,6 +970,13 @@ static inline int ra_has_index(struct file_ra_state *ra, pgoff_t index)
 
 struct file {
 	union {
+#ifdef MY_ABC_HERE
+	/*
+	 * fu_list becomes invalid after file_free is called and queued via
+	 * fu_rcuhead for RCU freeing
+	 */
+		struct list_head	fu_list;
+#endif /* MY_ABC_HERE */
 		struct llist_node	fu_llist;
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
@@ -887,6 +989,11 @@ struct file {
 	 * Must not be taken from IRQ context.
 	 */
 	spinlock_t		f_lock;
+#ifdef MY_ABC_HERE
+#ifdef CONFIG_SMP
+	int			f_sb_list_cpu;
+#endif
+#endif /* MY_ABC_HERE */
 	atomic_long_t		f_count;
 	unsigned int 		f_flags;
 	fmode_t			f_mode;
@@ -909,6 +1016,9 @@ struct file {
 	struct list_head	f_tfile_llink;
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
+#ifdef MY_ABC_HERE
+	char comm[TASK_COMM_LEN];
+#endif /* MY_ABC_HERE */
 } __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
 
 struct file_handle {
@@ -931,8 +1041,8 @@ static inline struct file *get_file(struct file *f)
 
 #define	MAX_NON_LFS	((1UL<<31) - 1)
 
-/* Page cache limit. The filesystems should put that into their s_maxbytes 
-   limits, otherwise bad things can happen in VM. */ 
+/* Page cache limit. The filesystems should put that into their s_maxbytes
+   limits, otherwise bad things can happen in VM. */
 #if BITS_PER_LONG==32
 #define MAX_LFS_FILESIZE	((loff_t)ULONG_MAX << PAGE_SHIFT)
 #elif BITS_PER_LONG==64
@@ -1282,6 +1392,9 @@ extern void fasync_free(struct fasync_struct *);
 /* can be called from interrupts */
 extern void kill_fasync(struct fasync_struct **, int, int);
 
+#ifdef CONFIG_AUFS_FHSM
+extern int setfl(int fd, struct file * filp, unsigned long arg);
+#endif /* CONFIG_AUFS_FHSM */
 extern void __f_setown(struct file *filp, struct pid *, enum pid_type, int force);
 extern void f_setown(struct file *filp, unsigned long arg, int force);
 extern void f_delown(struct file *filp);
@@ -1347,6 +1460,13 @@ struct super_block {
 	const struct xattr_handler **s_xattr;
 
 	struct hlist_bl_head	s_anon;		/* anonymous dentries for (nfs) exporting */
+#ifdef MY_ABC_HERE
+#ifdef CONFIG_SMP
+	struct list_head __percpu *s_files;
+#else
+	struct list_head	s_files;
+#endif
+#endif /* MY_ABC_HERE */
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
 	struct block_device	*s_bdev;
 	struct backing_dev_info *s_bdi;
@@ -1386,6 +1506,14 @@ struct super_block {
 	 */
 	char __rcu *s_options;
 	const struct dentry_operations *s_d_op; /* default d_op for dentries */
+#ifdef MY_ABC_HERE
+	struct mutex s_archive_mutex;
+	u32		s_archive_version;
+#ifdef MY_ABC_HERE
+	/* ext4 on-disk archive version on the wrong place */
+	u32		s_archive_version1;
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Saved pool identifier for cleancache (-1 means none)
@@ -1423,7 +1551,21 @@ struct super_block {
 	/* s_inode_list_lock protects s_inodes */
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
 	struct list_head	s_inodes;	/* all inodes */
+#ifdef MY_ABC_HERE
+	/*
+	 * relatime_period can be changed by mount option "relatime_period=%u".
+	 * Because most file systems do not accept unrecognized mount options,
+	 * this option is parsed by underlying file systems instead of vfs layer.
+	 */
+	long relatime_period;
+#endif /* MY_ABC_HERE */
 };
+
+#ifdef MY_ABC_HERE
+#define SZ_FS_GLUSTER	"glusterfs"
+#define IS_GLUSTER_FS(inode) (inode->i_sb->s_subtype && !strcmp(SZ_FS_GLUSTER, inode->i_sb->s_subtype))
+#define IS_GLUSTER_FS_SB(sb) (sb->s_subtype && !strcmp(SZ_FS_GLUSTER, sb->s_subtype))
+#endif /* MY_ABC_HERE */
 
 extern struct timespec current_fs_time(struct super_block *sb);
 
@@ -1586,6 +1728,13 @@ int fiemap_fill_next_extent(struct fiemap_extent_info *info, u64 logical,
 			    u64 phys, u64 len, u32 flags);
 int fiemap_check_flags(struct fiemap_extent_info *fieinfo, u32 fs_flags);
 
+#ifdef MY_ABC_HERE
+/*
+ * VFS space_usage helper definitions.
+ */
+extern int vfs_syno_space_usage(struct file *file, struct syno_space_usage_info *info);
+#endif /* MY_ABC_HERE */
+
 /*
  * File types
  *
@@ -1669,9 +1818,22 @@ struct file_operations {
 	ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
 	unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 	int (*check_flags)(int);
+#ifdef CONFIG_AUFS_FHSM
+	int (*setfl)(struct file *, unsigned long);
+#endif /* CONFIG_AUFS_FHSM */
 	int (*flock) (struct file *, int, struct file_lock *);
 	ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
 	ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
+#ifdef CONFIG_SENDFILE_PATCH
+	ssize_t (*splice_from_socket)(struct file *, struct socket *,
+					loff_t *ppos, size_t count, bool ppage);
+					//loff_t __user *ppos, size_t count);
+#endif
+#if defined(MY_ABC_HERE)
+#ifdef CONFIG_SPLICE_FROM_SOCKET
+	ssize_t (*splice_from_socket)(struct file *file, struct socket *sock, loff_t __user *ppos, size_t count);
+#endif
+#endif /* MY_ABC_HERE */
 	int (*setlease)(struct file *, long, struct file_lock **, void **);
 	long (*fallocate)(struct file *file, int mode, loff_t offset,
 			  loff_t len);
@@ -1679,9 +1841,39 @@ struct file_operations {
 #ifndef CONFIG_MMU
 	unsigned (*mmap_capabilities)(struct file *);
 #endif
+#ifdef MY_ABC_HERE
+	ssize_t (*syno_recvfile)(int fd, struct file *file, struct socket *sock,
+	                                              loff_t pos, size_t count, size_t * rbytes, size_t * wbytes);
+#ifdef MY_DEF_HERE
+	int (*ecryptfs_zero_copy)(struct file *file, loff_t pos, int num_page,
+	      struct page **pages, void *crypt_stat);
+#endif /* MY_DEF_HERE */
+#endif /* MY_ABC_HERE */
+	ssize_t (*copy_file_range)(struct file *, loff_t, struct file *,
+			loff_t, size_t, unsigned int);
+	int (*clone_file_range)(struct file *, loff_t, struct file *, loff_t,
+			u64);
+#ifdef MY_DEF_HERE
+	int (*clone_check_compr)(struct file *, struct file *);
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	int (*fallocate_check_punch)(struct file *file, loff_t offset, loff_t len, loff_t *extent_align_offset, loff_t *extent_len);
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	long (*non_blocking_punch_hole)(struct file *file, loff_t offset, loff_t len);
+#endif
+#ifdef MY_ABC_HERE
+	int (*quota_query) (struct file *file, u64 *used, u64 *reserved, u64 *limit);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	int (*syno_space_usage) (struct file *file, struct syno_space_usage_info *info);
+#endif /* MY_ABC_HERE */
 };
 
 struct inode_operations {
+#ifdef MY_ABC_HERE
+	int (*syno_getattr)(struct dentry *, struct kstat *, int flags);
+#endif
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 	const char * (*follow_link) (struct dentry *, void **);
 	int (*permission) (struct inode *, int);
@@ -1701,6 +1893,44 @@ struct inode_operations {
 			struct inode *, struct dentry *);
 	int (*rename2) (struct inode *, struct dentry *,
 			struct inode *, struct dentry *, unsigned int);
+#ifdef MY_ABC_HERE
+	struct syno_acl * (*syno_acl_get)(struct inode *);
+	int (*syno_acl_set)(struct inode *, struct syno_acl *);
+	int (*syno_acl_xattr_get)(struct dentry *, int, void *, size_t);
+	int (*syno_permission)(struct dentry *, int);
+	int (*syno_exec_permission)(struct dentry *);
+	int (*syno_acl_access)(struct dentry *, int, int);
+	int (*syno_may_delete)(struct dentry *, struct inode *);
+	int (*syno_inode_change_ok)(struct dentry *, struct iattr *);
+	int (*syno_arbit_chg_ok)(struct dentry *, unsigned int cmd, int tag, int mask);
+	int (*syno_setattr_post)(struct dentry *, struct iattr *);
+	int (*syno_acl_init)(struct dentry *, struct inode *);
+	void (*syno_acl_to_mode)(struct dentry *, struct kstat *);
+	int (*syno_acl_sys_get_perm)(struct dentry *, int *mask);
+	int (*syno_acl_sys_check_perm)(struct dentry *, int mask);
+	int (*syno_acl_sys_is_support)(struct dentry *, int tag);
+	int (*syno_bypass_is_synoacl)(struct dentry *, int cmd, int reterr);
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	int (*syno_locker_mode_get)(struct inode *, enum locker_mode *);
+	int (*syno_locker_state_get)(struct inode *, enum locker_state *);
+	int (*syno_locker_state_set)(struct inode *, enum locker_state);
+	int (*syno_locker_period_end_set)(struct inode *, struct timespec64 *);
+#endif /* MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+	int (*syno_get_archive_bit)(struct dentry *, unsigned int *);
+	int (*syno_set_archive_bit)(struct dentry *, unsigned int);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	int (*syno_get_archive_ver)(struct dentry *, u32 *);
+	int (*syno_set_archive_ver)(struct dentry *, u32);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	int (*syno_set_crtime)(struct dentry *, struct timespec *);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	int (*syno_pattern_check)(struct inode *, struct page *, size_t offset, size_t bytes, int type);
+#endif /* MY_ABC_HERE */
 	int (*setattr) (struct dentry *, struct iattr *);
 	int (*getattr) (struct vfsmount *mnt, struct dentry *, struct kstat *);
 	int (*setxattr) (struct dentry *, const char *,const void *,size_t,int);
@@ -1715,12 +1945,34 @@ struct inode_operations {
 			   umode_t create_mode, int *opened);
 	int (*tmpfile) (struct inode *, struct dentry *, umode_t);
 	int (*set_acl)(struct inode *, struct posix_acl *, int);
+
+#ifdef MY_ABC_HERE
+	/* fsdev support */
+	int (*fsdev_activate)(struct inode *inode, struct block_device **fs_bdev);
+	void (*fsdev_deactivate)(struct inode *inode);
+	int (*fsdev_mapping)(struct inode *inode, u64 start, u64 end, u64 *dev_start, u64 *dev_end);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+	int (*syno_rbd_meta_file_activate)(struct inode *);
+	int (*syno_rbd_meta_file_deactivate)(struct inode *);
+	int (*syno_rbd_meta_file_mapping)(struct inode *,
+			struct syno_rbd_meta_ioctl_args *args);
+#endif /* MY_ABC_HERE */
 } ____cacheline_aligned;
 
 ssize_t rw_copy_check_uvector(int type, const struct iovec __user * uvector,
 			      unsigned long nr_segs, unsigned long fast_segs,
 			      struct iovec *fast_pointer,
 			      struct iovec **ret_pointer);
+
+#ifdef CONFIG_AUFS_FHSM
+typedef ssize_t (*vfs_readf_t)(struct file *, char __user *, size_t, loff_t *);
+typedef ssize_t (*vfs_writef_t)(struct file *, const char __user *, size_t,
+				loff_t *);
+vfs_readf_t vfs_readf(struct file *file);
+vfs_writef_t vfs_writef(struct file *file);
+#endif /* CONFIG_AUFS_FHSM */
 
 extern ssize_t __vfs_read(struct file *, char __user *, size_t, loff_t *);
 extern ssize_t __vfs_write(struct file *, const char __user *, size_t, loff_t *);
@@ -1730,8 +1982,48 @@ extern ssize_t vfs_readv(struct file *, const struct iovec __user *,
 		unsigned long, loff_t *);
 extern ssize_t vfs_writev(struct file *, const struct iovec __user *,
 		unsigned long, loff_t *);
+extern ssize_t vfs_copy_file_range(struct file *, loff_t , struct file *,
+				   loff_t, size_t, unsigned int);
+#ifdef MY_DEF_HERE
+extern int vfs_clone_file_range(struct file *file_in, loff_t pos_in,
+		struct file *file_out, loff_t pos_out, u64 len, int check_compr);
+#else
+extern int vfs_clone_file_range(struct file *file_in, loff_t pos_in,
+		struct file *file_out, loff_t pos_out, u64 len);
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+static inline int do_clone_file_range(struct file *file_in, loff_t pos_in,
+				      struct file *file_out, loff_t pos_out,
+				      u64 len, int check_compr)
+#else
+static inline int do_clone_file_range(struct file *file_in, loff_t pos_in,
+				      struct file *file_out, loff_t pos_out,
+				      u64 len)
+#endif /* MY_DEF_HERE */
+{
+	int ret;
+
+	sb_start_write(file_inode(file_out)->i_sb);
+#ifdef MY_DEF_HERE
+	ret = vfs_clone_file_range(file_in, pos_in, file_out, pos_out, len, check_compr);
+#else
+	ret = vfs_clone_file_range(file_in, pos_in, file_out, pos_out, len);
+#endif /* MY_DEF_HERE */
+	sb_end_write(file_inode(file_out)->i_sb);
+
+	return ret;
+}
 
 struct super_operations {
+#ifdef MY_ABC_HERE
+	int (*syno_get_sb_archive_ver)(struct super_block *sb, u32 *version);
+	int (*syno_set_sb_archive_ver)(struct super_block *sb, u32 version);
+#ifdef MY_ABC_HERE
+	int (*syno_get_sb_archive_ver1)(struct super_block *sb, u32 *version);
+	int (*syno_set_sb_archive_ver1)(struct super_block *sb, u32 version);
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
    	struct inode *(*alloc_inode)(struct super_block *sb);
 	void (*destroy_inode)(struct inode *);
 
@@ -1763,6 +2055,11 @@ struct super_operations {
 				  struct shrink_control *);
 	long (*free_cached_objects)(struct super_block *,
 				    struct shrink_control *);
+#ifdef MY_ABC_HERE
+	int (*syno_rbd_set_first_mapping_table_offset)(
+			struct super_block *, u64 offset);
+	int (*syno_rbd_meta_file_cleanup_all)(struct inode *);
+#endif /* MY_ABC_HERE */
 };
 
 /*
@@ -1786,6 +2083,12 @@ struct super_operations {
 #else
 #define S_DAX		0	/* Make all the DAX code disappear */
 #endif
+#ifdef MY_ABC_HERE
+#define S_CREATE_TIME_CACHED 0x40000000
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define S_ARCHIVE_VERSION_CACHED 0x80000000
+#endif /* MY_ABC_HERE */
 
 /*
  * Note that nosuid etc flags are inode-specific: setting some file-system
@@ -1812,8 +2115,14 @@ struct super_operations {
 #define IS_I_VERSION(inode)	__IS_FLG(inode, MS_I_VERSION)
 
 #define IS_NOQUOTA(inode)	((inode)->i_flags & S_NOQUOTA)
+#ifdef MY_DEF_HERE
+#define IS_APPEND(inode)	((inode)->i_flags & S_APPEND || syno_op_locker_is_appendable(inode))
+#define IS_IMMUTABLE(inode)	((inode)->i_flags & S_IMMUTABLE || syno_op_locker_is_immutable(inode))
+#define IS_EXPIRED(inode)	syno_op_locker_is_expired(inode)
+#else
 #define IS_APPEND(inode)	((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode)	((inode)->i_flags & S_IMMUTABLE)
+#endif /* MY_DEF_HERE */
 #define IS_POSIXACL(inode)	__IS_FLG(inode, MS_POSIXACL)
 
 #define IS_DEADDIR(inode)	((inode)->i_flags & S_DEAD)
@@ -1827,6 +2136,20 @@ struct super_operations {
 
 #define IS_WHITEOUT(inode)	(S_ISCHR(inode->i_mode) && \
 				 (inode)->i_rdev == WHITEOUT_DEV)
+#ifdef MY_ABC_HERE
+#define IS_ARCHIVE_VERSION_CACHED(inode) ((inode)->i_flags & S_ARCHIVE_VERSION_CACHED)
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+/*
+ * Usually, we hack trim function to send unused hints.
+ * This flag is used to tell if we want to send hint or trim
+ */
+enum trim_act {
+	TRIM_SEND_TRIM,
+	TRIM_SEND_HINT
+};
+#endif /* MY_ABC_HERE */
 
 /*
  * Inode state bits.  Protected by inode->i_lock
@@ -1976,7 +2299,7 @@ int sync_inode_metadata(struct inode *inode, int wait);
 struct file_system_type {
 	const char *name;
 	int fs_flags;
-#define FS_REQUIRES_DEV		1 
+#define FS_REQUIRES_DEV		1
 #define FS_BINARY_MOUNTDATA	2
 #define FS_HAS_SUBTYPE		4
 #define FS_USERNS_MOUNT		8	/* Can be mounted by userns root */
@@ -1997,6 +2320,9 @@ struct file_system_type {
 
 	struct lock_class_key i_lock_key;
 	struct lock_class_key i_mutex_key;
+#ifdef MY_ABC_HERE
+	struct lock_class_key i_syno_mutex_key;
+#endif /* MY_ABC_HERE */
 	struct lock_class_key i_mutex_dir_key;
 };
 
@@ -2022,6 +2348,9 @@ void deactivate_super(struct super_block *sb);
 void deactivate_locked_super(struct super_block *sb);
 int set_anon_super(struct super_block *s, void *data);
 int get_anon_bdev(dev_t *);
+#ifdef MY_DEF_HERE
+int get_anon_bdev_with_gfp(dev_t *p, gfp_t gfp_mask);
+#endif /* MY_DEF_HERE */
 void free_anon_bdev(dev_t);
 struct super_block *sget(struct file_system_type *type,
 			int (*test)(struct super_block *,void *),
@@ -2081,12 +2410,9 @@ extern struct kobject *fs_kobj;
 
 #define MAX_RW_COUNT (INT_MAX & PAGE_CACHE_MASK)
 
-#define FLOCK_VERIFY_READ  1
-#define FLOCK_VERIFY_WRITE 2
-
 #ifdef CONFIG_FILE_LOCKING
 extern int locks_mandatory_locked(struct file *);
-extern int locks_mandatory_area(int, struct inode *, struct file *, loff_t, size_t);
+extern int locks_mandatory_area(struct inode *, struct file *, loff_t, loff_t, unsigned char);
 
 /*
  * Candidates for mandatory locking have the setgid bit set
@@ -2116,17 +2442,19 @@ static inline int locks_verify_locked(struct file *file)
 }
 
 static inline int locks_verify_truncate(struct inode *inode,
-				    struct file *filp,
+				    struct file *f,
 				    loff_t size)
 {
-	if (inode->i_flctx && mandatory_lock(inode))
-		return locks_mandatory_area(
-			FLOCK_VERIFY_WRITE, inode, filp,
-			size < inode->i_size ? size : inode->i_size,
-			(size < inode->i_size ? inode->i_size - size
-			 : size - inode->i_size)
-		);
-	return 0;
+	if (!inode->i_flctx || !mandatory_lock(inode))
+		return 0;
+
+	if (size < inode->i_size) {
+		return locks_mandatory_area(inode, f, size, inode->i_size - 1,
+				F_WRLCK);
+	} else {
+		return locks_mandatory_area(inode, f, inode->i_size, size - 1,
+				F_WRLCK);
+	}
 }
 
 static inline int break_lease(struct inode *inode, unsigned int mode)
@@ -2195,9 +2523,8 @@ static inline int locks_mandatory_locked(struct file *file)
 	return 0;
 }
 
-static inline int locks_mandatory_area(int rw, struct inode *inode,
-				       struct file *filp, loff_t offset,
-				       size_t count)
+static inline int locks_mandatory_area(struct inode *inode, struct file *filp,
+		loff_t start, loff_t end, unsigned char type)
 {
 	return 0;
 }
@@ -2262,10 +2589,17 @@ struct filename {
 };
 
 extern long vfs_truncate(struct path *, loff_t);
+#ifdef MY_ABC_HERE
+extern long syno_vfs_truncate(struct path *, loff_t);
+#endif /* MY_ABC_HERE */
 extern int do_truncate(struct dentry *, loff_t start, unsigned int time_attrs,
 		       struct file *filp);
 extern int vfs_fallocate(struct file *file, int mode, loff_t offset,
 			loff_t len);
+#ifdef MY_ABC_HERE
+extern int do_fallocate(struct file *file, int mode, loff_t offset, loff_t len);
+#endif /* MY_ABC_HERE */
+
 extern long do_sys_open(int dfd, const char __user *filename, int flags,
 			umode_t mode);
 extern struct file *file_open_name(struct filename *, int, umode_t);
@@ -2305,6 +2639,7 @@ extern struct kmem_cache *names_cachep;
 #ifdef CONFIG_BLOCK
 extern int register_blkdev(unsigned int, const char *);
 extern void unregister_blkdev(unsigned int, const char *);
+extern void bdev_unhash_inode(dev_t dev);
 extern struct block_device *bdget(dev_t);
 extern struct block_device *bdgrab(struct block_device *bdev);
 extern void bd_set_size(struct block_device *, loff_t size);
@@ -2318,6 +2653,14 @@ extern struct super_block *freeze_bdev(struct block_device *);
 extern void emergency_thaw_all(void);
 extern int thaw_bdev(struct block_device *bdev, struct super_block *sb);
 extern int fsync_bdev(struct block_device *);
+#ifdef CONFIG_FS_DAX
+extern bool blkdev_dax_capable(struct block_device *bdev);
+#else
+static inline bool blkdev_dax_capable(struct block_device *bdev)
+{
+	return false;
+}
+#endif
 
 extern struct super_block *blockdev_superblock;
 
@@ -2464,6 +2807,8 @@ extern int filemap_fdatawait(struct address_space *);
 extern void filemap_fdatawait_keep_errors(struct address_space *);
 extern int filemap_fdatawait_range(struct address_space *, loff_t lstart,
 				   loff_t lend);
+extern bool filemap_range_has_page(struct address_space *, loff_t lstart,
+				  loff_t lend);
 extern int filemap_write_and_wait(struct address_space *mapping);
 extern int filemap_write_and_wait_range(struct address_space *mapping,
 				        loff_t lstart, loff_t lend);
@@ -2471,6 +2816,7 @@ extern int __filemap_fdatawrite_range(struct address_space *mapping,
 				loff_t start, loff_t end, int sync_mode);
 extern int filemap_fdatawrite_range(struct address_space *mapping,
 				loff_t start, loff_t end);
+extern int filemap_check_errors(struct address_space *mapping);
 
 extern int vfs_fsync_range(struct file *file, loff_t start, loff_t end,
 			   int datasync);
@@ -2584,7 +2930,7 @@ extern int kernel_read(struct file *, loff_t, char *, unsigned long);
 extern ssize_t kernel_write(struct file *, const char *, size_t, loff_t);
 extern ssize_t __kernel_write(struct file *, const char *, size_t, loff_t *);
 extern struct file * open_exec(const char *);
- 
+
 /* fs/dcache.c -- generic fs support functions */
 extern int is_subdir(struct dentry *, struct dentry *);
 extern int path_is_under(struct path *, struct path *);
@@ -2675,11 +3021,32 @@ extern int sb_min_blocksize(struct super_block *, int);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern int generic_file_readonly_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_write_checks(struct kiocb *, struct iov_iter *);
+#ifdef MY_ABC_HERE
+/* The max size of aggregating receive file request is "128KB" */
+#define MAX_RECVFILE_BUF (128 * 1024)
+#define MAX_PAGES_PER_RECVFILE (MAX_RECVFILE_BUF / PAGE_SIZE)
+/* The max size of aggregating receive file request is "1MB" */
+#define MAX_PAGES_PER_AGGREGATE_RECVFILE (1048576 / PAGE_SIZE)
+#if (MAX_PAGES_PER_RECVFILE > (MAX_PAGES_PER_AGGREGATE_RECVFILE - MAX_PAGES_PER_RECVFILE))
+#error "recvfile buffer configuration error, it will make aggregate recvfile fail to work."
+#endif
+extern int do_recvfile(struct file *, struct socket *, loff_t , size_t , size_t * , size_t *);
+extern ssize_t aggregate_recvfile(int, struct file *, struct socket *, loff_t, size_t, size_t *, size_t *);
+extern void aggregate_recvfile_flush_only(struct file *file);
+extern int do_aggregate_recvfile(struct file *file, struct socket *sock, loff_t pos, size_t count, size_t *rbytes , size_t *wbytes, unsigned flush_only);
+extern int flush_aggregate_recvfile(int fd);
+extern int flush_aggregate_recvfile_filp(struct file *file);
+#endif /* MY_ABC_HERE */
 extern ssize_t generic_file_read_iter(struct kiocb *, struct iov_iter *);
 extern ssize_t __generic_file_write_iter(struct kiocb *, struct iov_iter *);
 extern ssize_t generic_file_write_iter(struct kiocb *, struct iov_iter *);
 extern ssize_t generic_file_direct_write(struct kiocb *, struct iov_iter *, loff_t);
 extern ssize_t generic_perform_write(struct file *, struct iov_iter *, loff_t);
+
+#ifdef CONFIG_SENDFILE_PATCH
+#define MAX_SIZE_PER_RECVFILE 256*1024
+#define MAX_PAGES_PER_RECVFILE MAX_SIZE_PER_RECVFILE/PAGE_SIZE
+#endif
 
 ssize_t vfs_iter_read(struct file *file, struct iov_iter *iter, loff_t *ppos);
 ssize_t vfs_iter_write(struct file *file, struct iov_iter *iter, loff_t *ppos);
@@ -2702,7 +3069,10 @@ extern ssize_t generic_splice_sendpage(struct pipe_inode_info *pipe,
 		struct file *out, loff_t *, size_t len, unsigned int flags);
 extern long do_splice_direct(struct file *in, loff_t *ppos, struct file *out,
 		loff_t *opos, size_t len, unsigned int flags);
-
+#ifdef CONFIG_SENDFILE_PATCH
+extern ssize_t generic_splice_from_socket(struct file *file, struct socket *sock,
+					loff_t *ppos, size_t count, bool ppage);
+#endif
 
 extern void
 file_ra_state_init(struct file_ra_state *ra, struct address_space *mapping);
@@ -2734,6 +3104,11 @@ enum {
 
 	/* inode/fs/bdev does not need truncate protection */
 	DIO_SKIP_DIO_COUNT = 0x08,
+
+#ifdef MY_DEF_HERE
+	/* force aio end_io with defer completion */
+	DIO_AIO_DEFER_COMPLETION = 0x10,
+#endif /* MY_DEF_HERE */
 };
 
 void dio_end_io(struct bio *bio, int error);
@@ -2818,6 +3193,9 @@ extern int vfs_stat(const char __user *, struct kstat *);
 extern int vfs_lstat(const char __user *, struct kstat *);
 extern int vfs_fstat(unsigned int, struct kstat *);
 extern int vfs_fstatat(int , const char __user *, struct kstat *, int);
+#ifdef MY_ABC_HERE
+extern int vfs_quota_query(struct file *file, u64 *used, u64 *reserved, u64 *limit);
+#endif /* MY_ABC_HERE */
 
 extern int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 		    unsigned long arg);
@@ -2874,7 +3252,7 @@ extern void make_empty_dir_inode(struct inode *inode);
 extern bool is_empty_dir_inode(struct inode *inode);
 struct tree_descr { char *name; const struct file_operations *ops; int mode; };
 struct dentry *d_alloc_name(struct dentry *, const char *);
-extern int simple_fill_super(struct super_block *, unsigned long, struct tree_descr *);
+extern int simple_fill_super(struct super_block *, unsigned long, const struct tree_descr *);
 extern int simple_pin_fs(struct file_system_type *, struct vfsmount **mount, int *count);
 extern void simple_release_fs(struct vfsmount **mount, int *count);
 
@@ -3037,6 +3415,22 @@ static inline void inode_has_no_xattr(struct inode *inode)
 		inode->i_flags |= S_NOSEC;
 }
 
+#ifdef MY_ABC_HERE
+#define UTF16_UPCASE_TABLE_SIZE 	0x10000		/* 64k chars */
+#define UNICODE_UTF16_BUFSIZE		4096		/* should be safe enough for namei */
+#define UNICODE_UTF8_BUFSIZE		8192
+int syno_utf8_strcmp(const u_int8_t *utf8str1,const u_int8_t *utf8str2,int len_utf8_str1, int len_utf8_str2, u_int16_t *upcasetable);
+int syno_utf8_toupper(u_int8_t *to,const u_int8_t *from, int maxlen, int clenfrom, u_int16_t *upcasetable);
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+enum syno_pattern_check_type {
+	SYNO_PATTERN_CHECK_CACHE_PAGES = 0,
+	SYNO_PATTERN_CHECK_BIO,
+};
+int syno_page_pattern_check(struct inode *, struct page *, size_t offset, size_t bytes, int type);
+#endif /* MY_ABC_HERE */
+
 static inline bool is_root_inode(struct inode *inode)
 {
 	return inode == inode->i_sb->s_root->d_inode;
@@ -3078,8 +3472,216 @@ static inline bool dir_relax(struct inode *inode)
 	inode_lock(inode);
 	return !IS_DEADDIR(inode);
 }
+#ifdef MY_ABC_HERE
+#define IS_SYNOACL_SUPERUSER()	(uid_eq(KUIDT_INIT(0), current_fsuid()))
+
+static inline int is_syno_arbit_enable(struct inode *inode, struct dentry * dentry, unsigned int arbit)
+{
+	if (inode->i_op->syno_get_archive_bit) {
+		unsigned int tmp = 0;
+		int err = inode->i_op->syno_get_archive_bit(dentry, &tmp);
+
+		if (!err && (arbit & tmp)) {
+			return 1;
+		}
+		if (-EOPNOTSUPP != err){ //err or arbit not enabled
+			return 0;
+		}
+	}
+
+	if (inode->i_archive_bit & arbit) {
+		return 1;
+	}
+	return 0;
+}
+
+#define IS_INODE_SYNOACL(inode, dentry)		is_syno_arbit_enable(inode, dentry, S2_SYNO_ACL_SUPPORT)
+#define IS_SMB_READONLY(dentry)			is_syno_arbit_enable(dentry->d_inode, dentry, S2_SMB_READONLY)
+#define IS_SYNOACL_INHERIT(dentry)		is_syno_arbit_enable(dentry->d_inode, dentry, S2_SYNO_ACL_INHERIT)
+#define IS_SYNOACL_EXIST(dentry)		is_syno_arbit_enable(dentry->d_inode, dentry, S2_SYNO_ACL_EXIST)
+#define HAS_SYNOACL(dentry)			is_syno_arbit_enable(dentry->d_inode, dentry, (S2_SYNO_ACL_EXIST | S2_SYNO_ACL_INHERIT))
+#define IS_SYNOACL_OWNER_IS_GROUP(dentry)	is_syno_arbit_enable(dentry->d_inode, dentry, S2_SYNO_ACL_IS_OWNER_GROUP)
+
+#define IS_FS_SYNOACL(inode)			__IS_FLG(inode, MS_SYNOACL)
+#define IS_SYNOACL(dentry)			(IS_FS_SYNOACL(dentry->d_inode) && IS_INODE_SYNOACL(dentry->d_inode, dentry))
+#define IS_SYNOACL_INODE(inode, dentry)		(IS_FS_SYNOACL(inode) && IS_INODE_SYNOACL(inode, dentry))
+
+#define is_synoacl_owner(dentry)		IS_SYNOACL_OWNER_IS_GROUP(dentry)?in_group_p(dentry->d_inode->i_gid):(uid_eq(dentry->d_inode->i_uid, current_fsuid()))
+#define is_synoacl_owner_or_capable(dentry)	(is_synoacl_owner(dentry) || capable(CAP_FOWNER))
+#endif /* MY_ABC_HERE */
 
 extern bool path_noexec(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
+
+#ifdef MY_ABC_HERE
+static inline int syno_op_get_archive_bit(struct dentry *dentry, unsigned int *arbit)
+{
+	int err = 0;
+	struct inode *inode = dentry->d_inode;
+
+	if (inode->i_op->syno_get_archive_bit) {
+		err = inode->i_op->syno_get_archive_bit(dentry, arbit);
+		if (-ENODATA == err) {
+			err = 0;
+			*arbit= 0;
+		}
+	} else {
+		*arbit = inode->i_archive_bit;
+	}
+
+	return err;
+}
+
+static inline int syno_op_set_archive_bit_nolock(struct dentry *dentry, unsigned int arbit)
+{
+	int err = 0;
+	struct inode *inode = dentry->d_inode;
+
+	if (inode->i_op->syno_set_archive_bit) {
+		err = inode->i_op->syno_set_archive_bit(dentry, arbit);
+	} else {
+		inode->i_archive_bit = arbit;
+		inode->i_ctime = CURRENT_TIME;
+		mark_inode_dirty_sync(inode);
+	}
+
+	return err;
+}
+
+static inline int syno_op_set_archive_bit(struct dentry *dentry, unsigned int arbit)
+{
+	int err = 0;
+	struct inode *inode = dentry->d_inode;
+
+	mutex_lock(&inode->i_syno_mutex);
+	err = syno_op_set_archive_bit_nolock(dentry, arbit);
+	mutex_unlock(&inode->i_syno_mutex);
+	return err;
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+static inline int syno_op_set_crtime(struct dentry *dentry, struct timespec *time)
+{
+	int error = 0;
+	struct inode *inode = dentry->d_inode;
+
+	mutex_lock(&inode->i_mutex);
+
+	if (inode->i_op->syno_set_crtime) {
+		error = inode->i_op->syno_set_crtime(dentry, time);
+	} else {
+		inode->i_create_time = timespec_trunc(*time, inode->i_sb->s_time_gran);
+		inode->i_ctime = CURRENT_TIME;
+		mark_inode_dirty(inode);
+	}
+
+	mutex_unlock(&inode->i_mutex);
+	return error;
+}
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+static inline int syno_op_locker_mode_get(struct inode *inode, enum locker_mode *mode)
+{
+	if (!inode->i_op->syno_locker_mode_get)
+		return -EOPNOTSUPP;
+
+	return inode->i_op->syno_locker_mode_get(inode, mode);
+}
+
+static inline int syno_op_locker_state_get(struct inode *inode, enum locker_state *state)
+{
+	if (!inode->i_op->syno_locker_state_get)
+		return -EOPNOTSUPP;
+
+	return inode->i_op->syno_locker_state_get(inode, state);
+}
+
+static inline int syno_op_locker_state_set(struct inode *inode, enum locker_state state)
+{
+	if (!inode->i_op->syno_locker_state_set)
+		return -EOPNOTSUPP;
+
+	return inode->i_op->syno_locker_state_set(inode, state);
+}
+
+static inline int syno_op_locker_period_end_set(struct inode *inode, struct timespec64 *time)
+{
+	if (!inode->i_op->syno_locker_period_end_set)
+		return -EOPNOTSUPP;
+
+	return inode->i_op->syno_locker_period_end_set(inode, time);
+}
+
+#ifndef SZ_64K
+#define SZ_64K 0x00010000
+#endif
+#define LOCKER_CHUNK_SIZE               SZ_64K
+#define LOCKER_DEFAULT_WAITTIME         TIME64_MAX
+#define LOCKER_DEFAULT_DURATION         TIME64_MAX
+#define LOCKER_DEFAULT_UPDATE_TIME      TIME64_MAX
+#define LOCKER_DEFAULT_PERIOD_BEGIN     TIME64_MAX
+#define LOCKER_DEFAULT_PERIOD_END       TIME64_MIN
+
+#define IS_LOCKER_STATE_APPENDABLE(state) \
+	((state) == LS_APPENDABLE || (state) == LS_EXPIRED_A || (state) == LS_W_APPENDABLE)
+#define IS_LOCKER_STATE_IMMUTABLE(state) \
+	((state) == LS_IMMUTABLE || (state) == LS_EXPIRED_I || (state) == LS_W_IMMUTABLE)
+#define IS_LOCKER_STATE_EXPIRED(state) \
+	((state) == LS_EXPIRED_I || (state) == LS_EXPIRED_A)
+
+static inline bool syno_op_locker_is_open(struct inode *inode)
+{
+	int ret;
+	enum locker_state state;
+
+	ret = syno_op_locker_state_get(inode, &state);
+	if (ret)
+		return true;
+
+	return state == LS_OPEN;
+}
+
+static inline bool syno_op_locker_is_appendable(struct inode *inode)
+{
+	int ret;
+	enum locker_state state;
+
+	ret = syno_op_locker_state_get(inode, &state);
+	if (ret)
+		return false;
+
+	return IS_LOCKER_STATE_APPENDABLE(state);
+}
+
+static inline bool syno_op_locker_is_immutable(struct inode *inode)
+{
+	int ret;
+	enum locker_state state;
+
+	ret = syno_op_locker_state_get(inode, &state);
+	if (ret)
+		return false;
+
+	return IS_LOCKER_STATE_IMMUTABLE(state);
+}
+
+static inline bool syno_op_locker_is_expired(struct inode *inode)
+{
+	int ret;
+	enum locker_state state;
+
+	ret = syno_op_locker_state_get(inode, &state);
+	if (ret)
+		return false;
+
+	return IS_LOCKER_STATE_EXPIRED(state);
+}
+#endif /* MY_DEF_HERE */
+
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+#define SYNO_MOUNT_PATH_LEN 128
+#endif /* MY_ABC_HERE || MY_DEF_HERE */
 
 #endif /* _LINUX_FS_H */

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Kernel-based Virtual Machine driver for Linux
  *
@@ -175,7 +178,11 @@ bool kvm_make_all_cpus_request(struct kvm *kvm, unsigned int req)
 		/* Set ->requests bit before we read ->mode */
 		smp_mb();
 
+#if defined (MY_ABC_HERE) && ! defined (CONFIG_CPUMASK_OFFSTACK)
+		if (cpu != -1 && cpu != me &&
+#else
 		if (cpus != NULL && cpu != -1 && cpu != me &&
+#endif
 		      kvm_vcpu_exiting_guest_mode(vcpu) != OUTSIDE_GUEST_MODE)
 			cpumask_set_cpu(cpu, cpus);
 	}

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_NAMEI_H
 #define _LINUX_NAMEI_H
 
@@ -43,6 +46,16 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
 #define LOOKUP_JUMPED		0x1000
 #define LOOKUP_ROOT		0x2000
 #define LOOKUP_EMPTY		0x4000
+#ifdef MY_ABC_HERE
+/* this namei has done to the last component */
+#define LOOKUP_TO_LASTCOMPONENT 0x8000
+#define LOOKUP_MOUNTED			0x10000
+#define LOOKUP_CASELESS_COMPARE 0x20000
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+extern int syno_user_path_at(int, const char __user *, unsigned, struct path *, char **, int *);
+#endif /* MY_ABC_HERE */
 
 extern int user_path_at_empty(int, const char __user *, unsigned, struct path *, int *empty);
 
@@ -76,6 +89,10 @@ extern void done_path_create(struct path *, struct dentry *);
 extern struct dentry *kern_path_locked(const char *, struct path *);
 extern int kern_path_mountpoint(int, const char *, struct path *, unsigned int);
 
+#ifdef MY_ABC_HERE
+struct nameidata;
+extern struct dentry *lookup_hash(struct nameidata *);
+#endif /* MY_ABC_HERE */
 extern struct dentry *lookup_one_len(const char *, struct dentry *, int);
 
 extern int follow_down_one(struct path *);

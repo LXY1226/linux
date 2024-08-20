@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * AppArmor security module
  *
@@ -236,7 +239,7 @@ static const char *next_name(int xtype, const char *name)
  *
  * Returns: refcounted profile, or NULL on failure (MAYBE NULL)
  */
-static struct aa_profile *x_table_lookup(struct aa_profile *profile, u32 xindex)
+struct aa_profile *x_table_lookup(struct aa_profile *profile, u32 xindex)
 {
 	struct aa_profile *new_profile = NULL;
 	struct aa_namespace *ns = profile->ns;
@@ -765,7 +768,11 @@ int aa_change_profile(const char *ns_name, const char *hname, bool onexec,
 	}
 
 	cred = get_current_cred();
+#ifdef MY_ABC_HERE
+	profile = aa_get_newest_cred_profile(cred);
+#else
 	profile = aa_cred_profile(cred);
+#endif
 
 	/*
 	 * Fail explicitly requested domain transitions if no_new_privs
@@ -846,6 +853,9 @@ audit:
 
 	aa_put_namespace(ns);
 	aa_put_profile(target);
+#ifdef MY_ABC_HERE
+	aa_put_profile(profile);
+#endif
 	put_cred(cred);
 
 	return error;

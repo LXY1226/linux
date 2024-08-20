@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * DaVinci MDIO Module driver
  *
@@ -393,10 +396,18 @@ static int davinci_mdio_probe(struct platform_device *pdev)
 
 	/* scan and dump the bus */
 	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
+#if defined(MY_ABC_HERE)
+		phy = mdiobus_get_phy(data->bus, addr);
+#else /* MY_ABC_HERE */
 		phy = data->bus->phy_map[addr];
+#endif /* MY_ABC_HERE */
 		if (phy) {
 			dev_info(dev, "phy[%d]: device %s, driver %s\n",
+#if defined(MY_ABC_HERE)
+				 phy->mdio.addr, phydev_name(phy),
+#else /* MY_ABC_HERE */
 				 phy->addr, dev_name(&phy->dev),
+#endif /* MY_ABC_HERE */
 				 phy->drv ? phy->drv->name : "unknown");
 		}
 	}

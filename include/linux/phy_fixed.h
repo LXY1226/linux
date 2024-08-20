@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef __PHY_FIXED_H
 #define __PHY_FIXED_H
 
@@ -19,7 +22,11 @@ extern struct phy_device *fixed_phy_register(unsigned int irq,
 					     struct fixed_phy_status *status,
 					     int link_gpio,
 					     struct device_node *np);
+#if defined(MY_ABC_HERE)
+extern void fixed_phy_unregister(struct phy_device *phydev);
+#else /* MY_ABC_HERE */
 extern void fixed_phy_del(int phy_addr);
+#endif /* MY_ABC_HERE */
 extern int fixed_phy_set_link_update(struct phy_device *phydev,
 			int (*link_update)(struct net_device *,
 					   struct fixed_phy_status *));
@@ -40,10 +47,16 @@ static inline struct phy_device *fixed_phy_register(unsigned int irq,
 {
 	return ERR_PTR(-ENODEV);
 }
+#if defined(MY_ABC_HERE)
+static inline void fixed_phy_unregister(struct phy_device *phydev)
+{
+}
+#else /* MY_ABC_HERE */
 static inline int fixed_phy_del(int phy_addr)
 {
 	return -ENODEV;
 }
+#endif /* MY_ABC_HERE */
 static inline int fixed_phy_set_link_update(struct phy_device *phydev,
 			int (*link_update)(struct net_device *,
 					   struct fixed_phy_status *))

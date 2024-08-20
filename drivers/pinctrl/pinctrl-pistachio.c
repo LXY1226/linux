@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Pistachio SoC pinctrl driver
  *
@@ -1390,7 +1393,11 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 		bank->pctl = pctl;
 		bank->base = pctl->base + GPIO_BANK_BASE(i);
 
+#if defined(MY_ABC_HERE)
+		bank->gpio_chip.parent = pctl->dev;
+#else /* MY_ABC_HERE */
 		bank->gpio_chip.dev = pctl->dev;
+#endif /* MY_ABC_HERE */
 		bank->gpio_chip.of_node = child;
 		ret = gpiochip_add(&bank->gpio_chip);
 		if (ret < 0) {

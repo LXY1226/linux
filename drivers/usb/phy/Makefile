@@ -22,8 +22,25 @@ obj-$(CONFIG_USB_ISP1301)		+= phy-isp1301.o
 obj-$(CONFIG_USB_MSM_OTG)		+= phy-msm-usb.o
 obj-$(CONFIG_USB_QCOM_8X16_PHY)	+= phy-qcom-8x16-usb.o
 obj-$(CONFIG_USB_MV_OTG)		+= phy-mv-usb.o
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_16_12), y)
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_17_06_01), y)
+obj-$(CONFIG_USB_A3700_PHY)		+= phy-a3700-usb.o
+else # CONFIG_SYNO_LSP_ARMADA_17_06_01
+obj-$(CONFIG_USB_A3700_OTG)		+= phy-a3700-otg.o
+endif # CONFIG_SYNO_LSP_ARMADA_17_06_01
+endif
 obj-$(CONFIG_USB_MXS_PHY)		+= phy-mxs-usb.o
 obj-$(CONFIG_USB_RCAR_PHY)		+= phy-rcar-usb.o
 obj-$(CONFIG_USB_ULPI)			+= phy-ulpi.o
 obj-$(CONFIG_USB_ULPI_VIEWPORT)		+= phy-ulpi-viewport.o
 obj-$(CONFIG_KEYSTONE_USB_PHY)		+= phy-keystone.o
+ifeq ($(CONFIG_SYNO_LSP_RTD129X), y)
+obj-$(CONFIG_RTK_USB_RLE0599_PHY)	+= phy-rtk-rle0599.o
+obj-$(CONFIG_RTK_USB2PHY)		+= phy-rtk-usb2.o
+obj-$(CONFIG_RTK_USB3PHY)		+= phy-rtk-usb3.o
+endif # CONFIG_SYNO_LSP_RTD129X
+ifeq ($(CONFIG_SYNO_LSP_RTD1619), y)
+obj-$(CONFIG_RTK_USB_RLE0599_PHY)	+= phy-rtk-rle0599_1619.o
+obj-$(CONFIG_RTK_USB2PHY)		+= phy-rtk-usb2_1619.o
+obj-$(CONFIG_RTK_USB3PHY)		+= phy-rtk-usb3_1619.o
+endif # CONFIG_SYNO_LSP_RTD1619

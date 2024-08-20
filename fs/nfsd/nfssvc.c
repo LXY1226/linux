@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Central processing for nfsd.
  *
@@ -22,6 +25,10 @@
 #include "cache.h"
 #include "vfs.h"
 #include "netns.h"
+
+#ifdef MY_ABC_HERE
+#include "syno_io_stat.h"
+#endif /* MY_ABC_HERE */
 
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 
@@ -298,6 +305,9 @@ static void nfsd_shutdown_net(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
+#ifdef MY_ABC_HERE
+	syno_nfsd_clients_destroy_all();
+#endif /* MY_ABC_HERE */
 	nfs4_state_shutdown_net(net);
 	if (nn->lockd_up) {
 		lockd_down(net);
@@ -370,6 +380,9 @@ static void set_max_drc(void)
 
 static int nfsd_get_default_max_blksize(void)
 {
+#if defined(CONFIG_SYNO_NFSD_WRITE_SIZE_MIN)
+	return CONFIG_SYNO_NFSD_WRITE_SIZE_MIN;
+#else /* CONFIG_SYNO_NFSD_WRITE_SIZE_MIN */
 	struct sysinfo i;
 	unsigned long long target;
 	unsigned long ret;
@@ -387,6 +400,7 @@ static int nfsd_get_default_max_blksize(void)
 	while (ret > target && ret >= 8*1024*2)
 		ret /= 2;
 	return ret;
+#endif /*CONFIG_SYNO_NFSD_WRITE_SIZE_MIN*/
 }
 
 static struct svc_serv_ops nfsd_thread_sv_ops = {

@@ -776,7 +776,7 @@ static ssize_t cache_read(struct file *filp, char __user *buf, size_t count,
 	if (count == 0)
 		return 0;
 
-	mutex_lock(&inode->i_mutex); /* protect against multiple concurrent
+	inode_lock(inode); /* protect against multiple concurrent
 			      * readers on this file */
  again:
 	spin_lock(&queue_lock);
@@ -789,7 +789,7 @@ static ssize_t cache_read(struct file *filp, char __user *buf, size_t count,
 	}
 	if (rp->q.list.next == &cd->queue) {
 		spin_unlock(&queue_lock);
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 		WARN_ON_ONCE(rp->offset);
 		return 0;
 	}
@@ -843,7 +843,7 @@ static ssize_t cache_read(struct file *filp, char __user *buf, size_t count,
 	}
 	if (err == -EAGAIN)
 		goto again;
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return err ? err :  count;
 }
 
@@ -914,9 +914,9 @@ static ssize_t cache_write(struct file *filp, const char __user *buf,
 	if (!cd->cache_parse)
 		goto out;
 
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 	ret = cache_downcall(mapping, buf, count, cd);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 out:
 	return ret;
 }
@@ -1362,7 +1362,7 @@ static int c_show(struct seq_file *m, void *p)
 	ifdebug(CACHE)
 		seq_printf(m, "# expiry=%ld refcnt=%d flags=%lx\n",
 			   convert_to_wallclock(cp->expiry_time),
-			   atomic_read(&cp->ref.refcount), cp->flags);
+			   kref_read(&cp->ref), cp->flags);
 	cache_get(cp);
 	if (cache_check(cd, cp, NULL))
 		/* cache_check does a cache_put on failure */

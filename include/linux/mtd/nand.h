@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/include/linux/mtd/nand.h
  *
@@ -283,7 +286,11 @@ struct nand_onfi_params {
 	u8 input_pin_capacitance_max;
 	u8 driver_strength_support;
 	__le16 t_int_r;
+#if defined(MY_ABC_HERE)
+	__le16 t_adl;
+#else /* MY_ABC_HERE */
 	__le16 t_ald;
+#endif /* MY_ABC_HERE */
 	u8 reserved4[8];
 
 	/* vendor */
@@ -407,7 +414,11 @@ struct nand_jedec_params {
 	__le16 input_pin_capacitance_typ;
 	__le16 clk_pin_capacitance_typ;
 	u8 driver_strength_support;
+#if defined(MY_ABC_HERE)
+	__le16 t_adl;
+#else /* MY_ABC_HERE */
 	__le16 t_ald;
+#endif /* MY_ABC_HERE */
 	u8 reserved4[36];
 
 	/* ECC and endurance block */
@@ -640,6 +651,12 @@ struct nand_buffers {
  */
 
 struct nand_chip {
+#if defined(MY_ABC_HERE)
+/*
+ * @mtd:		MTD device registered to the MTD framework
+ */
+	struct mtd_info mtd;
+#endif /* MY_ABC_HERE */
 	void __iomem *IO_ADDR_R;
 	void __iomem *IO_ADDR_W;
 
@@ -719,6 +736,29 @@ struct nand_chip {
 	void *priv;
 };
 
+#if defined(MY_ABC_HERE)
+static inline void nand_set_flash_node(struct nand_chip *chip,
+				       struct device_node *np)
+{
+	chip->flash_node = np;
+}
+
+static inline struct device_node *nand_get_flash_node(struct nand_chip *chip)
+{
+	return chip->flash_node;
+}
+
+static inline struct nand_chip *mtd_to_nand(struct mtd_info *mtd)
+{
+	return mtd->priv;
+}
+
+static inline struct mtd_info *nand_to_mtd(struct nand_chip *chip)
+{
+	return &chip->mtd;
+}
+#endif /* MY_ABC_HERE */
+
 /*
  * NAND Flash Manufacturer ID Codes
  */
@@ -736,6 +776,9 @@ struct nand_chip {
 #define NAND_MFR_SANDISK	0x45
 #define NAND_MFR_INTEL		0x89
 #define NAND_MFR_ATO		0x9b
+#if defined(MY_ABC_HERE)
+#define NAND_MFR_GIGA		0xc8
+#endif /* MY_ABC_HERE */
 
 /* The maximum expected count of bytes in the NAND ID sequence */
 #define NAND_MAX_ID_LEN 8

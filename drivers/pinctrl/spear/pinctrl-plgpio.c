@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * SPEAr platform PLGPIO driver
  *
@@ -561,7 +564,11 @@ static int plgpio_probe(struct platform_device *pdev)
 	plgpio->chip.get = plgpio_get_value;
 	plgpio->chip.set = plgpio_set_value;
 	plgpio->chip.label = dev_name(&pdev->dev);
+#if defined(MY_ABC_HERE)
+	plgpio->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	plgpio->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	plgpio->chip.owner = THIS_MODULE;
 	plgpio->chip.of_node = pdev->dev.of_node;
 

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Atmel PIO2 Port Multiplexer support
  *
@@ -397,7 +400,11 @@ static int __init pio_probe(struct platform_device *pdev)
 	pio->chip.label = pio->name;
 	pio->chip.base = pdev->id * 32;
 	pio->chip.ngpio = 32;
+#if defined(MY_ABC_HERE)
+	pio->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	pio->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 	pio->chip.owner = THIS_MODULE;
 
 	pio->chip.direction_input = direction_input;

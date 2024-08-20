@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * linux/net/sunrpc/svc.c
  *
@@ -30,6 +33,10 @@
 
 #include <trace/events/sunrpc.h>
 
+#ifdef MY_ABC_HERE
+#include <uapi/linux/nfs.h>
+#endif /* MY_ABC_HERE */
+
 #define RPCDBG_FACILITY	RPCDBG_SVCDSP
 
 static void svc_unregister(const struct svc_serv *serv, struct net *net);
@@ -43,7 +50,11 @@ static void svc_unregister(const struct svc_serv *serv, struct net *net);
  * Setup once during sunrpc initialisation.
  */
 struct svc_pool_map svc_pool_map = {
+#ifdef MY_DEF_HERE
+	.mode = SVC_POOL_PERNODE
+#else
 	.mode = SVC_POOL_DEFAULT
+#endif /* MY_DEF_HERE */
 };
 EXPORT_SYMBOL_GPL(svc_pool_map);
 
@@ -959,6 +970,12 @@ int svc_register(const struct svc_serv *serv, struct net *net,
 			if (vers->vs_hidden)
 				continue;
 
+#ifdef MY_ABC_HERE
+			if (NFS_PROGRAM == progp->pg_prog && 4 == i && IPPROTO_UDP == proto) {
+				continue;
+			}
+#endif /*MY_ABC_HERE*/
+
 			error = __svc_register(net, progp->pg_name, progp->pg_prog,
 						i, family, proto, port);
 
@@ -1323,6 +1340,9 @@ svc_process(struct svc_rqst *rqstp)
 	rqstp->rq_res.buflen = PAGE_SIZE;
 	rqstp->rq_res.tail[0].iov_base = NULL;
 	rqstp->rq_res.tail[0].iov_len = 0;
+#ifdef MY_ABC_HERE
+	rqstp->rq_procinfo = NULL;
+#endif
 
 	dir  = svc_getnl(argv);
 	if (dir != 0) {

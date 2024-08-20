@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Information interface for ALSA driver
  *  Copyright (c) by Jaroslav Kysela <perex@perex.cz>
@@ -32,6 +35,13 @@
 #include <linux/proc_fs.h>
 #include <linux/mutex.h>
 #include <stdarg.h>
+
+#if defined(MY_ABC_HERE)
+int gSynoAudioVolume = 50;
+EXPORT_SYMBOL(gSynoAudioVolume);
+static int snd_info_syno_audio_volume_init(void);
+static int snd_info_syno_audio_volume_done(void);
+#endif /* MY_ABC_HERE */
 
 int snd_info_check_reserved_words(const char *str)
 {
@@ -485,6 +495,9 @@ int __init snd_info_init(void)
 		goto error;
 #endif
 	if (snd_info_version_init() < 0 ||
+#if defined(MY_ABC_HERE)
+	    snd_info_syno_audio_volume_init() < 0 ||
+#endif /*MY_ABC_HERE*/
 	    snd_minor_info_init() < 0 ||
 	    snd_minor_info_oss_init() < 0 ||
 	    snd_card_info_init() < 0 ||
@@ -499,6 +512,9 @@ int __init snd_info_init(void)
 
 int __exit snd_info_done(void)
 {
+#if defined(MY_ABC_HERE)
+	snd_info_syno_audio_volume_done();
+#endif /*MY_ABC_HERE*/
 	snd_info_free_entry(snd_proc_root);
 	return 0;
 }
@@ -892,3 +908,37 @@ static int __init snd_info_version_init(void)
 	entry->c.text.read = snd_info_version_read;
 	return snd_info_register(entry); /* freed in error path */
 }
+
+#if defined(MY_ABC_HERE)
+static struct snd_info_entry *snd_info_syno_audio_volume_entry;
+
+static void snd_info_syno_audio_volume_read(struct snd_info_entry *entry,
+		struct snd_info_buffer *buffer)
+{
+	snd_iprintf(buffer, "%d\n", gSynoAudioVolume);
+}
+
+static int __init snd_info_syno_audio_volume_init(void)
+{
+	struct snd_info_entry *entry;
+
+	entry = snd_info_create_module_entry(THIS_MODULE,
+			"syno_audio_volume", NULL);
+	if (entry == NULL) {
+		   return -ENOMEM;
+	}
+	entry->c.text.read = snd_info_syno_audio_volume_read;
+	if (snd_info_register(entry) < 0) {
+		   snd_info_free_entry(entry);
+		   return -ENOMEM;
+	}
+	snd_info_syno_audio_volume_entry = entry;
+	return 0;
+}
+
+static int __exit snd_info_syno_audio_volume_done(void)
+{
+	snd_info_free_entry(snd_info_syno_audio_volume_entry);
+	return 0;
+}
+#endif /*MY_ABC_HERE*/

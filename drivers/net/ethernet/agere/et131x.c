@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* Agere Systems Inc.
  * 10/100/1000 Base-T Ethernet Driver for the ET1301 and ET131x series MACs
  *
@@ -1235,7 +1238,11 @@ static int et131x_mii_read(struct et131x_adapter *adapter, u8 reg, u16 *value)
 	if (!phydev)
 		return -EIO;
 
+#if defined(MY_ABC_HERE)
+	return et131x_phy_mii_read(adapter, phydev->mdio.addr, reg, value);
+#else /* MY_ABC_HERE */
 	return et131x_phy_mii_read(adapter, phydev->addr, reg, value);
+#endif /* MY_ABC_HERE */
 }
 
 static int et131x_mii_write(struct et131x_adapter *adapter, u8 addr, u8 reg,
@@ -1462,7 +1469,11 @@ static void et1310_phy_power_switch(struct et131x_adapter *adapter, bool down)
 	data &= ~BMCR_PDOWN;
 	if (down)
 		data |= BMCR_PDOWN;
+#if defined(MY_ABC_HERE)
+	et131x_mii_write(adapter, phydev->mdio.addr, MII_BMCR, data);
+#else /* MY_ABC_HERE */
 	et131x_mii_write(adapter, phydev->addr, MII_BMCR, data);
+#endif /* MY_ABC_HERE */
 }
 
 /* et131x_xcvr_init - Init the phy if we are setting it into force mode */
@@ -1490,7 +1501,11 @@ static void et131x_xcvr_init(struct et131x_adapter *adapter)
 		else
 			lcr2 |= (LED_VAL_LINKON << LED_TXRX_SHIFT);
 
+#if defined(MY_ABC_HERE)
+		et131x_mii_write(adapter, phydev->mdio.addr, PHY_LED_2, lcr2);
+#else /* MY_ABC_HERE */
 		et131x_mii_write(adapter, phydev->addr, PHY_LED_2, lcr2);
+#endif /* MY_ABC_HERE */
 	}
 }
 
@@ -3192,6 +3207,17 @@ static void et131x_adjust_link(struct net_device *netdev)
 
 			et131x_mii_read(adapter, PHY_MPHY_CONTROL_REG,
 					&register18);
+#if defined(MY_ABC_HERE)
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_MPHY_CONTROL_REG,
+					 register18 | 0x4);
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_INDEX_REG, register18 | 0x8402);
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_DATA_REG, register18 | 511);
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_MPHY_CONTROL_REG, register18);
+#else /* MY_ABC_HERE */
 			et131x_mii_write(adapter, phydev->addr,
 					 PHY_MPHY_CONTROL_REG,
 					 register18 | 0x4);
@@ -3201,6 +3227,7 @@ static void et131x_adjust_link(struct net_device *netdev)
 					 register18 | 511);
 			et131x_mii_write(adapter, phydev->addr,
 					 PHY_MPHY_CONTROL_REG, register18);
+#endif /* MY_ABC_HERE */
 		}
 
 		et1310_config_flow_control(adapter);
@@ -3212,8 +3239,13 @@ static void et131x_adjust_link(struct net_device *netdev)
 			et131x_mii_read(adapter, PHY_CONFIG, &reg);
 			reg &= ~ET_PHY_CONFIG_TX_FIFO_DEPTH;
 			reg |= ET_PHY_CONFIG_FIFO_DEPTH_32;
+#if defined(MY_ABC_HERE)
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_CONFIG, reg);
+#else /* MY_ABC_HERE */
 			et131x_mii_write(adapter, phydev->addr, PHY_CONFIG,
 					 reg);
+#endif /* MY_ABC_HERE */
 		}
 
 		et131x_set_rx_dma_timer(adapter);
@@ -3226,6 +3258,17 @@ static void et131x_adjust_link(struct net_device *netdev)
 
 			et131x_mii_read(adapter, PHY_MPHY_CONTROL_REG,
 					&register18);
+#if defined(MY_ABC_HERE)
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_MPHY_CONTROL_REG,
+					 register18 | 0x4);
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_INDEX_REG, register18 | 0x8402);
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_DATA_REG, register18 | 511);
+			et131x_mii_write(adapter, phydev->mdio.addr,
+					 PHY_MPHY_CONTROL_REG, register18);
+#else /* MY_ABC_HERE */
 			et131x_mii_write(adapter, phydev->addr,
 					 PHY_MPHY_CONTROL_REG,
 					 register18 | 0x4);
@@ -3235,6 +3278,7 @@ static void et131x_adjust_link(struct net_device *netdev)
 					 PHY_DATA_REG, register18 | 511);
 			et131x_mii_write(adapter, phydev->addr,
 					 PHY_MPHY_CONTROL_REG, register18);
+#endif /* MY_ABC_HERE */
 		}
 
 		et131x_free_busy_send_packets(adapter);
@@ -3265,8 +3309,13 @@ static int et131x_mii_probe(struct net_device *netdev)
 		return -ENODEV;
 	}
 
+#if defined(MY_ABC_HERE)
+	phydev = phy_connect(netdev, phydev_name(phydev),
+			     &et131x_adjust_link, PHY_INTERFACE_MODE_MII);
+#else /* MY_ABC_HERE */
 	phydev = phy_connect(netdev, dev_name(&phydev->dev),
 			     &et131x_adjust_link, PHY_INTERFACE_MODE_MII);
+#endif /* MY_ABC_HERE */
 
 	if (IS_ERR(phydev)) {
 		dev_err(&adapter->pdev->dev, "Could not attach to PHY\n");
@@ -3289,9 +3338,13 @@ static int et131x_mii_probe(struct net_device *netdev)
 	phydev->autoneg = AUTONEG_ENABLE;
 	adapter->phydev = phydev;
 
+#if defined(MY_ABC_HERE)
+	phy_attached_info(phydev);
+#else /* MY_ABC_HERE */
 	dev_info(&adapter->pdev->dev,
 		 "attached PHY driver [%s] (mii_bus:phy_addr=%s)\n",
 		 phydev->drv->name, dev_name(&phydev->dev));
+#endif /* MY_ABC_HERE */
 
 	return 0;
 }
@@ -3327,7 +3380,11 @@ static void et131x_pci_remove(struct pci_dev *pdev)
 	netif_napi_del(&adapter->napi);
 	phy_disconnect(adapter->phydev);
 	mdiobus_unregister(adapter->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(adapter->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 	mdiobus_free(adapter->mii_bus);
 
 	et131x_adapter_memory_free(adapter);
@@ -3946,7 +4003,11 @@ static int et131x_pci_setup(struct pci_dev *pdev,
 	struct net_device *netdev;
 	struct et131x_adapter *adapter;
 	int rc;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int ii;
+#endif /* MY_ABC_HERE */
 
 	rc = pci_enable_device(pdev);
 	if (rc < 0) {
@@ -4036,6 +4097,9 @@ static int et131x_pci_setup(struct pci_dev *pdev,
 	adapter->mii_bus->priv = netdev;
 	adapter->mii_bus->read = et131x_mdio_read;
 	adapter->mii_bus->write = et131x_mdio_write;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	adapter->mii_bus->irq = kmalloc_array(PHY_MAX_ADDR, sizeof(int),
 					      GFP_KERNEL);
 	if (!adapter->mii_bus->irq)
@@ -4043,11 +4107,16 @@ static int et131x_pci_setup(struct pci_dev *pdev,
 
 	for (ii = 0; ii < PHY_MAX_ADDR; ii++)
 		adapter->mii_bus->irq[ii] = PHY_POLL;
+#endif /* MY_ABC_HERE */
 
 	rc = mdiobus_register(adapter->mii_bus);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "failed to register MII bus\n");
+#if defined(MY_ABC_HERE)
+		goto err_mdio_free;
+#else /* MY_ABC_HERE */
 		goto err_mdio_free_irq;
+#endif /* MY_ABC_HERE */
 	}
 
 	rc = et131x_mii_probe(netdev);
@@ -4087,8 +4156,12 @@ err_phy_disconnect:
 	phy_disconnect(adapter->phydev);
 err_mdio_unregister:
 	mdiobus_unregister(adapter->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 err_mdio_free_irq:
 	kfree(adapter->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 err_mdio_free:
 	mdiobus_free(adapter->mii_bus);
 err_mem_free:

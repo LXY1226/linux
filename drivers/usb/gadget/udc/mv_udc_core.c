@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2011 Marvell International Ltd. All rights reserved.
  * Author: Chao Xie <chao.xie@marvell.com>
@@ -33,8 +36,15 @@
 #include <linux/irq.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#if defined(MY_ABC_HERE)
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+#endif /* MY_ABC_HERE */
 #include <linux/platform_data/mv_usb.h>
 #include <asm/unaligned.h>
+#if defined(MY_ABC_HERE)
+#include <linux/gpio.h>
+#endif /* MY_ABC_HERE */
 
 #include "mv_udc.h"
 
@@ -69,7 +79,11 @@ static const struct usb_endpoint_descriptor mv_ep0_desc = {
 	.bDescriptorType =	USB_DT_ENDPOINT,
 	.bEndpointAddress =	0,
 	.bmAttributes =		USB_ENDPOINT_XFER_CONTROL,
+#if defined(MY_ABC_HERE)
+	.wMaxPacketSize =	cpu_to_le16(EP0_MAX_PKT_SIZE),
+#else /* MY_ABC_HERE */
 	.wMaxPacketSize =	EP0_MAX_PKT_SIZE,
+#endif /* MY_ABC_HERE */
 };
 
 static void ep0_reset(struct mv_udc *udc)
@@ -87,11 +101,19 @@ static void ep0_reset(struct mv_udc *udc)
 		ep->dqh = &udc->ep_dqh[i];
 
 		/* configure ep0 endpoint capabilities in dQH */
+#if defined(MY_ABC_HERE)
+		ep->dqh->max_packet_length = cpu_to_le32(
+			(EP0_MAX_PKT_SIZE << EP_QUEUE_HEAD_MAX_PKT_LEN_POS)
+			| EP_QUEUE_HEAD_IOS);
+
+		ep->dqh->next_dtd_ptr = cpu_to_le32(EP_QUEUE_HEAD_NEXT_TERMINATE);
+#else /* MY_ABC_HERE */
 		ep->dqh->max_packet_length =
 			(EP0_MAX_PKT_SIZE << EP_QUEUE_HEAD_MAX_PKT_LEN_POS)
 			| EP_QUEUE_HEAD_IOS;
 
 		ep->dqh->next_dtd_ptr = EP_QUEUE_HEAD_NEXT_TERMINATE;
+#endif /* MY_ABC_HERE */
 
 		epctrlx = readl(&udc->op_regs->epctrlx[0]);
 		if (i) {	/* TX */
@@ -143,17 +165,31 @@ static int process_ep_req(struct mv_udc *udc, int index,
 	actual = curr_req->req.length;
 
 	for (i = 0; i < curr_req->dtd_count; i++) {
+#if defined(MY_ABC_HERE)
+		if (le32_to_cpu(curr_dtd->size_ioc_sts) & DTD_STATUS_ACTIVE) {
+#else /* MY_ABC_HERE */
 		if (curr_dtd->size_ioc_sts & DTD_STATUS_ACTIVE) {
+#endif /* MY_ABC_HERE */
 			dev_dbg(&udc->dev->dev, "%s, dTD not completed\n",
 				udc->eps[index].name);
 			return 1;
 		}
 
+#if defined(MY_ABC_HERE)
+		errors = le32_to_cpu(curr_dtd->size_ioc_sts) & DTD_ERROR_MASK;
+#else /* MY_ABC_HERE */
 		errors = curr_dtd->size_ioc_sts & DTD_ERROR_MASK;
+#endif /* MY_ABC_HERE */
 		if (!errors) {
+#if defined(MY_ABC_HERE)
+			remaining_length =
+				(le32_to_cpu(curr_dtd->size_ioc_sts)	& DTD_PACKET_SIZE)
+					>> DTD_LENGTH_BIT_POS;
+#else /* MY_ABC_HERE */
 			remaining_length =
 				(curr_dtd->size_ioc_sts	& DTD_PACKET_SIZE)
 					>> DTD_LENGTH_BIT_POS;
+#endif /* MY_ABC_HERE */
 			actual -= remaining_length;
 
 			if (remaining_length) {
@@ -172,7 +208,12 @@ static int process_ep_req(struct mv_udc *udc, int index,
 				errors);
 			if (errors & DTD_STATUS_HALTED) {
 				/* Clear the errors and Halt condition */
+#if defined(MY_ABC_HERE)
+				curr_dqh->size_ioc_int_sts =
+					cpu_to_le32(le32_to_cpu(curr_dqh->size_ioc_int_sts) & (~errors));
+#else /* MY_ABC_HERE */
 				curr_dqh->size_ioc_int_sts &= ~errors;
+#endif /* MY_ABC_HERE */
 				retval = -EPIPE;
 			} else if (errors & DTD_STATUS_DATA_BUFF_ERR) {
 				retval = -EPROTO;
@@ -191,8 +232,13 @@ static int process_ep_req(struct mv_udc *udc, int index,
 	else
 		bit_pos = 1 << (16 + curr_req->ep->ep_num);
 
+#if defined(MY_ABC_HERE)
+	while ((curr_dqh->curr_dtd_ptr == cpu_to_le32(curr_dtd->td_dma))) {
+		if (curr_dtd->dtd_next == cpu_to_le32(EP_QUEUE_HEAD_NEXT_TERMINATE)) {
+#else /* MY_ABC_HERE */
 	while ((curr_dqh->curr_dtd_ptr == curr_dtd->td_dma)) {
 		if (curr_dtd->dtd_next == EP_QUEUE_HEAD_NEXT_TERMINATE) {
+#endif /* MY_ABC_HERE */
 			while (readl(&udc->op_regs->epstatus) & bit_pos)
 				udelay(1);
 			break;
@@ -249,6 +295,9 @@ static void done(struct mv_ep *ep, struct mv_req *req, int status)
 
 	spin_unlock(&ep->udc->lock);
 
+#if defined(MY_ABC_HERE)
+	if (req->req.complete)
+#endif /* MY_ABC_HERE */
 	usb_gadget_giveback_request(&ep->ep, &req->req);
 
 	spin_lock(&ep->udc->lock);
@@ -274,7 +323,11 @@ static int queue_dtd(struct mv_ep *ep, struct mv_req *req)
 		struct mv_req *lastreq;
 		lastreq = list_entry(ep->queue.prev, struct mv_req, queue);
 		lastreq->tail->dtd_next =
+#if defined(MY_ABC_HERE)
+			cpu_to_le32(req->head->td_dma & EP_QUEUE_HEAD_NEXT_POINTER_MASK);
+#else /* MY_ABC_HERE */
 			req->head->td_dma & EP_QUEUE_HEAD_NEXT_POINTER_MASK;
+#endif /* MY_ABC_HERE */
 
 		wmb();
 
@@ -322,11 +375,21 @@ static int queue_dtd(struct mv_ep *ep, struct mv_req *req)
 	}
 
 	/* Write dQH next pointer and terminate bit to 0 */
+#if defined(MY_ABC_HERE)
+	dqh->next_dtd_ptr = cpu_to_le32(req->head->td_dma
+				& EP_QUEUE_HEAD_NEXT_POINTER_MASK);
+#else /* MY_ABC_HERE */
 	dqh->next_dtd_ptr = req->head->td_dma
 				& EP_QUEUE_HEAD_NEXT_POINTER_MASK;
+#endif /* MY_ABC_HERE */
 
 	/* clear active and halt bit, in case set from a previous error */
+#if defined(MY_ABC_HERE)
+	dqh->size_ioc_int_sts =
+		cpu_to_le32(le32_to_cpu(dqh->size_ioc_int_sts) & (~(DTD_STATUS_ACTIVE | DTD_STATUS_HALTED)));
+#else /* MY_ABC_HERE */
 	dqh->size_ioc_int_sts &= ~(DTD_STATUS_ACTIVE | DTD_STATUS_HALTED);
+#endif /* MY_ABC_HERE */
 
 	/* Ensure that updates to the QH will occur before priming. */
 	wmb();
@@ -349,7 +412,11 @@ static struct mv_dtd *build_dtd(struct mv_req *req, unsigned *length,
 	/* how big will this transfer be? */
 	if (usb_endpoint_xfer_isoc(req->ep->ep.desc)) {
 		dqh = req->ep->dqh;
+#if defined(MY_ABC_HERE)
+		mult = (le32_to_cpu(dqh->max_packet_length) >> EP_QUEUE_HEAD_MULT_POS)
+#else /* MY_ABC_HERE */
 		mult = (dqh->max_packet_length >> EP_QUEUE_HEAD_MULT_POS)
+#endif /* MY_ABC_HERE */
 				& 0x3;
 		*length = min(req->req.length - req->req.actual,
 				(unsigned)(mult * req->ep->ep.maxpacket));
@@ -399,7 +466,11 @@ static struct mv_dtd *build_dtd(struct mv_req *req, unsigned *length,
 
 	temp |= mult << 10;
 
+#if defined(MY_ABC_HERE)
+	dtd->size_ioc_sts = cpu_to_le32(temp);
+#else /* MY_ABC_HERE */
 	dtd->size_ioc_sts = temp;
+#endif /* MY_ABC_HERE */
 
 	mb();
 
@@ -426,7 +497,11 @@ static int req_to_dtd(struct mv_req *req)
 			is_first = 0;
 			req->head = dtd;
 		} else {
+#if defined(MY_ABC_HERE)
+			last_dtd->dtd_next = cpu_to_le32(dma);
+#else /* MY_ABC_HERE */
 			last_dtd->dtd_next = dma;
+#endif /* MY_ABC_HERE */
 			last_dtd->next_dtd_virt = dtd;
 		}
 		last_dtd = dtd;
@@ -434,7 +509,11 @@ static int req_to_dtd(struct mv_req *req)
 	} while (!is_last);
 
 	/* set terminate bit to 1 for the last dTD */
+#if defined(MY_ABC_HERE)
+	dtd->dtd_next = cpu_to_le32(DTD_NEXT_TERMINATE);
+#else /* MY_ABC_HERE */
 	dtd->dtd_next = DTD_NEXT_TERMINATE;
+#endif /* MY_ABC_HERE */
 
 	req->tail = dtd;
 
@@ -511,12 +590,19 @@ static int mv_ep_enable(struct usb_ep *_ep,
 	spin_lock_irqsave(&udc->lock, flags);
 	/* Get the endpoint queue head address */
 	dqh = ep->dqh;
+#if defined(MY_ABC_HERE)
+	dqh->max_packet_length = cpu_to_le32((max << EP_QUEUE_HEAD_MAX_PKT_LEN_POS)
+		| (ios ? EP_QUEUE_HEAD_IOS : 0));
+	dqh->next_dtd_ptr = cpu_to_le32(1);
+	dqh->size_ioc_int_sts = cpu_to_le32(0);
+#else /* MY_ABC_HERE */
 	dqh->max_packet_length = (max << EP_QUEUE_HEAD_MAX_PKT_LEN_POS)
 		| (mult << EP_QUEUE_HEAD_MULT_POS)
 		| (zlt ? EP_QUEUE_HEAD_ZLT_SEL : 0)
 		| (ios ? EP_QUEUE_HEAD_IOS : 0);
 	dqh->next_dtd_ptr = 1;
 	dqh->size_ioc_int_sts = 0;
+#endif /* MY_ABC_HERE */
 
 	ep->ep.maxpacket = max;
 	ep->ep.desc = desc;
@@ -585,7 +671,11 @@ static int  mv_ep_disable(struct usb_ep *_ep)
 	bit_pos = 1 << ((direction == EP_DIR_OUT ? 0 : 16) + ep->ep_num);
 
 	/* Reset the max packet length and the interrupt on Setup */
+#if defined(MY_ABC_HERE)
+	dqh->max_packet_length = cpu_to_le32(0);
+#else /* MY_ABC_HERE */
 	dqh->max_packet_length = 0;
+#endif /* MY_ABC_HERE */
 
 	/* Disable the endpoint for Rx or Tx and reset the endpoint type */
 	epctrlx = readl(&udc->op_regs->epctrlx[ep->ep_num]);
@@ -765,11 +855,21 @@ static void mv_prime_ep(struct mv_ep *ep, struct mv_req *req)
 	u32 bit_pos;
 
 	/* Write dQH next pointer and terminate bit to 0 */
+#if defined(MY_ABC_HERE)
+	dqh->next_dtd_ptr = cpu_to_le32(req->head->td_dma
+		& EP_QUEUE_HEAD_NEXT_POINTER_MASK);
+#else /* MY_ABC_HERE */
 	dqh->next_dtd_ptr = req->head->td_dma
 		& EP_QUEUE_HEAD_NEXT_POINTER_MASK;
+#endif /* MY_ABC_HERE */
 
 	/* clear active and halt bit, in case set from a previous error */
+#if defined(MY_ABC_HERE)
+	dqh->size_ioc_int_sts =
+		cpu_to_le32(le32_to_cpu(dqh->size_ioc_int_sts) & (~(DTD_STATUS_ACTIVE | DTD_STATUS_HALTED)));
+#else /* MY_ABC_HERE */
 	dqh->size_ioc_int_sts &= ~(DTD_STATUS_ACTIVE | DTD_STATUS_HALTED);
+#endif /* MY_ABC_HERE */
 
 	/* Ensure that updates to the QH will occure before priming. */
 	wmb();
@@ -833,8 +933,13 @@ static int mv_ep_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 			struct mv_dqh *qh;
 
 			qh = ep->dqh;
+#if defined(MY_ABC_HERE)
+			qh->next_dtd_ptr = cpu_to_le32(1);
+			qh->size_ioc_int_sts = cpu_to_le32(0);
+#else /* MY_ABC_HERE */
 			qh->next_dtd_ptr = 1;
 			qh->size_ioc_int_sts = 0;
+#endif /* MY_ABC_HERE */
 		}
 
 		/* The request hasn't been processed, patch up the TD chain */
@@ -1078,7 +1183,11 @@ static int mv_udc_enable_internal(struct mv_udc *udc)
 
 	dev_dbg(&udc->dev->dev, "enable udc\n");
 	udc_clock_enable(udc);
+#if defined(MY_ABC_HERE)
+	if (udc->pdata && udc->pdata->phy_init) {
+#else /* MY_ABC_HERE */
 	if (udc->pdata->phy_init) {
+#endif /* MY_ABC_HERE */
 		retval = udc->pdata->phy_init(udc->phy_regs);
 		if (retval) {
 			dev_err(&udc->dev->dev,
@@ -1104,7 +1213,11 @@ static void mv_udc_disable_internal(struct mv_udc *udc)
 {
 	if (udc->active) {
 		dev_dbg(&udc->dev->dev, "disable udc\n");
+#if defined(MY_ABC_HERE)
+		if (udc->pdata && udc->pdata->phy_deinit)
+#else /* MY_ABC_HERE */
 		if (udc->pdata->phy_deinit)
+#endif /* MY_ABC_HERE */
 			udc->pdata->phy_deinit(udc->phy_regs);
 		udc_clock_disable(udc);
 		udc->active = 0;
@@ -1374,6 +1487,11 @@ static int mv_udc_start(struct usb_gadget *gadget,
 	udc->ep0_state = WAIT_FOR_SETUP;
 	udc->ep0_dir = EP_DIR_OUT;
 
+#if defined(MY_ABC_HERE)
+	if (gpio_is_valid(udc->vbus_pin))
+		enable_irq(gpio_to_irq(udc->vbus_pin));
+#endif /* MY_ABC_HERE */
+
 	spin_unlock_irqrestore(&udc->lock, flags);
 
 	if (udc->transceiver) {
@@ -1400,6 +1518,11 @@ static int mv_udc_stop(struct usb_gadget *gadget)
 	unsigned long flags;
 
 	udc = container_of(gadget, struct mv_udc, gadget);
+
+#if defined(MY_ABC_HERE)
+	if (gpio_is_valid(udc->vbus_pin))
+		disable_irq(gpio_to_irq(udc->vbus_pin));
+#endif /* MY_ABC_HERE */
 
 	spin_lock_irqsave(&udc->lock, flags);
 
@@ -1522,7 +1645,11 @@ static void mv_udc_testmode(struct mv_udc *udc, u16 index)
 
 static void ch9setaddress(struct mv_udc *udc, struct usb_ctrlrequest *setup)
 {
+#if defined(MY_ABC_HERE)
+	udc->dev_addr = le16_to_cpu(setup->wValue);
+#else /* MY_ABC_HERE */
 	udc->dev_addr = (u8)setup->wValue;
+#endif /* MY_ABC_HERE */
 
 	/* update usb state */
 	udc->usb_state = USB_STATE_ADDRESS;
@@ -1552,8 +1679,13 @@ static void ch9getstatus(struct mv_udc *udc, u8 ep_num,
 			== USB_RECIP_ENDPOINT) {
 		u8 ep_num, direction;
 
+#if defined(MY_ABC_HERE)
+		ep_num = le16_to_cpu(setup->wIndex) & USB_ENDPOINT_NUMBER_MASK;
+		direction = (le16_to_cpu(setup->wIndex) & USB_ENDPOINT_DIR_MASK)
+#else /* MY_ABC_HERE */
 		ep_num = setup->wIndex & USB_ENDPOINT_NUMBER_MASK;
 		direction = (setup->wIndex & USB_ENDPOINT_DIR_MASK)
+#endif /* MY_ABC_HERE */
 				? EP_DIR_IN : EP_DIR_OUT;
 		status = ep_is_stall(udc, ep_num, direction)
 				<< USB_ENDPOINT_HALT;
@@ -1574,7 +1706,11 @@ static void ch9clearfeature(struct mv_udc *udc, struct usb_ctrlrequest *setup)
 
 	if ((setup->bRequestType & (USB_TYPE_MASK | USB_RECIP_MASK))
 		== ((USB_TYPE_STANDARD | USB_RECIP_DEVICE))) {
+#if defined(MY_ABC_HERE)
+		switch (le16_to_cpu(setup->wValue)) {
+#else /* MY_ABC_HERE */
 		switch (setup->wValue) {
+#endif /* MY_ABC_HERE */
 		case USB_DEVICE_REMOTE_WAKEUP:
 			udc->remote_wakeup = 0;
 			break;
@@ -1583,6 +1719,15 @@ static void ch9clearfeature(struct mv_udc *udc, struct usb_ctrlrequest *setup)
 		}
 	} else if ((setup->bRequestType & (USB_TYPE_MASK | USB_RECIP_MASK))
 		== ((USB_TYPE_STANDARD | USB_RECIP_ENDPOINT))) {
+#if defined(MY_ABC_HERE)
+		switch (le16_to_cpu(setup->wValue)) {
+		case USB_ENDPOINT_HALT:
+			ep_num = le16_to_cpu(setup->wIndex) & USB_ENDPOINT_NUMBER_MASK;
+			direction = (le16_to_cpu(setup->wIndex) & USB_ENDPOINT_DIR_MASK)
+				? EP_DIR_IN : EP_DIR_OUT;
+			if (le16_to_cpu(setup->wValue) != 0 || le16_to_cpu(setup->wLength) != 0
+				|| ep_num > udc->max_eps)
+#else /* MY_ABC_HERE */
 		switch (setup->wValue) {
 		case USB_ENDPOINT_HALT:
 			ep_num = setup->wIndex & USB_ENDPOINT_NUMBER_MASK;
@@ -1590,6 +1735,7 @@ static void ch9clearfeature(struct mv_udc *udc, struct usb_ctrlrequest *setup)
 				? EP_DIR_IN : EP_DIR_OUT;
 			if (setup->wValue != 0 || setup->wLength != 0
 				|| ep_num > udc->max_eps)
+#endif /* MY_ABC_HERE */
 				goto out;
 			ep = &udc->eps[ep_num * 2 + direction];
 			if (ep->wedge == 1)
@@ -1617,27 +1763,50 @@ static void ch9setfeature(struct mv_udc *udc, struct usb_ctrlrequest *setup)
 
 	if ((setup->bRequestType & (USB_TYPE_MASK | USB_RECIP_MASK))
 		== ((USB_TYPE_STANDARD | USB_RECIP_DEVICE))) {
+#if defined(MY_ABC_HERE)
+		switch (le16_to_cpu(setup->wValue)) {
+#else /* MY_ABC_HERE */
 		switch (setup->wValue) {
+#endif /* MY_ABC_HERE */
 		case USB_DEVICE_REMOTE_WAKEUP:
 			udc->remote_wakeup = 1;
 			break;
 		case USB_DEVICE_TEST_MODE:
+#if defined(MY_ABC_HERE)
+			if (le16_to_cpu(setup->wIndex) & 0xFF
+				||  udc->gadget.speed != USB_SPEED_HIGH)
+				ep0_stall(udc);
+#else /* MY_ABC_HERE */
 			if (setup->wIndex & 0xFF
 				||  udc->gadget.speed != USB_SPEED_HIGH)
 				ep0_stall(udc);
+#endif /* MY_ABC_HERE */
 
 			if (udc->usb_state != USB_STATE_CONFIGURED
 				&& udc->usb_state != USB_STATE_ADDRESS
 				&& udc->usb_state != USB_STATE_DEFAULT)
 				ep0_stall(udc);
 
+#if defined(MY_ABC_HERE)
+			mv_udc_testmode(udc, (le16_to_cpu(setup->wIndex) >> 8));
+#else /* MY_ABC_HERE */
 			mv_udc_testmode(udc, (setup->wIndex >> 8));
+#endif /* MY_ABC_HERE */
 			goto out;
 		default:
 			goto out;
 		}
 	} else if ((setup->bRequestType & (USB_TYPE_MASK | USB_RECIP_MASK))
 		== ((USB_TYPE_STANDARD | USB_RECIP_ENDPOINT))) {
+#if defined(MY_ABC_HERE)
+		switch (le16_to_cpu(setup->wValue)) {
+		case USB_ENDPOINT_HALT:
+			ep_num = le16_to_cpu(setup->wIndex) & USB_ENDPOINT_NUMBER_MASK;
+			direction = (le16_to_cpu(setup->wIndex) & USB_ENDPOINT_DIR_MASK)
+				? EP_DIR_IN : EP_DIR_OUT;
+			if (le16_to_cpu(setup->wValue) != 0 || le16_to_cpu(setup->wLength) != 0
+				|| ep_num > udc->max_eps)
+#else /* MY_ABC_HERE */
 		switch (setup->wValue) {
 		case USB_ENDPOINT_HALT:
 			ep_num = setup->wIndex & USB_ENDPOINT_NUMBER_MASK;
@@ -1645,6 +1814,7 @@ static void ch9setfeature(struct mv_udc *udc, struct usb_ctrlrequest *setup)
 				? EP_DIR_IN : EP_DIR_OUT;
 			if (setup->wValue != 0 || setup->wLength != 0
 				|| ep_num > udc->max_eps)
+#endif /* MY_ABC_HERE */
 				goto out;
 			spin_unlock(&udc->lock);
 			ep_set_stall(udc, ep_num, direction, 1);
@@ -1702,7 +1872,11 @@ static void handle_setup_packet(struct mv_udc *udc, u8 ep_num,
 	/* delegate USB standard requests to the gadget driver */
 	if (delegate == true) {
 		/* USB requests handled by gadget */
+#if defined(MY_ABC_HERE)
+		if (le16_to_cpu(setup->wLength)) {
+#else /* MY_ABC_HERE */
 		if (setup->wLength) {
+#endif /* MY_ABC_HERE */
 			/* DATA phase from gadget, STATUS phase from udc */
 			udc->ep0_dir = (setup->bRequestType & USB_DIR_IN)
 					?  EP_DIR_IN : EP_DIR_OUT;
@@ -2004,6 +2178,34 @@ static void irq_process_error(struct mv_udc *udc)
 	udc->errors++;
 }
 
+#if defined(MY_ABC_HERE)
+static ATOMIC_NOTIFIER_HEAD(mv_udc_status_list);
+
+int mv_udc_register_status_notify(struct notifier_block *nb)
+{
+	int ret = 0;
+
+	ret = atomic_notifier_chain_register(&mv_udc_status_list, nb);
+	if (ret)
+		return ret;
+
+	return 0;
+
+}
+EXPORT_SYMBOL(mv_udc_register_status_notify);
+
+int mv_udc_unregister_status_notify(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&mv_udc_status_list, nb);
+}
+EXPORT_SYMBOL(mv_udc_unregister_status_notify);
+
+static void status_change(struct mv_udc *udc, int event)
+{
+	atomic_notifier_call_chain(&mv_udc_status_list, event, NULL);
+}
+#endif /* MY_ABC_HERE */
+
 static irqreturn_t mv_udc_irq(int irq, void *dev)
 {
 	struct mv_udc *udc = (struct mv_udc *)dev;
@@ -2030,8 +2232,15 @@ static irqreturn_t mv_udc_irq(int irq, void *dev)
 	if (status & USBSTS_ERR)
 		irq_process_error(udc);
 
+#if defined(MY_ABC_HERE)
+	if (status & USBSTS_RESET) {
+		irq_process_reset(udc);
+		status_change(udc, 1);
+	}
+#else /* MY_ABC_HERE */
 	if (status & USBSTS_RESET)
 		irq_process_reset(udc);
+#endif /* MY_ABC_HERE */
 
 	if (status & USBSTS_PORT_CHANGE)
 		irq_process_port_change(udc);
@@ -2039,8 +2248,15 @@ static irqreturn_t mv_udc_irq(int irq, void *dev)
 	if (status & USBSTS_INT)
 		irq_process_tr_complete(udc);
 
+#if defined(MY_ABC_HERE)
+	if (status & USBSTS_SUSPEND) {
+		irq_process_suspend(udc);
+		status_change(udc, 1);
+	}
+#else /* MY_ABC_HERE */
 	if (status & USBSTS_SUSPEND)
 		irq_process_suspend(udc);
+#endif /* MY_ABC_HERE */
 
 	spin_unlock(&udc->lock);
 
@@ -2064,10 +2280,22 @@ static void mv_udc_vbus_work(struct work_struct *work)
 	unsigned int vbus;
 
 	udc = container_of(work, struct mv_udc, vbus_work);
+#if defined(MY_ABC_HERE)
+	if (udc->pdata && udc->pdata->vbus)
+		vbus = udc->pdata->vbus->poll();
+	else if (gpio_is_valid(udc->vbus_pin))
+		vbus = gpio_get_value(udc->vbus_pin);
+	else
+#else /* MY_ABC_HERE */
 	if (!udc->pdata->vbus)
+#endif /* MY_ABC_HERE */
 		return;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	vbus = udc->pdata->vbus->poll();
+#endif /* MY_ABC_HERE */
 	dev_info(&udc->dev->dev, "vbus is %d\n", vbus);
 
 	if (vbus == VBUS_HIGH)
@@ -2111,6 +2339,14 @@ static int mv_udc_remove(struct platform_device *pdev)
 	/* free dev, wait for the release() finished */
 	wait_for_completion(udc->done);
 
+#if defined(MY_ABC_HERE)
+	/* Power off PHY and exit */
+	if (udc->utmi_phy) {
+		phy_power_off(udc->utmi_phy);
+		phy_exit(udc->utmi_phy);
+	}
+
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 
@@ -2119,6 +2355,14 @@ static int mv_udc_probe(struct platform_device *pdev)
 	struct mv_usb_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct mv_udc *udc;
 	int retval = 0;
+#if defined(MY_ABC_HERE)
+	struct resource *capregs, *phyregs, *irq;
+	size_t size;
+	struct clk *clk;
+#if defined(MY_ABC_HERE)
+	int err;
+#endif /* MY_ABC_HERE */
+#else /* MY_ABC_HERE */
 	struct resource *r;
 	size_t size;
 
@@ -2126,23 +2370,122 @@ static int mv_udc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "missing platform_data\n");
 		return -ENODEV;
 	}
+#endif /* MY_ABC_HERE */
 
 	udc = devm_kzalloc(&pdev->dev, sizeof(*udc), GFP_KERNEL);
+#if defined(MY_ABC_HERE)
+	if (!udc)
+#else /* MY_ABC_HERE */
 	if (udc == NULL)
+#endif /* MY_ABC_HERE */
 		return -ENOMEM;
 
+#if defined(MY_ABC_HERE)
+	/* udc only have one sysclk. */
+	clk = devm_clk_get(&pdev->dev, NULL);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	if (pdev->dev.of_node) {
+		udc->pdata = NULL;
+
+		capregs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+		/* no phyregs for mvebu platform */
+		phyregs = NULL;
+
+		/* VBUS pin via GPIO */
+		udc->vbus_pin = of_get_named_gpio(pdev->dev.of_node, "vbus-gpio", 0);
+		if (udc->vbus_pin < 0)
+			udc->vbus_pin = -ENODEV;
+
+#if defined(MY_ABC_HERE)
+		/* Get comphy and init if there is */
+		udc->utmi_phy = devm_of_phy_get(&pdev->dev, pdev->dev.of_node, "usb");
+		if (!IS_ERR(udc->utmi_phy)) {
+			err = phy_init(udc->utmi_phy);
+			if (err)
+				goto disable_phys;
+
+			err = phy_power_on(udc->utmi_phy);
+			if (err) {
+				phy_exit(udc->utmi_phy);
+				goto disable_phys;
+			}
+		}
+
+#endif /* MY_ABC_HERE */
+	} else if (pdata) {
+		udc->pdata = pdev->dev.platform_data;
+		if (pdata->mode == MV_USB_MODE_OTG) {
+			udc->transceiver = devm_usb_get_phy(&pdev->dev,
+							    USB_PHY_TYPE_USB2);
+			if (IS_ERR(udc->transceiver)) {
+				retval = PTR_ERR(udc->transceiver);
+				if (retval == -ENXIO)
+					return retval;
+
+				udc->transceiver = NULL;
+				return -EPROBE_DEFER;
+			}
+		}
+#else /* MY_ABC_HERE */
 	udc->done = &release_done;
 	udc->pdata = dev_get_platdata(&pdev->dev);
 	spin_lock_init(&udc->lock);
 
 	udc->dev = pdev;
+#endif /* MY_ABC_HERE */
 
+
+#if defined(MY_ABC_HERE)
+		capregs = platform_get_resource_byname(pdev, IORESOURCE_MEM, "capregs");
+		phyregs = platform_get_resource_byname(pdev, IORESOURCE_MEM, "phyregs");
+		if (!phyregs) {
+			dev_err(&pdev->dev, "no phy I/O memory resource defined\n");
+			return -ENODEV;
+		}
+#else /* MY_ABC_HERE */
 	if (pdata->mode == MV_USB_MODE_OTG) {
 		udc->transceiver = devm_usb_get_phy(&pdev->dev,
 					USB_PHY_TYPE_USB2);
 		if (IS_ERR(udc->transceiver)) {
 			retval = PTR_ERR(udc->transceiver);
+#endif /* MY_ABC_HERE */
 
+#if defined(MY_ABC_HERE)
+		/* platform data registration doesn't use the VBUS GPIO subsystem */
+		udc->vbus_pin = -ENODEV;
+	} else {
+		dev_err(&pdev->dev, "missing platform_data or of_node\n");
+		return -ENODEV;
+	}
+
+	/* set udc struct*/
+	udc->done = &release_done;
+	udc->clk = clk;
+	udc->dev = pdev;
+	spin_lock_init(&udc->lock);
+
+	if (!capregs) {
+		dev_err(&pdev->dev, "no capregs I/O memory resource defined\n");
+		return -ENXIO;
+	}
+
+	udc->cap_regs = (struct mv_cap_regs __iomem *)
+		devm_ioremap(&pdev->dev, capregs->start, resource_size(capregs));
+	if (!udc->cap_regs) {
+		dev_err(&pdev->dev, "failed to map I/O memory\n");
+		return -EBUSY;
+	}
+
+	if (phyregs) {
+		udc->phy_regs = ioremap(phyregs->start, resource_size(capregs));
+		if (!udc->phy_regs) {
+			dev_err(&pdev->dev, "failed to map phy I/O memory\n");
+			return -EBUSY;
+		}
+	}
+#else /* MY_ABC_HERE */
 			if (retval == -ENXIO)
 				return retval;
 
@@ -2180,8 +2523,9 @@ static int mv_udc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to map phy I/O memory\n");
 		return -EBUSY;
 	}
+#endif /* MY_ABC_HERE */
 
-	/* we will acces controller register, so enable the clk */
+	/* we will access controller register, so enable the clk */
 	retval = mv_udc_enable_internal(udc);
 	if (retval)
 		return retval;
@@ -2248,13 +2592,23 @@ static int mv_udc_probe(struct platform_device *pdev)
 	udc->ep0_dir = EP_DIR_OUT;
 	udc->remote_wakeup = 0;
 
+#if defined(MY_ABC_HERE)
+	/* request irq */
+	irq = platform_get_resource(udc->dev, IORESOURCE_IRQ, 0);
+	if (irq == NULL) {
+#else /* MY_ABC_HERE */
 	r = platform_get_resource(udc->dev, IORESOURCE_IRQ, 0);
 	if (r == NULL) {
+#endif /* MY_ABC_HERE */
 		dev_err(&pdev->dev, "no IRQ resource defined\n");
 		retval = -ENODEV;
 		goto err_destroy_dma;
 	}
+#if defined(MY_ABC_HERE)
+	udc->irq = irq->start;
+#else /* MY_ABC_HERE */
 	udc->irq = r->start;
+#endif /* MY_ABC_HERE */
 	if (devm_request_irq(&pdev->dev, udc->irq, mv_udc_irq,
 		IRQF_SHARED, driver_name, udc)) {
 		dev_err(&pdev->dev, "Request irq %d for UDC failed\n",
@@ -2278,7 +2632,11 @@ static int mv_udc_probe(struct platform_device *pdev)
 	/* VBUS detect: we can disable/enable clock on demand.*/
 	if (udc->transceiver)
 		udc->clock_gating = 1;
+#if defined(MY_ABC_HERE)
+	else if (pdata && pdata->vbus) {
+#else /* MY_ABC_HERE */
 	else if (pdata->vbus) {
+#endif /* MY_ABC_HERE */
 		udc->clock_gating = 1;
 		retval = devm_request_threaded_irq(&pdev->dev,
 				pdata->vbus->irq, NULL,
@@ -2290,6 +2648,32 @@ static int mv_udc_probe(struct platform_device *pdev)
 			udc->clock_gating = 0;
 		}
 
+#if defined(MY_ABC_HERE)
+	} else if (gpio_is_valid(udc->vbus_pin)) {
+		udc->clock_gating = 1;
+		if (!devm_gpio_request(&pdev->dev, udc->vbus_pin, "mv-udc")) {
+			retval = devm_request_irq(&pdev->dev,
+					       gpio_to_irq(udc->vbus_pin),
+					       mv_udc_vbus_irq, IRQ_TYPE_EDGE_BOTH,
+					       "mv-udc", udc);
+			if (retval) {
+				udc->vbus_pin = -ENODEV;
+				dev_warn(&pdev->dev,
+					 "failed to request vbus irq; "
+					 "assuming always on\n");
+			} else
+				disable_irq(gpio_to_irq(udc->vbus_pin));
+		} else {
+			/* gpio_request fail so use -EINVAL for gpio_is_valid */
+			udc->vbus_pin = -EINVAL;
+		}
+	}
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_ABC_HERE)
+	/* if using VBUS interrupt, initialize work queue */
+	if ((pdata && pdata->vbus) || gpio_is_valid(udc->vbus_pin)) {
+#endif /* MY_ABC_HERE */
 		udc->qwork = create_singlethread_workqueue("mv_udc_queue");
 		if (!udc->qwork) {
 			dev_err(&pdev->dev, "cannot create workqueue\n");
@@ -2331,6 +2715,13 @@ err_free_dma:
 			udc->ep_dqh, udc->ep_dqh_dma);
 err_disable_clock:
 	mv_udc_disable_internal(udc);
+#if defined(MY_ABC_HERE)
+disable_phys:
+	if (udc->utmi_phy) {
+		phy_power_off(udc->utmi_phy);
+		phy_exit(udc->utmi_phy);
+	}
+#endif /* MY_ABC_HERE */
 
 	return retval;
 }
@@ -2346,7 +2737,11 @@ static int mv_udc_suspend(struct device *dev)
 	if (udc->transceiver)
 		return 0;
 
+#if defined(MY_ABC_HERE)
+	if (udc->pdata && udc->pdata->vbus && udc->pdata->vbus->poll)
+#else /* MY_ABC_HERE */
 	if (udc->pdata->vbus && udc->pdata->vbus->poll)
+#endif /* MY_ABC_HERE */
 		if (udc->pdata->vbus->poll() == VBUS_HIGH) {
 			dev_info(&udc->dev->dev, "USB cable is connected!\n");
 			return -EAGAIN;
@@ -2367,6 +2762,14 @@ static int mv_udc_suspend(struct device *dev)
 		mv_udc_disable_internal(udc);
 	}
 
+#if defined(MY_ABC_HERE)
+	/* PHY exit if there is */
+	if (udc->utmi_phy) {
+		phy_power_off(udc->utmi_phy);
+		phy_exit(udc->utmi_phy);
+	}
+
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 
@@ -2381,6 +2784,22 @@ static int mv_udc_resume(struct device *dev)
 	if (udc->transceiver)
 		return 0;
 
+#if defined(MY_ABC_HERE)
+	/* PHY init if there is */
+	if (udc->utmi_phy) {
+		retval = phy_init(udc->utmi_phy);
+		if (retval)
+			return retval;
+
+		retval = phy_power_on(udc->utmi_phy);
+		if (retval) {
+			phy_power_off(udc->utmi_phy);
+			phy_exit(udc->utmi_phy);
+			return retval;
+		}
+	}
+
+#endif /* MY_ABC_HERE */
 	if (!udc->clock_gating) {
 		retval = mv_udc_enable_internal(udc);
 		if (retval)
@@ -2416,12 +2835,23 @@ static void mv_udc_shutdown(struct platform_device *pdev)
 	mv_udc_disable(udc);
 }
 
+#if defined(MY_ABC_HERE)
+static const struct of_device_id mv_udc_dt_match[] = {
+	{ .compatible = "marvell,mv-udc" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, mv_udc_dt_match);
+#endif /* MY_ABC_HERE */
+
 static struct platform_driver udc_driver = {
 	.probe		= mv_udc_probe,
 	.remove		= mv_udc_remove,
 	.shutdown	= mv_udc_shutdown,
 	.driver		= {
 		.name	= "mv-udc",
+#if defined(MY_ABC_HERE)
+		.of_match_table = of_match_ptr(mv_udc_dt_match),
+#endif /* MY_ABC_HERE */
 #ifdef CONFIG_PM
 		.pm	= &mv_udc_pm_ops,
 #endif

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _ASM_X86_IA32_H
 #define _ASM_X86_IA32_H
 
@@ -55,6 +58,21 @@ struct stat64 {
 
 	unsigned long long	st_ino;
 } __attribute__((packed));
+
+#ifdef MY_ABC_HERE
+// For 32 bit application
+struct SYNOSTAT64_EXTRA {
+	struct compat_timespec create_time;
+	unsigned int archive_version;
+	unsigned int archive_bit;
+	unsigned int last_component;
+};
+
+struct SYNOSTAT64 {
+	struct stat64 st;
+	struct SYNOSTAT64_EXTRA ext;
+};
+#endif /* MY_ABC_HERE */
 
 #define IA32_STACK_TOP IA32_PAGE_OFFSET
 

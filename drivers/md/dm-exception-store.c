@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2001-2002 Sistina Software (UK) Limited.
  * Copyright (C) 2006-2008 Red Hat GmbH
@@ -167,6 +170,18 @@ int dm_exception_store_set_chunk_size(struct dm_exception_store *store,
 		return -EINVAL;
 	}
 
+#ifdef MY_ABC_HERE
+	/* DSM #62671 - for Time Backup to support 4K HDD.
+	 * DSM #77071 - for Time Backup align to SSD Cache chunk size.
+	 * Although this bug can be fixed by changing the attribute of the dmsetup caller in Time Backup,
+	 * we do not want to release another version of Time Backup. So we workaround here.
+	 * We will change the input chunk size to 8(4K) if the input is 4(2K),
+	 * since Time Backup use 4 in its option but we want to modify it to 8.
+	 */
+	if (4 == chunk_size) {
+		chunk_size = 8;
+	}
+#endif	/* MY_ABC_HERE */
 	/* Validate the chunk size against the device block size */
 	if (chunk_size %
 	    (bdev_logical_block_size(dm_snap_cow(store->snap)->bdev) >> 9) ||

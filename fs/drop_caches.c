@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Implement the manual drop-all-pagecache function
  */
@@ -73,3 +76,15 @@ int drop_caches_sysctl_handler(struct ctl_table *table, int write,
 	}
 	return 0;
 }
+
+#ifdef MY_ABC_HERE
+void syno_drop_caches()
+{
+	iterate_supers(drop_pagecache_sb, NULL);
+	count_vm_event(DROP_PAGECACHE);
+	drop_slab();
+	count_vm_event(DROP_SLAB);
+}
+
+EXPORT_SYMBOL(syno_drop_caches);
+#endif /* MY_ABC_HERE */

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * soc-io.c  --  ASoC register I/O helpers
  *
@@ -13,7 +16,10 @@
 
 #include <linux/i2c.h>
 #include <linux/spi/spi.h>
+#if defined(MY_ABC_HERE)
+#else /* MY_ABC_HERE */
 #include <linux/regmap.h>
+#endif /* MY_ABC_HERE */
 #include <linux/export.h>
 #include <sound/soc.h>
 

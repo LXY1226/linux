@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Bridge between MCE and APEI
  *
@@ -52,8 +55,16 @@ void apei_mce_report_mem_error(int severity, struct cper_sec_mem_err *mem_err)
 
 	if (severity >= GHES_SEV_RECOVERABLE)
 		m.status |= MCI_STATUS_UC;
+
+#ifdef MY_DEF_HERE
+	if (severity >= GHES_SEV_PANIC) {
+		m.status |= MCI_STATUS_PCC;
+		m.tsc = rdtsc();
+	}
+#else /* MY_DEF_HERE */
 	if (severity >= GHES_SEV_PANIC)
 		m.status |= MCI_STATUS_PCC;
+#endif /* MY_DEF_HERE */
 
 	m.addr = mem_err->physical_addr;
 	mce_log(&m);

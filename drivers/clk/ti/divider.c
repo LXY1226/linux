@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * TI Divider Clock
  *
@@ -26,7 +29,11 @@
 #undef pr_fmt
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_divider(_hw) container_of(_hw, struct clk_divider, hw)
+#endif /* MY_ABC_HERE */
 
 #define div_mask(d)	((1 << ((d)->width)) - 1)
 

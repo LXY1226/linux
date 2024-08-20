@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/mm/oom_kill.c
  * 
@@ -42,6 +45,10 @@
 int sysctl_panic_on_oom;
 int sysctl_oom_kill_allocating_task;
 int sysctl_oom_dump_tasks = 1;
+
+#ifdef MY_ABC_HERE
+extern void syno_dump_modules(void);
+#endif /* MY_ABC_HERE */
 
 DEFINE_MUTEX(oom_lock);
 
@@ -355,7 +362,11 @@ static void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
 	struct task_struct *p;
 	struct task_struct *task;
 
+#ifdef MY_ABC_HERE
+	pr_warning("[ pid ]   uid  tgid total_vm      rss nr_ptes nr_pmds swapents oom_score_adj name\n");
+#else
 	pr_info("[ pid ]   uid  tgid total_vm      rss nr_ptes nr_pmds swapents oom_score_adj name\n");
+#endif /* MY_ABC_HERE */
 	rcu_read_lock();
 	for_each_process(p) {
 		if (oom_unkillable_task(p, memcg, nodemask))
@@ -371,7 +382,11 @@ static void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
 			continue;
 		}
 
+#ifdef MY_ABC_HERE
+		pr_warning("[%5d] %5d %5d %8lu %8lu %7ld %7ld %8lu         %5hd %s\n",
+#else
 		pr_info("[%5d] %5d %5d %8lu %8lu %7ld %7ld %8lu         %5hd %s\n",
+#endif /* MY_ABC_HERE */
 			task->pid, from_kuid(&init_user_ns, task_uid(task)),
 			task->tgid, task->mm->total_vm, get_mm_rss(task->mm),
 			atomic_long_read(&task->mm->nr_ptes),
@@ -398,6 +413,9 @@ static void dump_header(struct oom_control *oc, struct task_struct *p,
 		show_mem(SHOW_MEM_FILTER_NODES);
 	if (sysctl_oom_dump_tasks)
 		dump_tasks(memcg, oc->nodemask);
+#ifdef MY_ABC_HERE
+	syno_dump_modules();
+#endif /* MY_ABC_HERE */
 }
 
 /*
@@ -501,6 +519,17 @@ static bool process_shares_mm(struct task_struct *p, struct mm_struct *mm)
 	return false;
 }
 
+#ifdef MY_ABC_HERE
+int (*funcSYNOSendErrorOOMEvent)(const char*) = NULL;
+static void sendOOMEvent(const char* process_name){
+	if (NULL == funcSYNOSendErrorOOMEvent){
+		printk(KERN_ERR "Can't reference to function 'funcSYNOSendErrorOOMEvent'\n");
+		return;
+	}
+	funcSYNOSendErrorOOMEvent(process_name);
+}
+EXPORT_SYMBOL(funcSYNOSendErrorOOMEvent);
+#endif /* MY_ABC_HERE */
 #define K(x) ((x) << (PAGE_SHIFT-10))
 /*
  * Must be called while holding a reference to p, which will be released upon
@@ -537,6 +566,10 @@ void oom_kill_process(struct oom_control *oc, struct task_struct *p,
 	pr_err("%s: Kill process %d (%s) score %u or sacrifice child\n",
 		message, task_pid_nr(p), p->comm, points);
 
+#ifdef MY_ABC_HERE
+	if (!memcg)
+		sendOOMEvent(p->comm);
+#endif /* MY_ABC_HERE */
 	/*
 	 * If any of p's children has a different mm and is eligible for kill,
 	 * the one with the highest oom_badness() score is sacrificed for its

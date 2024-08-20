@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2001 Jens Axboe <axboe@kernel.dk>
  *
@@ -305,17 +308,6 @@ static void bio_chain_endio(struct bio *bio)
 	bio_put(bio);
 }
 
-/*
- * Increment chain count for the bio. Make sure the CHAIN flag update
- * is visible before the raised count.
- */
-static inline void bio_inc_remaining(struct bio *bio)
-{
-	bio_set_flag(bio, BIO_CHAIN);
-	smp_mb__before_atomic();
-	atomic_inc(&bio->__bi_remaining);
-}
-
 /**
  * bio_chain - chain bio completions
  * @bio: the target bio
@@ -590,6 +582,24 @@ void __bio_clone_fast(struct bio *bio, struct bio *bio_src)
 	bio->bi_rw = bio_src->bi_rw;
 	bio->bi_iter = bio_src->bi_iter;
 	bio->bi_io_vec = bio_src->bi_io_vec;
+#ifdef MY_ABC_HERE
+	/*
+	 * Originally, kernel doent's expose bi_vcnt for cloned bio to forbid
+	 * operating on it. However we expose the field due to flashcache's split IO
+	 * feature needs it
+	 */
+	bio->bi_vcnt = bio_src->bi_vcnt;
+#endif
+#ifdef MY_ABC_HERE
+	if (unlikely(bio_flagged(bio_src, BIO_CORRECTION_RETRY)))
+		bio_set_flag(bio, BIO_CORRECTION_RETRY);
+	if (unlikely(bio_flagged(bio_src, BIO_CORRECTION_ABORT)))
+		bio_set_flag(bio, BIO_CORRECTION_ABORT);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	if (unlikely(bio_flagged(bio_src, BIO_SYNO_FULL_STRIPE_MERGE)))
+		bio_set_flag(bio, BIO_SYNO_FULL_STRIPE_MERGE);
+#endif /* MY_ABC_HERE */
 
 	bio_clone_blkcg_association(bio, bio_src);
 }
@@ -678,10 +688,26 @@ struct bio *bio_clone_bioset(struct bio *bio_src, gfp_t gfp_mask,
 	if (bio->bi_rw & REQ_DISCARD)
 		goto integrity_clone;
 
+#ifdef MY_ABC_HERE
+	if (bio->bi_rw & REQ_UNUSED_HINT)
+		goto integrity_clone;
+#endif /* MY_ABC_HERE */
+
 	if (bio->bi_rw & REQ_WRITE_SAME) {
 		bio->bi_io_vec[bio->bi_vcnt++] = bio_src->bi_io_vec[0];
 		goto integrity_clone;
 	}
+
+#ifdef MY_ABC_HERE
+	if (unlikely(bio_flagged(bio_src, BIO_CORRECTION_RETRY)))
+		bio_set_flag(bio, BIO_CORRECTION_RETRY);
+	if (unlikely(bio_flagged(bio_src, BIO_CORRECTION_ABORT)))
+		bio_set_flag(bio, BIO_CORRECTION_ABORT);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	if (unlikely(bio_flagged(bio_src, BIO_SYNO_FULL_STRIPE_MERGE)))
+		bio_set_flag(bio, BIO_SYNO_FULL_STRIPE_MERGE);
+#endif /* MY_ABC_HERE */
 
 	bio_for_each_segment(bv, bio_src, iter)
 		bio->bi_io_vec[bio->bi_vcnt++] = bv;
@@ -1076,7 +1102,7 @@ static int bio_copy_to_iter(struct bio *bio, struct iov_iter iter)
 	return 0;
 }
 
-static void bio_free_pages(struct bio *bio)
+void bio_free_pages(struct bio *bio)
 {
 	struct bio_vec *bvec;
 	int i;
@@ -1084,6 +1110,7 @@ static void bio_free_pages(struct bio *bio)
 	bio_for_each_segment_all(bvec, bio, i)
 		__free_page(bvec->bv_page);
 }
+EXPORT_SYMBOL(bio_free_pages);
 
 /**
  *	bio_uncopy_user	-	finish previously mapped bio
@@ -1541,7 +1568,7 @@ struct bio *bio_copy_kern(struct request_queue *q, void *data, unsigned int len,
 		if (bytes > len)
 			bytes = len;
 
-		page = alloc_page(q->bounce_gfp | gfp_mask);
+		page = alloc_page(q->bounce_gfp | __GFP_ZERO | gfp_mask);
 		if (!page)
 			goto cleanup;
 
@@ -1779,6 +1806,14 @@ void bio_endio(struct bio *bio)
 		 * optimization would handle this, but compiling with frame
 		 * pointers also disables gcc's sibling call optimization.
 		 */
+#ifdef MY_ABC_HERE
+		if (bio->bi_bdev && bio_flagged(bio, BIO_TRACE_COMPLETION)) {
+			trace_block_bio_complete(bdev_get_queue(bio->bi_bdev),
+						bio, bio->bi_error);
+			bio_clear_flag(bio, BIO_TRACE_COMPLETION);
+		}
+#endif /* MY_ABC_HERE */
+
 		if (bio->bi_end_io == bio_chain_endio) {
 			struct bio *parent = bio->bi_private;
 			parent->bi_error = bio->bi_error;
@@ -1821,6 +1856,10 @@ struct bio *bio_split(struct bio *bio, int sectors,
 	 */
 	if (bio->bi_rw & REQ_DISCARD)
 		split = bio_clone_bioset(bio, gfp, bs);
+#ifdef MY_ABC_HERE
+	else if (bio->bi_rw & REQ_UNUSED_HINT)
+		split = bio_clone_bioset(bio, gfp, bs);
+#endif /* MY_ABC_HERE */
 	else
 		split = bio_clone_fast(bio, gfp, bs);
 
@@ -1833,6 +1872,11 @@ struct bio *bio_split(struct bio *bio, int sectors,
 		bio_integrity_trim(split, 0, sectors);
 
 	bio_advance(bio, split->bi_iter.bi_size);
+
+#ifdef MY_ABC_HERE
+	if (bio_flagged(bio, BIO_TRACE_COMPLETION))
+		bio_set_flag(split, BIO_TRACE_COMPLETION);
+#endif /* MY_ABC_HERE */
 
 	return split;
 }

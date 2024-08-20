@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * This header file contains public constants and structures used by
  * the SCSI initiator code.
@@ -6,16 +9,29 @@
 #define _SCSI_SCSI_H
 
 #include <linux/types.h>
+#ifdef __KERNEL__
 #include <linux/scatterlist.h>
 #include <linux/kernel.h>
 #include <scsi/scsi_common.h>
+#endif /* __KERNEL__ */
 #include <scsi/scsi_proto.h>
 
+#ifdef __KERNEL__
 struct scsi_cmnd;
 
 enum scsi_timeouts {
 	SCSI_DEFAULT_EH_TIMEOUT		= 10 * HZ,
 };
+
+#else
+/*
+ * SYNO SCSI UAPI
+ * The three headers scsi.h, scsi_ioctl.h and sg.h are required by some
+ * user space applications but kept in kernel space. We just drop sections
+ * that are kernel internal in scsi.h (guarded by ifdef __KERNEL__), and
+ * export them from include/UAPIi/scsi/ via symbolic links.
+ */
+#endif /* __KERNEL__ */
 
 /*
  * The maximum number of SG segments that we will put inside a
@@ -48,6 +64,8 @@ enum scsi_timeouts {
  */
 #define SCAN_WILD_CARD	~0
 
+#ifdef __KERNEL__
+
 #ifdef CONFIG_ACPI
 struct acpi_bus_type;
 
@@ -57,6 +75,8 @@ scsi_register_acpi_bus_type(struct acpi_bus_type *bus);
 extern void
 scsi_unregister_acpi_bus_type(struct acpi_bus_type *bus);
 #endif
+
+#endif /* __KERNEL__ */
 
 /** scsi_status_is_good - check the status return.
  *
@@ -101,6 +121,7 @@ struct ccs_modesel_head {
 	__u8 block_length_lo;
 };
 
+#ifdef __KERNEL__
 /*
  * The Well Known LUNS (SAM-3) in our int representation of a LUN
  */
@@ -113,7 +134,7 @@ static inline int scsi_is_wlun(u64 lun)
 {
 	return (lun & 0xff00) == SCSI_W_LUN_BASE;
 }
-
+#endif /* __KERNEL__ */
 
 /*
  *  MESSAGE CODES
@@ -305,5 +326,30 @@ static inline __u32 scsi_to_u32(__u8 *ptr)
 {
 	return (ptr[0]<<24) + (ptr[1]<<16) + (ptr[2]<<8) + ptr[3];
 }
+
+#ifdef __KERNEL__
+/* Syno define in kernel space only */
+#ifdef MY_ABC_HERE
+#define SCSI_IOCTL_SET_BADSECTORS    0x5400
+
+typedef struct _tag_SdBadSectors {
+	unsigned int     rgSectors[101];
+	unsigned short     rgEnableSector[101];
+	unsigned short     uiEnable;   // 0-->disable, 1-->enable for read
+} SDBADSECTORS, *PSDBADSECTORS;
+#define EN_BAD_SECTOR_READ      0x01
+#define EN_BAD_SECTOR_WRITE     0x02
+
+extern SDBADSECTORS grgSdBadSectors[CONFIG_SYNO_MAX_INTERNAL_DISK];
+extern int gBadSectorTest;
+#define SynoGetInternalDiskSeq(szBdevName) (szBdevName[2] - 'a')
+#endif /* MY_ABC_HERE */
+#endif /* __KERNEL__ */
+
+#ifdef MY_ABC_HERE
+#define SYNO_DESCRIPTOR_RESERVED_INDEX 3 // Descriptor format sense data, information descriptor type, reserved byte index
+#define SYNO_NCQ_FAKE_UNC 0x01 // 0x01-->no remap, default 0x00-->do remap
+#define SYNO_SCSI_SECT_SIZE 512
+#endif /* MY_ABC_HERE */
 
 #endif /* _SCSI_SCSI_H */

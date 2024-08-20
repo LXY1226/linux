@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   fs/cifs/cifsglob.h
  *
@@ -167,6 +170,9 @@ struct smb_rqst {
 
 enum smb_version {
 	Smb_1 = 1,
+#ifdef MY_ABC_HERE
+	Smb_Syno,
+#endif /* MY_ABC_HERE */
 	Smb_20,
 	Smb_21,
 	Smb_30,
@@ -384,14 +390,26 @@ struct smb_version_operations {
 				 struct cifs_sb_info *, const unsigned char *,
 				 char *, unsigned int *);
 	/* if we can do cache read operations */
+#ifdef MY_ABC_HERE
+	bool (*is_read_op)(struct TCP_Server_Info *, __u32);
+#else
 	bool (*is_read_op)(__u32);
+#endif /* MY_ABC_HERE */
 	/* set oplock level for the inode */
 	void (*set_oplock_level)(struct cifsInodeInfo *, __u32, unsigned int,
 				 bool *);
 	/* create lease context buffer for CREATE request */
+#ifdef MY_ABC_HERE
+	char * (*create_lease_buf)(struct TCP_Server_Info *, u8 *, u8);
+#else
 	char * (*create_lease_buf)(u8 *, u8);
+#endif /* MY_ABC_HERE */
 	/* parse lease context buffer and return oplock/epoch info */
+#ifdef MY_ABC_HERE
+	__u8 (*parse_lease_buf)(struct TCP_Server_Info *, void *, unsigned int *);
+#else
 	__u8 (*parse_lease_buf)(void *, unsigned int *);
+#endif /* MY_ABC_HERE */
 	int (*clone_range)(const unsigned int, struct cifsFileInfo *src_file,
 			struct cifsFileInfo *target_file, u64 src_off, u64 len,
 			u64 dest_off);
@@ -553,6 +571,10 @@ struct TCP_Server_Info {
 	char server_RFC1001_name[RFC1001_NAME_LEN_WITH_NULL];
 	struct smb_version_operations	*ops;
 	struct smb_version_values	*vals;
+#ifdef MY_ABC_HERE
+	/* values: for synoops; vals is changeable when vers=syno. it is for fit server max protocol */
+	struct smb_version_values	*values;
+#endif /* MY_ABC_HERE */
 	enum statusEnum tcpStatus; /* what we think the status is */
 	char *hostname; /* hostname portion of UNC string */
 	struct socket *ssocket;
@@ -1612,11 +1634,20 @@ GLOBAL_EXTERN bool lookupCacheEnabled;
 GLOBAL_EXTERN unsigned int global_secflags;	/* if on, session setup sent
 				with more secure ntlmssp2 challenge/resp */
 GLOBAL_EXTERN unsigned int sign_CIFS_PDUs;  /* enable smb packet signing */
+#ifdef MY_ABC_HERE
+GLOBAL_EXTERN unsigned int SynoPosixSemanticsEnabled;/*enable POSIX SEMANTICS*/
+#endif /* MY_ABC_HERE */
 GLOBAL_EXTERN bool linuxExtEnabled;/*enable Linux/Unix CIFS extensions*/
 GLOBAL_EXTERN unsigned int CIFSMaxBufSize;  /* max size not including hdr */
 GLOBAL_EXTERN unsigned int cifs_min_rcv;    /* min size of big ntwrk buf pool */
 GLOBAL_EXTERN unsigned int cifs_min_small;  /* min size of small buf pool */
 GLOBAL_EXTERN unsigned int cifs_max_pending; /* MAX requests at once to server*/
+
+/* reconnect after this many failed echo attempts */
+GLOBAL_EXTERN unsigned short echo_retries;
+#ifdef MY_ABC_HERE
+GLOBAL_EXTERN unsigned short need_nego_timeout;
+#endif /* MY_ABC_HERE */
 
 #ifdef CONFIG_CIFS_ACL
 GLOBAL_EXTERN struct rb_root uidtree;
@@ -1633,6 +1664,7 @@ void cifs_oplock_break(struct work_struct *work);
 
 extern const struct slow_work_ops cifs_oplock_break_ops;
 extern struct workqueue_struct *cifsiod_wq;
+extern struct workqueue_struct *cifsoplockd_wq;
 
 extern mempool_t *cifs_mid_poolp;
 
@@ -1640,6 +1672,11 @@ extern mempool_t *cifs_mid_poolp;
 #define SMB1_VERSION_STRING	"1.0"
 extern struct smb_version_operations smb1_operations;
 extern struct smb_version_values smb1_values;
+#ifdef MY_ABC_HERE
+#define SYNO_VERSION_STRING	"syno"
+extern struct smb_version_operations synocifs_operations;
+extern struct smb_version_values synocifs_values;
+#endif /* MY_ABC_HERE */
 #define SMB20_VERSION_STRING	"2.0"
 extern struct smb_version_operations smb20_operations;
 extern struct smb_version_values smb20_values;

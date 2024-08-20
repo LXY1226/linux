@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* CPU control.
  * (C) 2001, 2002, 2003, 2004 Rusty Russell
  *
@@ -26,6 +29,13 @@
 #include <trace/events/power.h>
 
 #include "smpboot.h"
+
+#if defined(CONFIG_ARCH_RTD129X) && defined(MY_DEF_HERE) || \
+	defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+extern void rtk_cpu_power_down(int cpu);
+extern void rtk_cpu_power_up(int cpu);
+#endif /* CONFIG_ARCH_RTD129X && MY_DEF_HERE ||
+		  CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 
 #ifdef CONFIG_SMP
 /* Serializes the updates to cpu_online_mask, cpu_present_mask */
@@ -602,6 +612,13 @@ int disable_nonboot_cpus(void)
 			continue;
 		trace_suspend_resume(TPS("CPU_OFF"), cpu, true);
 		error = _cpu_down(cpu, 1);
+
+#if defined(CONFIG_ARCH_RTD129X) && defined(MY_DEF_HERE) || \
+	defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+		rtk_cpu_power_down(cpu);
+#endif /* CONIFG_ARCH_RTD129X && MY_DEF_HERE ||
+		  CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
+
 		trace_suspend_resume(TPS("CPU_OFF"), cpu, false);
 		if (!error)
 			cpumask_set_cpu(cpu, frozen_cpus);
@@ -651,6 +668,13 @@ void enable_nonboot_cpus(void)
 
 	for_each_cpu(cpu, frozen_cpus) {
 		trace_suspend_resume(TPS("CPU_ON"), cpu, true);
+
+#if defined(CONFIG_ARCH_RTD129X) && defined(MY_DEF_HERE) || \
+	defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+		rtk_cpu_power_up(cpu);
+#endif /* CONIFG_ARCH_RTD129X && MY_DEF_HERE ||
+		  CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
+
 		error = _cpu_up(cpu, 1);
 		trace_suspend_resume(TPS("CPU_ON"), cpu, false);
 		if (!error) {
@@ -737,7 +761,11 @@ void notify_cpu_starting(unsigned int cpu)
 	unsigned long val = CPU_STARTING;
 
 #ifdef CONFIG_PM_SLEEP_SMP
+#if defined (MY_ABC_HERE) && ! defined (CONFIG_CPUMASK_OFFSTACK)
+	if (cpumask_test_cpu(cpu, frozen_cpus))
+#else
 	if (frozen_cpus != NULL && cpumask_test_cpu(cpu, frozen_cpus))
+#endif
 		val = CPU_STARTING_FROZEN;
 #endif /* CONFIG_PM_SLEEP_SMP */
 	cpu_notify(val, (void *)(long)cpu);
@@ -843,7 +871,11 @@ void init_cpu_online(const struct cpumask *src)
 	cpumask_copy(to_cpumask(cpu_online_bits), src);
 }
 
+#ifdef MY_DEF_HERE
+enum cpu_mitigations cpu_mitigations = CPU_MITIGATIONS_OFF;
+#else /* MY_DEF_HERE */
 enum cpu_mitigations cpu_mitigations = CPU_MITIGATIONS_AUTO;
+#endif /* MY_DEF_HERE */
 
 static int __init mitigations_parse_cmdline(char *arg)
 {

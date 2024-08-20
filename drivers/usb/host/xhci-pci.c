@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * xHCI host controller driver PCI Bus Glue.
  *
@@ -139,11 +142,20 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	if (pdev->vendor == PCI_VENDOR_ID_AMD && usb_amd_find_chipset_info())
 		xhci->quirks |= XHCI_AMD_PLL_FIX;
 
+	if (pdev->vendor == PCI_VENDOR_ID_AMD &&
+		(pdev->device == 0x145c ||
+		 pdev->device == 0x15e0 ||
+		 pdev->device == 0x15e1 ||
+		 pdev->device == 0x43bb))
+		xhci->quirks |= XHCI_SUSPEND_DELAY;
+
 	if (pdev->vendor == PCI_VENDOR_ID_AMD)
 		xhci->quirks |= XHCI_TRUST_TX_LENGTH;
 
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL) {
+#ifdef MY_DEF_HERE
 		xhci->quirks |= XHCI_LPM_SUPPORT;
+#endif /* MY_DEF_HERE */
 		xhci->quirks |= XHCI_INTEL_HOST;
 		xhci->quirks |= XHCI_AVOID_BEI;
 	}
@@ -251,6 +263,10 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	if (retval)
 		return retval;
 
+#ifdef MY_ABC_HERE
+	hcd->power_control_support = 1;
+#endif /* MY_ABC_HERE */
+
 	if (!usb_hcd_is_primary_hcd(hcd))
 		return 0;
 
@@ -274,6 +290,11 @@ static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	struct xhci_hcd *xhci;
 	struct hc_driver *driver;
 	struct usb_hcd *hcd;
+
+#if defined(CONFIG_USB_ETRON_HUB)
+	if (dev->vendor == PCI_VENDOR_ID_ETRON)
+		return -ENODEV;
+#endif /* CONFIG_USB_ETRON_HUB */
 
 	driver = (struct hc_driver *)id->driver_data;
 

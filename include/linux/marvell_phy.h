@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _MARVELL_PHY_H
 #define _MARVELL_PHY_H
 
@@ -17,7 +20,13 @@
 #define MARVELL_PHY_ID_88E1116R		0x01410e40
 #define MARVELL_PHY_ID_88E1510		0x01410dd0
 #define MARVELL_PHY_ID_88E1540		0x01410eb0
+#if defined(MY_ABC_HERE)
+#define MARVELL_PHY_ID_88E2110		0x002b09b8
+#endif /* MY_ABC_HERE */
 #define MARVELL_PHY_ID_88E3016		0x01410e60
+#if defined(MY_ABC_HERE)
+#define MARVELL_PHY_ID_88E3310		0x01410da0
+#endif /* MY_ABC_HERE */
 
 /* struct phy_device dev_flags definitions */
 #define MARVELL_PHY_M1145_FLAGS_RESISTANCE	0x00000001

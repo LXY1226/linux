@@ -46,8 +46,10 @@ else
 # To build 64-bit compressed kernel as PIE, we disable relocation
 # overflow check to avoid relocation overflow error with a new linker
 # command-line option, -z noreloc-overflow.
+ifneq ($(CONFIG_SYNO_GCC12_COMPAT), y)
 LDFLAGS += $(shell $(LD) --help 2>&1 | grep -q "\-z noreloc-overflow" \
 	&& echo "-z noreloc-overflow -pie --no-dynamic-linker")
+endif # CONFIG_SYNO_GCC12_COMPAT
 endif
 endif
 LDFLAGS_vmlinux := -T

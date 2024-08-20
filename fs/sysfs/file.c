@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * fs/sysfs/file.c - sysfs regular (text) file implementation
  *
@@ -565,7 +568,11 @@ int sysfs_emit(char *buf, const char *fmt, ...)
 	va_list args;
 	int len;
 
+#ifdef MY_ABC_HERE
+	if (WARN(!buf,
+#else /* MY_ABC_HERE */
 	if (WARN(!buf || offset_in_page(buf),
+#endif /* MY_ABC_HERE */
 		 "invalid sysfs_emit: buf:%p\n", buf))
 		return 0;
 
@@ -593,7 +600,11 @@ int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
 	va_list args;
 	int len;
 
+#ifdef MY_ABC_HERE
+	if (WARN(!buf || at < 0 || at >= PAGE_SIZE,
+#else /* MY_ABC_HERE */
 	if (WARN(!buf || offset_in_page(buf) || at < 0 || at >= PAGE_SIZE,
+#endif /* MY_ABC_HERE */
 		 "invalid sysfs_emit_at: buf:%p at:%d\n", buf, at))
 		return 0;
 

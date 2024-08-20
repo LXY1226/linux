@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright 2004 James Cleverdon, IBM.
  * Subject to the GNU Public License, v.2
@@ -253,10 +256,14 @@ static void physflat_send_IPI_all(int vector)
 
 static int physflat_probe(void)
 {
+#ifdef MY_DEF_HERE
+	return 1;
+#else
 	if (apic == &apic_physflat || num_possible_cpus() > 8)
 		return 1;
 
 	return 0;
+#endif /* MY_DEF_HERE */
 }
 
 static struct apic apic_physflat =  {

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/ext4/ialloc.c
  *
@@ -29,6 +32,10 @@
 #include "acl.h"
 
 #include <trace/events/ext4.h>
+
+#ifdef MY_ABC_HERE
+#define MAX_U32_IN_U64 ((u64)(~0U))
+#endif /* MY_ABC_HERE */
 
 /*
  * ialloc.c contains the inodes allocation and deallocation routines
@@ -80,7 +87,6 @@ static int ext4_validate_inode_bitmap(struct super_block *sb,
 {
 	ext4_fsblk_t	blk;
 	struct ext4_group_info *grp = ext4_get_group_info(sb, block_group);
-	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
 	if (buffer_verified(bh))
 		return 0;
@@ -93,18 +99,17 @@ static int ext4_validate_inode_bitmap(struct super_block *sb,
 	blk = ext4_inode_bitmap(sb, desc);
 	if (!ext4_inode_bitmap_csum_verify(sb, block_group, desc, bh,
 					   EXT4_INODES_PER_GROUP(sb) / 8)) {
+#ifdef MY_ABC_HERE
+		ext4_msg(sb, KERN_CRIT, "Corrupt inode bitmap - block_group = %u, "
+			   "inode_bitmap = %llu", block_group, blk);
+#else
 		ext4_unlock_group(sb, block_group);
 		ext4_error(sb, "Corrupt inode bitmap - block_group = %u, "
 			   "inode_bitmap = %llu", block_group, blk);
-		grp = ext4_get_group_info(sb, block_group);
-		if (!EXT4_MB_GRP_IBITMAP_CORRUPT(grp)) {
-			int count;
-			count = ext4_free_inodes_count(sb, desc);
-			percpu_counter_sub(&sbi->s_freeinodes_counter,
-					   count);
-		}
-		set_bit(EXT4_GROUP_INFO_IBITMAP_CORRUPT_BIT, &grp->bb_state);
+		ext4_mark_group_bitmap_corrupted(sb, block_group,
+					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 		return -EFSBADCRC;
+#endif /* MY_ABC_HERE */
 	}
 	set_buffer_verified(bh);
 verified:
@@ -136,6 +141,8 @@ ext4_read_inode_bitmap(struct super_block *sb, ext4_group_t block_group)
 	    (bitmap_blk >= ext4_blocks_count(sbi->s_es))) {
 		ext4_error(sb, "Invalid inode bitmap blk %llu in "
 			   "block_group %u", bitmap_blk, block_group);
+		ext4_mark_group_bitmap_corrupted(sb, block_group,
+					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 		return ERR_PTR(-EFSCORRUPTED);
 	}
 	bh = sb_getblk(sb, bitmap_blk);
@@ -199,6 +206,8 @@ ext4_read_inode_bitmap(struct super_block *sb, ext4_group_t block_group)
 		ext4_error(sb, "Cannot read inode bitmap - "
 			   "block_group = %u, inode_bitmap = %llu",
 			   block_group, bitmap_blk);
+		ext4_mark_group_bitmap_corrupted(sb, block_group,
+				EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 		return ERR_PTR(-EIO);
 	}
 
@@ -279,7 +288,7 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 	/* Do this BEFORE marking the inode not in use or returning an error */
 	ext4_clear_inode(inode);
 
-	es = EXT4_SB(sb)->s_es;
+	es = sbi->s_es;
 	if (ino < EXT4_FIRST_INO(sb) || ino > le32_to_cpu(es->s_inodes_count)) {
 		ext4_error(sb, "reserved or nonexistent inode %lu", ino);
 		goto error_return;
@@ -349,13 +358,8 @@ out:
 			fatal = err;
 	} else {
 		ext4_error(sb, "bit already cleared for inode %lu", ino);
-		if (gdp && !EXT4_MB_GRP_IBITMAP_CORRUPT(grp)) {
-			int count;
-			count = ext4_free_inodes_count(sb, gdp);
-			percpu_counter_sub(&sbi->s_freeinodes_counter,
-					   count);
-		}
-		set_bit(EXT4_GROUP_INFO_IBITMAP_CORRUPT_BIT, &grp->bb_state);
+		ext4_mark_group_bitmap_corrupted(sb, block_group,
+					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 	}
 
 error_return:
@@ -429,7 +433,12 @@ static int find_group_orlov(struct super_block *sb, struct inode *parent,
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	ext4_group_t real_ngroups = ext4_get_groups_count(sb);
 	int inodes_per_group = EXT4_INODES_PER_GROUP(sb);
+#ifdef MY_ABC_HERE
+	ext4_fsblk_t freei, avefreei;
+	unsigned int grp_free;
+#else
 	unsigned int freei, avefreei, grp_free;
+#endif /* MY_ABC_HERE */
 	ext4_fsblk_t freec, avefreec;
 	unsigned int ndirs;
 	int max_dirs, min_inodes;
@@ -463,6 +472,9 @@ static int find_group_orlov(struct super_block *sb, struct inode *parent,
 		if (qstr) {
 			hinfo.hash_version = DX_HASH_HALF_MD4;
 			hinfo.seed = sbi->s_hash_seed;
+#ifdef MY_ABC_HERE
+			hinfo.caseless = is_syno_ext(sb);
+#endif /* MY_ABC_HERE */
 			ext4fs_dirhash(qstr->name, qstr->len, &hinfo);
 			grp = hinfo.hash;
 		} else
@@ -709,6 +721,36 @@ out:
 	return ret;
 }
 
+static int find_inode_bit(struct super_block *sb, ext4_group_t group,
+			  struct buffer_head *bitmap, unsigned long *ino)
+{
+next:
+	*ino = ext4_find_next_zero_bit((unsigned long *)
+				       bitmap->b_data,
+				       EXT4_INODES_PER_GROUP(sb), *ino);
+	if (*ino >= EXT4_INODES_PER_GROUP(sb))
+		return 0;
+
+#ifdef MY_ABC_HERE
+	/*
+	 * Since the inode bitmap is zero-based, so the ino should not
+	 * equal to MAX_U32_IN_U64.
+	 */
+	if (MAX_U32_IN_U64 <= (u64) (*ino) + (u64) group * EXT4_INODES_PER_GROUP(sb))
+		return 0;
+#endif /* MY_ABC_HERE */
+
+	if ((EXT4_SB(sb)->s_journal == NULL) &&
+	    recently_deleted(sb, group, *ino)) {
+		*ino = *ino + 1;
+		if (*ino < EXT4_INODES_PER_GROUP(sb))
+			goto next;
+		return 0;
+	}
+
+	return 1;
+}
+
 /*
  * There are two policies for allocating an inode.  If the new inode is
  * a directory, then a forward search is made for a block group with both
@@ -781,6 +823,13 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 		inode->i_gid = dir->i_gid;
 	} else
 		inode_init_owner(inode, dir, mode);
+
+	if (EXT4_HAS_RO_COMPAT_FEATURE(sb, EXT4_FEATURE_RO_COMPAT_PROJECT) &&
+	    ext4_test_inode_flag(dir, EXT4_INODE_PROJINHERIT))
+		ei->i_projid = EXT4_I(dir)->i_projid;
+	else
+		ei->i_projid = make_kprojid(&init_user_ns, EXT4_DEF_PROJID);
+
 	err = dquot_initialize(inode);
 	if (err)
 		goto out;
@@ -806,6 +855,13 @@ got_group:
 	if (ret2 == -1)
 		goto out;
 
+#ifdef MY_ABC_HERE
+	if (MAX_U32_IN_U64 < (u64)group*EXT4_INODES_PER_GROUP(sb)) {
+		u32 max_group =	(u32)((MAX_U32_IN_U64 + 1) / EXT4_INODES_PER_GROUP(sb));
+		group %= max_group;
+	}
+#endif /* MY_ABC_HERE */
+
 	/*
 	 * Normally we will only go through one pass of this loop,
 	 * unless we get unlucky and it turns out the group we selected
@@ -821,19 +877,13 @@ got_group:
 		/*
 		 * Check free inodes count before loading bitmap.
 		 */
-		if (ext4_free_inodes_count(sb, gdp) == 0) {
-			if (++group == ngroups)
-				group = 0;
-			continue;
-		}
+		if (ext4_free_inodes_count(sb, gdp) == 0)
+			goto next_group;
 
 		grp = ext4_get_group_info(sb, group);
 		/* Skip groups with already-known suspicious inode tables */
-		if (EXT4_MB_GRP_IBITMAP_CORRUPT(grp)) {
-			if (++group == ngroups)
-				group = 0;
-			continue;
-		}
+		if (EXT4_MB_GRP_IBITMAP_CORRUPT(grp))
+			goto next_group;
 
 		brelse(inode_bitmap_bh);
 		inode_bitmap_bh = ext4_read_inode_bitmap(sb, group);
@@ -841,27 +891,22 @@ got_group:
 		if (EXT4_MB_GRP_IBITMAP_CORRUPT(grp) ||
 		    IS_ERR(inode_bitmap_bh)) {
 			inode_bitmap_bh = NULL;
-			if (++group == ngroups)
-				group = 0;
-			continue;
+			goto next_group;
 		}
 
 repeat_in_this_group:
-		ino = ext4_find_next_zero_bit((unsigned long *)
-					      inode_bitmap_bh->b_data,
-					      EXT4_INODES_PER_GROUP(sb), ino);
-		if (ino >= EXT4_INODES_PER_GROUP(sb))
+		ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &ino);
+		if (!ret2)
 			goto next_group;
-		if (group == 0 && (ino+1) < EXT4_FIRST_INO(sb)) {
+
+		if (group == 0 && (ino + 1) < EXT4_FIRST_INO(sb)) {
 			ext4_error(sb, "reserved inode found cleared - "
 				   "inode=%lu", ino + 1);
-			continue;
+			ext4_mark_group_bitmap_corrupted(sb, group,
+					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
+			goto next_group;
 		}
-		if ((EXT4_SB(sb)->s_journal == NULL) &&
-		    recently_deleted(sb, group, ino)) {
-			ino++;
-			goto next_inode;
-		}
+
 		if (!handle) {
 			BUG_ON(nblocks <= 0);
 			handle = __ext4_journal_start_sb(dir->i_sb, line_no,
@@ -881,16 +926,34 @@ repeat_in_this_group:
 		}
 		ext4_lock_group(sb, group);
 		ret2 = ext4_test_and_set_bit(ino, inode_bitmap_bh->b_data);
+		if (ret2) {
+			/* Someone already took the bit. Repeat the search
+			 * with lock held.
+			 */
+			ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &ino);
+			if (ret2) {
+				ext4_set_bit(ino, inode_bitmap_bh->b_data);
+				ret2 = 0;
+			} else {
+				ret2 = 1; /* we didn't grab the inode */
+			}
+		}
 		ext4_unlock_group(sb, group);
 		ino++;		/* the inode bitmap is zero-based */
 		if (!ret2)
 			goto got; /* we grabbed the inode! */
-next_inode:
+
 		if (ino < EXT4_INODES_PER_GROUP(sb))
 			goto repeat_in_this_group;
 next_group:
+#ifdef MY_ABC_HERE
+		if (++group == ngroups || (MAX_U32_IN_U64 < (u64)group*EXT4_INODES_PER_GROUP(sb))) {
+			group = 0;
+		}
+#else /* MY_ABC_HERE */
 		if (++group == ngroups)
 			group = 0;
+#endif /* MY_ABC_HERE */
 	}
 	err = -ENOSPC;
 	goto out;
@@ -1016,6 +1079,18 @@ got:
 	inode->i_blocks = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = ei->i_crtime =
 						       ext4_current_time(inode);
+#ifdef MY_ABC_HERE
+	if (ext4_is_ext3_sb(inode->i_sb))
+		inode->i_create_time = CURRENT_TIME_SEC;
+	else
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	inode->i_create_time = ei->i_crtime;
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+	inode->i_archive_bit = ALL_SYNO_ARCHIVE;	/* set archive bit on creation */
+#endif /* MY_ABC_HERE || MY_ABC_HERE*/
 
 	memset(ei->i_data, 0, sizeof(ei->i_data));
 	ei->i_dir_start_lookup = 0;
@@ -1028,6 +1103,9 @@ got:
 	ei->i_dtime = 0;
 	ei->i_block_group = group;
 	ei->i_last_alloc_group = ~0;
+#ifdef MY_ABC_HERE
+	ei->i_is_swapfile = false;
+#endif /* MY_ABC_HERE */
 
 	ext4_set_inode_flags(inode);
 	if (IS_DIRSYNC(inode))
@@ -1040,6 +1118,8 @@ got:
 		err = -EIO;
 		ext4_error(sb, "failed to insert inode %lu: doubly allocated?",
 			   inode->i_ino);
+		ext4_mark_group_bitmap_corrupted(sb, group,
+					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 		goto out;
 	}
 	spin_lock(&sbi->s_next_gen_lock);
@@ -1060,7 +1140,7 @@ got:
 	ext4_clear_state_flags(ei); /* Only relevant on 32-bit archs */
 	ext4_set_inode_state(inode, EXT4_STATE_NEW);
 
-	ei->i_extra_isize = EXT4_SB(sb)->s_want_extra_isize;
+	ei->i_extra_isize = sbi->s_want_extra_isize;
 	ei->i_inline_off = 0;
 	if (ext4_has_feature_inline_data(sb))
 		ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
@@ -1136,11 +1216,8 @@ struct inode *ext4_orphan_get(struct super_block *sb, unsigned long ino)
 	block_group = (ino - 1) / EXT4_INODES_PER_GROUP(sb);
 	bit = (ino - 1) % EXT4_INODES_PER_GROUP(sb);
 	bitmap_bh = ext4_read_inode_bitmap(sb, block_group);
-	if (IS_ERR(bitmap_bh)) {
-		ext4_error(sb, "inode bitmap error %ld for orphan %lu",
-			   ino, PTR_ERR(bitmap_bh));
+	if (IS_ERR(bitmap_bh))
 		return (struct inode *) bitmap_bh;
-	}
 
 	/* Having the inode bit set should be a 100% indicator that this
 	 * is a valid orphan (no e2fsck run on fs).  Orphans also include

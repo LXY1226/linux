@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/mtd/nand/pxa3xx_nand.c
  *
@@ -31,9 +34,13 @@
 #include <linux/of_device.h>
 #include <linux/of_mtd.h>
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #if defined(CONFIG_ARM) && (defined(CONFIG_ARCH_PXA) || defined(CONFIG_ARCH_MMP))
 #define ARCH_HAS_DMA
 #endif
+#endif /* MY_ABC_HERE */
 
 #include <linux/platform_data/mtd-nand-pxa3xx.h>
 
@@ -172,7 +179,11 @@ enum pxa3xx_nand_variant {
 
 struct pxa3xx_nand_host {
 	struct nand_chip	chip;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	struct mtd_info         *mtd;
+#endif /* MY_ABC_HERE */
 	void			*info_data;
 
 	/* page size of attached chip */
@@ -228,14 +239,53 @@ struct pxa3xx_nand_info {
 	int			use_spare;	/* use spare ? */
 	int			need_wait;
 
+#if defined(MY_ABC_HERE)
+	/* Amount of real data per full chunk */
+	unsigned int		chunk_size;
+#else /* MY_ABC_HERE */
 	unsigned int		data_size;	/* data to be read from FIFO */
 	unsigned int		chunk_size;	/* split commands chunk size */
 	unsigned int		oob_size;
+#endif /* MY_ABC_HERE */
+
+	/* Amount of spare data per full chunk */
 	unsigned int		spare_size;
+
+#if defined(MY_ABC_HERE)
+	/* Number of full chunks (i.e chunk_size + spare_size) */
+	unsigned int            nfullchunks;
+
+	/*
+	 * Total number of chunks. If equal to nfullchunks, then there
+	 * are only full chunks. Otherwise, there is one last chunk of
+	 * size (last_chunk_size + last_spare_size)
+	 */
+	unsigned int            ntotalchunks;
+
+	/* Amount of real data in the last chunk */
+	unsigned int		last_chunk_size;
+
+	/* Amount of spare data in the last chunk */
+	unsigned int		last_spare_size;
+#endif /* MY_ABC_HERE */
+
 	unsigned int		ecc_size;
 	unsigned int		ecc_err_cnt;
 	unsigned int		max_bitflips;
 	int 			retcode;
+
+#if defined(MY_ABC_HERE)
+	/*
+	 * Variables only valid during command
+	 * execution. step_chunk_size and step_spare_size is the
+	 * amount of real data and spare data in the current
+	 * chunk. cur_chunk is the current chunk being
+	 * read/programmed.
+	 */
+	unsigned int		step_chunk_size;
+	unsigned int		step_spare_size;
+	unsigned int            cur_chunk;
+#endif /* MY_ABC_HERE */
 
 	/* cached register value */
 	uint32_t		reg_ndcr;
@@ -455,14 +505,24 @@ static int pxa3xx_nand_init_timings_compat(struct pxa3xx_nand_host *host,
 	struct nand_chip *chip = &host->chip;
 	struct pxa3xx_nand_info *info = host->info_data;
 	const struct pxa3xx_nand_flash *f = NULL;
+#if defined(MY_ABC_HERE)
+	struct mtd_info *mtd = nand_to_mtd(&host->chip);
+#endif /* MY_ABC_HERE */
 	int i, id, ntypes;
 
 	ntypes = ARRAY_SIZE(builtin_flash_types);
 
+#if defined(MY_ABC_HERE)
+	chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
+
+	id = chip->read_byte(mtd);
+	id |= chip->read_byte(mtd) << 0x8;
+#else /* MY_ABC_HERE */
 	chip->cmdfunc(host->mtd, NAND_CMD_READID, 0x00, -1);
 
 	id = chip->read_byte(host->mtd);
 	id |= chip->read_byte(host->mtd) << 0x8;
+#endif /* MY_ABC_HERE */
 
 	for (i = 0; i < ntypes; i++) {
 		f = &builtin_flash_types[i];
@@ -531,6 +591,9 @@ static int pxa3xx_nand_init(struct pxa3xx_nand_host *host)
 	return 0;
 }
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 /*
  * Set the data and OOB size, depending on the selected
  * spare and ECC configuration.
@@ -549,6 +612,7 @@ static void pxa3xx_set_datasize(struct pxa3xx_nand_info *info,
 	if (!info->use_ecc)
 		info->oob_size += info->ecc_size;
 }
+#endif /* MY_ABC_HERE */
 
 /**
  * NOTE: it is a must to set ND_RUN firstly, then write
@@ -665,10 +729,25 @@ static void drain_fifo(struct pxa3xx_nand_info *info, void *data, int len)
 
 static void handle_data_pio(struct pxa3xx_nand_info *info)
 {
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	unsigned int do_bytes = min(info->data_size, info->chunk_size);
+#endif /* MY_ABC_HERE */
 
 	switch (info->state) {
 	case STATE_PIO_WRITING:
+#if defined(MY_ABC_HERE)
+		if (info->step_chunk_size)
+			writesl(info->mmio_base + NDDB,
+				info->data_buff + info->data_buff_pos,
+				DIV_ROUND_UP(info->step_chunk_size, 4));
+
+		if (info->step_spare_size)
+			writesl(info->mmio_base + NDDB,
+				info->oob_buff + info->oob_buff_pos,
+				DIV_ROUND_UP(info->step_spare_size, 4));
+#else /* MY_ABC_HERE */
 		writesl(info->mmio_base + NDDB,
 			info->data_buff + info->data_buff_pos,
 			DIV_ROUND_UP(do_bytes, 4));
@@ -677,8 +756,20 @@ static void handle_data_pio(struct pxa3xx_nand_info *info)
 			writesl(info->mmio_base + NDDB,
 				info->oob_buff + info->oob_buff_pos,
 				DIV_ROUND_UP(info->oob_size, 4));
+#endif /* MY_ABC_HERE */
 		break;
 	case STATE_PIO_READING:
+#if defined(MY_ABC_HERE)
+		if (info->step_chunk_size)
+			drain_fifo(info,
+				   info->data_buff + info->data_buff_pos,
+				   DIV_ROUND_UP(info->step_chunk_size, 4));
+
+		if (info->step_spare_size)
+			drain_fifo(info,
+				   info->oob_buff + info->oob_buff_pos,
+				   DIV_ROUND_UP(info->step_spare_size, 4));
+#else /* MY_ABC_HERE */
 		drain_fifo(info,
 			   info->data_buff + info->data_buff_pos,
 			   DIV_ROUND_UP(do_bytes, 4));
@@ -687,6 +778,7 @@ static void handle_data_pio(struct pxa3xx_nand_info *info)
 			drain_fifo(info,
 				   info->oob_buff + info->oob_buff_pos,
 				   DIV_ROUND_UP(info->oob_size, 4));
+#endif /* MY_ABC_HERE */
 		break;
 	default:
 		dev_err(&info->pdev->dev, "%s: invalid state %d\n", __func__,
@@ -695,9 +787,14 @@ static void handle_data_pio(struct pxa3xx_nand_info *info)
 	}
 
 	/* Update buffer pointers for multi-page read/write */
+#if defined(MY_ABC_HERE)
+	info->data_buff_pos += info->step_chunk_size;
+	info->oob_buff_pos += info->step_spare_size;
+#else /* MY_ABC_HERE */
 	info->data_buff_pos += do_bytes;
 	info->oob_buff_pos += info->oob_size;
 	info->data_size -= do_bytes;
+#endif /* MY_ABC_HERE */
 }
 
 static void pxa3xx_nand_data_dma_irq(void *data)
@@ -738,8 +835,14 @@ static void start_data_dma(struct pxa3xx_nand_info *info)
 				info->state);
 		BUG();
 	}
+#if defined(MY_ABC_HERE)
+	info->sg.length = info->chunk_size;
+	if (info->use_spare)
+		info->sg.length += info->spare_size + info->ecc_size;
+#else /* MY_ABC_HERE */
 	info->sg.length = info->data_size +
 		(info->oob_size ? info->spare_size + info->ecc_size : 0);
+#endif /* MY_ABC_HERE */
 	dma_map_sg(info->dma_chan->device->dev, &info->sg, 1, info->dma_dir);
 
 	tx = dmaengine_prep_slave_sg(info->dma_chan, &info->sg, 1, direction,
@@ -895,14 +998,27 @@ static void set_command_address(struct pxa3xx_nand_info *info,
 static void prepare_start_command(struct pxa3xx_nand_info *info, int command)
 {
 	struct pxa3xx_nand_host *host = info->host[info->cs];
+#if defined(MY_ABC_HERE)
+	struct mtd_info *mtd = nand_to_mtd(&host->chip);
+#else /* MY_ABC_HERE */
 	struct mtd_info *mtd = host->mtd;
+#endif /* MY_ABC_HERE */
 
 	/* reset data and oob column point to handle data */
 	info->buf_start		= 0;
 	info->buf_count		= 0;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	info->oob_size		= 0;
+#endif /* MY_ABC_HERE */
 	info->data_buff_pos	= 0;
 	info->oob_buff_pos	= 0;
+#if defined(MY_ABC_HERE)
+	info->step_chunk_size   = 0;
+	info->step_spare_size   = 0;
+	info->cur_chunk         = 0;
+#endif /* MY_ABC_HERE */
 	info->use_ecc		= 0;
 	info->use_spare		= 1;
 	info->retcode		= ERR_NONE;
@@ -914,8 +1030,12 @@ static void prepare_start_command(struct pxa3xx_nand_info *info, int command)
 	case NAND_CMD_READ0:
 	case NAND_CMD_PAGEPROG:
 		info->use_ecc = 1;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	case NAND_CMD_READOOB:
 		pxa3xx_set_datasize(info, mtd);
+#endif /* MY_ABC_HERE */
 		break;
 	case NAND_CMD_PARAM:
 		info->use_spare = 0;
@@ -948,7 +1068,11 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 	struct mtd_info *mtd;
 
 	host = info->host[info->cs];
+#if defined(MY_ABC_HERE)
+	mtd = nand_to_mtd(&host->chip);
+#else /* MY_ABC_HERE */
 	mtd = host->mtd;
+#endif /* MY_ABC_HERE */
 	addr_cycle = 0;
 	exec_cmd = 1;
 
@@ -974,6 +1098,16 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 		if (command == NAND_CMD_READOOB)
 			info->buf_start += mtd->writesize;
 
+#if defined(MY_ABC_HERE)
+		if (info->cur_chunk < info->nfullchunks) {
+			info->step_chunk_size = info->chunk_size;
+			info->step_spare_size = info->spare_size;
+		} else {
+			info->step_chunk_size = info->last_chunk_size;
+			info->step_spare_size = info->last_spare_size;
+		}
+#endif /* MY_ABC_HERE */
+
 		/*
 		 * Multiple page read needs an 'extended command type' field,
 		 * which is either naked-read or last-read according to the
@@ -985,8 +1119,13 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 			info->ndcb0 |= NDCB0_DBC | (NAND_CMD_READSTART << 8)
 					| NDCB0_LEN_OVRD
 					| NDCB0_EXT_CMD_TYPE(ext_cmd_type);
+#if defined(MY_ABC_HERE)
+			info->ndcb3 = info->step_chunk_size +
+				info->step_spare_size;
+#else /* MY_ABC_HERE */
 			info->ndcb3 = info->chunk_size +
 				      info->oob_size;
+#endif /* MY_ABC_HERE */
 		}
 
 		set_command_address(info, mtd->writesize, column, page_addr);
@@ -1006,8 +1145,12 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 				| NDCB0_EXT_CMD_TYPE(ext_cmd_type)
 				| addr_cycle
 				| command;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 			/* No data transfer in this case */
 			info->data_size = 0;
+#endif /* MY_ABC_HERE */
 			exec_cmd = 1;
 		}
 		break;
@@ -1019,6 +1162,16 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 			break;
 		}
 
+#if defined(MY_ABC_HERE)
+		if (info->cur_chunk < info->nfullchunks) {
+			info->step_chunk_size = info->chunk_size;
+			info->step_spare_size = info->spare_size;
+		} else {
+			info->step_chunk_size = info->last_chunk_size;
+			info->step_spare_size = info->last_spare_size;
+		}
+#endif /* MY_ABC_HERE */
+
 		/* Second command setting for large pages */
 		if (mtd->writesize > PAGE_CHUNK_SIZE) {
 			/*
@@ -1029,14 +1182,23 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 			info->ndcb0 |= NDCB0_CMD_TYPE(0x1)
 					| NDCB0_LEN_OVRD
 					| NDCB0_EXT_CMD_TYPE(ext_cmd_type);
+#if defined(MY_ABC_HERE)
+			info->ndcb3 = info->step_chunk_size +
+				      info->step_spare_size;
+#else /* MY_ABC_HERE */
 			info->ndcb3 = info->chunk_size +
 				      info->oob_size;
+#endif /* MY_ABC_HERE */
 
 			/*
 			 * This is the command dispatch that completes a chunked
 			 * page program operation.
 			 */
+#if defined(MY_ABC_HERE)
+			if (info->cur_chunk == info->ntotalchunks) {
+#else /* MY_ABC_HERE */
 			if (info->data_size == 0) {
+#endif /* MY_ABC_HERE */
 				info->ndcb0 = NDCB0_CMD_TYPE(0x1)
 					| NDCB0_EXT_CMD_TYPE(ext_cmd_type)
 					| command;
@@ -1063,7 +1225,11 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 				| command;
 		info->ndcb1 = (column & 0xFF);
 		info->ndcb3 = INIT_BUFFER_SIZE;
+#if defined(MY_ABC_HERE)
+		info->step_chunk_size = INIT_BUFFER_SIZE;
+#else /* MY_ABC_HERE */
 		info->data_size = INIT_BUFFER_SIZE;
+#endif /* MY_ABC_HERE */
 		break;
 
 	case NAND_CMD_READID:
@@ -1073,7 +1239,11 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 				| command;
 		info->ndcb1 = (column & 0xFF);
 
+#if defined(MY_ABC_HERE)
+		info->step_chunk_size = 8;
+#else /* MY_ABC_HERE */
 		info->data_size = 8;
+#endif /* MY_ABC_HERE */
 		break;
 	case NAND_CMD_STATUS:
 		info->buf_count = 1;
@@ -1081,7 +1251,11 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 				| NDCB0_ADDR_CYC(1)
 				| command;
 
+#if defined(MY_ABC_HERE)
+		info->step_chunk_size = 8;
+#else /* MY_ABC_HERE */
 		info->data_size = 8;
+#endif /* MY_ABC_HERE */
 		break;
 
 	case NAND_CMD_ERASE1:
@@ -1118,7 +1292,12 @@ static int prepare_set_command(struct pxa3xx_nand_info *info, int command,
 static void nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 			 int column, int page_addr)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	int exec_cmd;
 
@@ -1166,7 +1345,12 @@ static void nand_cmdfunc_extended(struct mtd_info *mtd,
 				  const unsigned command,
 				  int column, int page_addr)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	int exec_cmd, ext_cmd_type;
 
@@ -1239,22 +1423,44 @@ static void nand_cmdfunc_extended(struct mtd_info *mtd,
 			break;
 		}
 
+#if defined(MY_ABC_HERE)
+		/* Only a few commands need several steps */
+		if (command != NAND_CMD_PAGEPROG &&
+		    command != NAND_CMD_READ0    &&
+		    command != NAND_CMD_READOOB)
+			break;
+
+		info->cur_chunk++;
+#endif /* MY_ABC_HERE */
+
 		/* Check if the sequence is complete */
+#if defined(MY_ABC_HERE)
+		if (info->cur_chunk == info->ntotalchunks && command != NAND_CMD_PAGEPROG)
+#else /* MY_ABC_HERE */
 		if (info->data_size == 0 && command != NAND_CMD_PAGEPROG)
+#endif /* MY_ABC_HERE */
 			break;
 
 		/*
 		 * After a splitted program command sequence has issued
 		 * the command dispatch, the command sequence is complete.
 		 */
+#if defined(MY_ABC_HERE)
+		if (info->cur_chunk == (info->ntotalchunks + 1) &&
+#else /* MY_ABC_HERE */
 		if (info->data_size == 0 &&
+#endif /* MY_ABC_HERE */
 		    command == NAND_CMD_PAGEPROG &&
 		    ext_cmd_type == EXT_CMD_TYPE_DISPATCH)
 			break;
 
 		if (command == NAND_CMD_READ0 || command == NAND_CMD_READOOB) {
 			/* Last read: issue a 'last naked read' */
+#if defined(MY_ABC_HERE)
+			if (info->cur_chunk == info->ntotalchunks - 1)
+#else /* MY_ABC_HERE */
 			if (info->data_size == info->chunk_size)
+#endif /* MY_ABC_HERE */
 				ext_cmd_type = EXT_CMD_TYPE_LAST_RW;
 			else
 				ext_cmd_type = EXT_CMD_TYPE_NAKED_RW;
@@ -1264,7 +1470,11 @@ static void nand_cmdfunc_extended(struct mtd_info *mtd,
 		 * the command dispatch must be issued to complete.
 		 */
 		} else if (command == NAND_CMD_PAGEPROG &&
+#if defined(MY_ABC_HERE)
+			   info->cur_chunk == info->ntotalchunks) {
+#else /* MY_ABC_HERE */
 			   info->data_size == 0) {
+#endif /* MY_ABC_HERE */
 				ext_cmd_type = EXT_CMD_TYPE_DISPATCH;
 		}
 	} while (1);
@@ -1286,7 +1496,11 @@ static int pxa3xx_nand_read_page_hwecc(struct mtd_info *mtd,
 		struct nand_chip *chip, uint8_t *buf, int oob_required,
 		int page)
 {
+#if defined(MY_ABC_HERE)
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 
 	chip->read_buf(mtd, buf, mtd->writesize);
@@ -1312,7 +1526,12 @@ static int pxa3xx_nand_read_page_hwecc(struct mtd_info *mtd,
 
 static uint8_t pxa3xx_nand_read_byte(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	char retval = 0xFF;
 
@@ -1325,7 +1544,12 @@ static uint8_t pxa3xx_nand_read_byte(struct mtd_info *mtd)
 
 static u16 pxa3xx_nand_read_word(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	u16 retval = 0xFFFF;
 
@@ -1338,7 +1562,12 @@ static u16 pxa3xx_nand_read_word(struct mtd_info *mtd)
 
 static void pxa3xx_nand_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	int real_len = min_t(size_t, len, info->buf_count - info->buf_start);
 
@@ -1349,7 +1578,12 @@ static void pxa3xx_nand_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 static void pxa3xx_nand_write_buf(struct mtd_info *mtd,
 		const uint8_t *buf, int len)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	int real_len = min_t(size_t, len, info->buf_count - info->buf_start);
 
@@ -1364,7 +1598,12 @@ static void pxa3xx_nand_select_chip(struct mtd_info *mtd, int chip)
 
 static int pxa3xx_nand_waitfunc(struct mtd_info *mtd, struct nand_chip *this)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 
 	if (info->need_wait) {
@@ -1387,6 +1626,41 @@ static int pxa3xx_nand_waitfunc(struct mtd_info *mtd, struct nand_chip *this)
 	return NAND_STATUS_READY;
 }
 
+#if defined(MY_ABC_HERE)
+static int pxa3xx_nand_config_ident(struct pxa3xx_nand_info *info)
+{
+	struct pxa3xx_nand_host *host = info->host[info->cs];
+	struct platform_device *pdev = info->pdev;
+	struct pxa3xx_nand_platform_data *pdata = dev_get_platdata(&pdev->dev);
+	const struct nand_sdr_timings *timings;
+
+	/* Configure default flash values */
+	info->chunk_size = PAGE_CHUNK_SIZE;
+	info->reg_ndcr = 0x0; /* enable all interrupts */
+	info->reg_ndcr |= (pdata->enable_arbiter) ? NDCR_ND_ARB_EN : 0;
+	info->reg_ndcr |= NDCR_RD_ID_CNT(READ_ID_BYTES);
+	info->reg_ndcr |= NDCR_SPARE_EN;
+
+	/* use the common timing to make a try */
+	timings = onfi_async_timing_mode_to_sdr_timings(0);
+	if (IS_ERR(timings))
+		return PTR_ERR(timings);
+
+	pxa3xx_nand_set_sdr_timing(host, timings);
+	return 0;
+}
+
+static void pxa3xx_nand_config_tail(struct pxa3xx_nand_info *info)
+{
+	struct pxa3xx_nand_host *host = info->host[info->cs];
+	struct nand_chip *chip = &host->chip;
+	struct mtd_info *mtd = nand_to_mtd(chip);
+
+	info->reg_ndcr |= (host->col_addr_cycles == 2) ? NDCR_RA_START : 0;
+	info->reg_ndcr |= (chip->page_shift == 6) ? NDCR_PG_PER_BLK : 0;
+	info->reg_ndcr |= (mtd->writesize == 2048) ? NDCR_PAGE_SZ : 0;
+}
+#else /* MY_ABC_HERE */
 static int pxa3xx_nand_config_flash(struct pxa3xx_nand_info *info)
 {
 	struct platform_device *pdev = info->pdev;
@@ -1406,7 +1680,24 @@ static int pxa3xx_nand_config_flash(struct pxa3xx_nand_info *info)
 
 	return 0;
 }
+#endif /* MY_ABC_HERE */
 
+#if defined(MY_ABC_HERE)
+static void pxa3xx_nand_detect_config(struct pxa3xx_nand_info *info)
+{
+	struct platform_device *pdev = info->pdev;
+	struct pxa3xx_nand_platform_data *pdata = dev_get_platdata(&pdev->dev);
+	uint32_t ndcr = nand_readl(info, NDCR);
+
+	/* Set an initial chunk size */
+	info->chunk_size = ndcr & NDCR_PAGE_SZ ? 2048 : 512;
+	info->reg_ndcr = ndcr &
+		~(NDCR_INT_MASK | NDCR_ND_ARB_EN | NFCV1_NDCR_ARB_CNTL);
+	info->reg_ndcr |= (pdata->enable_arbiter) ? NDCR_ND_ARB_EN : 0;
+	info->ndtr0cs0 = nand_readl(info, NDTR0CS0);
+	info->ndtr1cs0 = nand_readl(info, NDTR1CS0);
+}
+#else /* MY_ABC_HERE */
 static int pxa3xx_nand_detect_config(struct pxa3xx_nand_info *info)
 {
 	uint32_t ndcr = nand_readl(info, NDCR);
@@ -1419,6 +1710,7 @@ static int pxa3xx_nand_detect_config(struct pxa3xx_nand_info *info)
 	info->ndtr1cs0 = nand_readl(info, NDTR1CS0);
 	return 0;
 }
+#endif /* MY_ABC_HERE */
 
 static int pxa3xx_nand_init_buff(struct pxa3xx_nand_info *info)
 {
@@ -1483,6 +1775,9 @@ static void pxa3xx_nand_free_buff(struct pxa3xx_nand_info *info)
 	kfree(info->data_buff);
 }
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 static int pxa3xx_nand_sensing(struct pxa3xx_nand_host *host)
 {
 	struct pxa3xx_nand_info *info = host->info_data;
@@ -1508,12 +1803,17 @@ static int pxa3xx_nand_sensing(struct pxa3xx_nand_host *host)
 
 	return 0;
 }
+#endif /* MY_ABC_HERE */
 
 static int pxa_ecc_init(struct pxa3xx_nand_info *info,
 			struct nand_ecc_ctrl *ecc,
 			int strength, int ecc_stepsize, int page_size)
 {
 	if (strength == 1 && ecc_stepsize == 512 && page_size == 2048) {
+#if defined(MY_ABC_HERE)
+		info->nfullchunks = 1;
+		info->ntotalchunks = 1;
+#endif /* MY_ABC_HERE */
 		info->chunk_size = 2048;
 		info->spare_size = 40;
 		info->ecc_size = 24;
@@ -1522,6 +1822,10 @@ static int pxa_ecc_init(struct pxa3xx_nand_info *info,
 		ecc->strength = 1;
 
 	} else if (strength == 1 && ecc_stepsize == 512 && page_size == 512) {
+#if defined(MY_ABC_HERE)
+		info->nfullchunks = 1;
+		info->ntotalchunks = 1;
+#endif /* MY_ABC_HERE */
 		info->chunk_size = 512;
 		info->spare_size = 8;
 		info->ecc_size = 8;
@@ -1535,6 +1839,10 @@ static int pxa_ecc_init(struct pxa3xx_nand_info *info,
 	 */
 	} else if (strength == 4 && ecc_stepsize == 512 && page_size == 2048) {
 		info->ecc_bch = 1;
+#if defined(MY_ABC_HERE)
+		info->nfullchunks = 1;
+		info->ntotalchunks = 1;
+#endif /* MY_ABC_HERE */
 		info->chunk_size = 2048;
 		info->spare_size = 32;
 		info->ecc_size = 32;
@@ -1545,6 +1853,10 @@ static int pxa_ecc_init(struct pxa3xx_nand_info *info,
 
 	} else if (strength == 4 && ecc_stepsize == 512 && page_size == 4096) {
 		info->ecc_bch = 1;
+#if defined(MY_ABC_HERE)
+		info->nfullchunks = 2;
+		info->ntotalchunks = 2;
+#endif /* MY_ABC_HERE */
 		info->chunk_size = 2048;
 		info->spare_size = 32;
 		info->ecc_size = 32;
@@ -1559,8 +1871,16 @@ static int pxa_ecc_init(struct pxa3xx_nand_info *info,
 	 */
 	} else if (strength == 8 && ecc_stepsize == 512 && page_size == 4096) {
 		info->ecc_bch = 1;
+#if defined(MY_ABC_HERE)
+		info->nfullchunks = 4;
+		info->ntotalchunks = 5;
+#endif /* MY_ABC_HERE */
 		info->chunk_size = 1024;
 		info->spare_size = 0;
+#if defined(MY_ABC_HERE)
+		info->last_chunk_size = 0;
+		info->last_spare_size = 64;
+#endif /* MY_ABC_HERE */
 		info->ecc_size = 32;
 		ecc->mode = NAND_ECC_HW;
 		ecc->size = info->chunk_size;
@@ -1580,14 +1900,32 @@ static int pxa_ecc_init(struct pxa3xx_nand_info *info,
 
 static int pxa3xx_nand_scan(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct pxa3xx_nand_host *host = chip->priv;
+#else /* MY_ABC_HERE */
 	struct pxa3xx_nand_host *host = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info = host->info_data;
 	struct platform_device *pdev = info->pdev;
 	struct pxa3xx_nand_platform_data *pdata = dev_get_platdata(&pdev->dev);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	int ret;
 	uint16_t ecc_strength, ecc_step;
 
+#if defined(MY_ABC_HERE)
+	if (pdata->keep_config) {
+		pxa3xx_nand_detect_config(info);
+	} else {
+		ret = pxa3xx_nand_config_ident(info);
+		if (ret)
+			return ret;
+	}
+#else /* MY_ABC_HERE */
 	if (pdata->keep_config && !pxa3xx_nand_detect_config(info))
 		goto KEEP_CONFIG;
 
@@ -1608,6 +1946,7 @@ static int pxa3xx_nand_scan(struct mtd_info *mtd)
 
 KEEP_CONFIG:
 	info->reg_ndcr |= (pdata->enable_arbiter) ? NDCR_ND_ARB_EN : 0;
+#endif /* MY_ABC_HERE */
 	if (info->reg_ndcr & NDCR_DWIDTH_M)
 		chip->options |= NAND_BUSWIDTH_16;
 
@@ -1692,11 +2031,20 @@ KEEP_CONFIG:
 		host->row_addr_cycles = 3;
 	else
 		host->row_addr_cycles = 2;
+
+#if defined(MY_ABC_HERE)
+	if (!pdata->keep_config)
+		pxa3xx_nand_config_tail(info);
+#endif /* MY_ABC_HERE */
+
 	return nand_scan_tail(mtd);
 }
 
 static int alloc_nand_resource(struct platform_device *pdev)
 {
+#if defined(MY_ABC_HERE)
+	struct device_node *np = pdev->dev.of_node;
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_platform_data *pdata;
 	struct pxa3xx_nand_info *info;
 	struct pxa3xx_nand_host *host;
@@ -1708,14 +2056,33 @@ static int alloc_nand_resource(struct platform_device *pdev)
 	pdata = dev_get_platdata(&pdev->dev);
 	if (pdata->num_cs <= 0)
 		return -ENODEV;
+#if defined(MY_ABC_HERE)
+	info = devm_kzalloc(&pdev->dev,
+			    sizeof(*info) + sizeof(*host) * pdata->num_cs,
+			    GFP_KERNEL);
+#else /* MY_ABC_HERE */
 	info = devm_kzalloc(&pdev->dev, sizeof(*info) + (sizeof(*mtd) +
 			    sizeof(*host)) * pdata->num_cs, GFP_KERNEL);
+#endif /* MY_ABC_HERE */
 	if (!info)
 		return -ENOMEM;
 
 	info->pdev = pdev;
 	info->variant = pxa3xx_nand_get_variant(pdev);
 	for (cs = 0; cs < pdata->num_cs; cs++) {
+#if defined(MY_ABC_HERE)
+		host = (void *)&info[1] + sizeof(*host) * cs;
+		chip = &host->chip;
+		chip->priv = host;
+		mtd = nand_to_mtd(chip);
+		info->host[cs] = host;
+		host->cs = cs;
+		host->info_data = info;
+		mtd->priv = chip;
+		mtd->dev.parent = &pdev->dev;
+		/* FIXME: all chips use the same device tree partitions */
+		nand_set_flash_node(chip, np);
+#else /* MY_ABC_HERE */
 		mtd = (void *)&info[1] + (sizeof(*mtd) + sizeof(*host)) * cs;
 		chip = (struct nand_chip *)(&mtd[1]);
 		host = (struct pxa3xx_nand_host *)chip;
@@ -1725,7 +2092,11 @@ static int alloc_nand_resource(struct platform_device *pdev)
 		host->info_data = info;
 		mtd->priv = host;
 		mtd->dev.parent = &pdev->dev;
+#endif /* MY_ABC_HERE */
 
+#if defined(MY_ABC_HERE)
+		chip->priv = host;
+#endif /* MY_ABC_HERE */
 		chip->ecc.read_page	= pxa3xx_nand_read_page_hwecc;
 		chip->ecc.write_page	= pxa3xx_nand_write_page_hwecc;
 		chip->controller        = &info->controller;
@@ -1742,6 +2113,18 @@ static int alloc_nand_resource(struct platform_device *pdev)
 	spin_lock_init(&chip->controller->lock);
 	init_waitqueue_head(&chip->controller->wq);
 	info->clk = devm_clk_get(&pdev->dev, NULL);
+#if defined(MY_ABC_HERE)
+	if (!IS_ERR(info->clk)) {
+		ret = clk_prepare_enable(info->clk);
+		if (ret < 0)
+			return ret;
+	} else if (PTR_ERR(info->clk) == -EPROBE_DEFER) {
+		return -EPROBE_DEFER;
+	} else {
+		dev_err(&pdev->dev, "failed to get nand clock\n");
+		return PTR_ERR(info->clk);
+	}
+#else /* MY_ABC_HERE */
 	if (IS_ERR(info->clk)) {
 		dev_err(&pdev->dev, "failed to get nand clock\n");
 		return PTR_ERR(info->clk);
@@ -1749,6 +2132,7 @@ static int alloc_nand_resource(struct platform_device *pdev)
 	ret = clk_prepare_enable(info->clk);
 	if (ret < 0)
 		return ret;
+#endif /* MY_ABC_HERE */
 
 	if (use_dma) {
 		r = platform_get_resource(pdev, IORESOURCE_DMA, 0);
@@ -1845,7 +2229,11 @@ static int pxa3xx_nand_remove(struct platform_device *pdev)
 	clk_disable_unprepare(info->clk);
 
 	for (cs = 0; cs < pdata->num_cs; cs++)
+#if defined(MY_ABC_HERE)
+		nand_release(nand_to_mtd(&info->host[cs]->chip));
+#else /* MY_ABC_HERE */
 		nand_release(info->host[cs]->mtd);
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 
@@ -1886,7 +2274,11 @@ static int pxa3xx_nand_probe_dt(struct platform_device *pdev)
 static int pxa3xx_nand_probe(struct platform_device *pdev)
 {
 	struct pxa3xx_nand_platform_data *pdata;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	struct mtd_part_parser_data ppdata = {};
+#endif /* MY_ABC_HERE */
 	struct pxa3xx_nand_info *info;
 	int ret, cs, probe_success, dma_available;
 
@@ -1917,7 +2309,11 @@ static int pxa3xx_nand_probe(struct platform_device *pdev)
 	info = platform_get_drvdata(pdev);
 	probe_success = 0;
 	for (cs = 0; cs < pdata->num_cs; cs++) {
+#if defined(MY_ABC_HERE)
+		struct mtd_info *mtd = nand_to_mtd(&info->host[cs]->chip);
+#else /* MY_ABC_HERE */
 		struct mtd_info *mtd = info->host[cs]->mtd;
+#endif /* MY_ABC_HERE */
 
 		/*
 		 * The mtd name matches the one used in 'mtdparts' kernel
@@ -1933,10 +2329,15 @@ static int pxa3xx_nand_probe(struct platform_device *pdev)
 			continue;
 		}
 
+#if defined(MY_ABC_HERE)
+		ret = mtd_device_register(mtd, pdata->parts[cs],
+					  pdata->nr_parts[cs]);
+#else /* MY_ABC_HERE */
 		ppdata.of_node = pdev->dev.of_node;
 		ret = mtd_device_parse_register(mtd, NULL,
 						&ppdata, pdata->parts[cs],
 						pdata->nr_parts[cs]);
+#endif /* MY_ABC_HERE */
 		if (!ret)
 			probe_success = 1;
 	}
@@ -1959,12 +2360,22 @@ static int pxa3xx_nand_suspend(struct device *dev)
 		return -EAGAIN;
 	}
 
+#if defined(MY_ABC_HERE)
+	clk_disable(info->clk);
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 
 static int pxa3xx_nand_resume(struct device *dev)
 {
 	struct pxa3xx_nand_info *info = dev_get_drvdata(dev);
+#if defined(MY_ABC_HERE)
+	int ret;
+
+	ret = clk_enable(info->clk);
+	if (ret < 0)
+		return ret;
+#endif /* MY_ABC_HERE */
 
 	/* We don't want to handle interrupt without calling mtd routine */
 	disable_int(info, NDCR_INT_MASK);

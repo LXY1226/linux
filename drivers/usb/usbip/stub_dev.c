@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2003-2008 Takahiro Hirofuchi
  *
@@ -129,11 +132,15 @@ static ssize_t store_sockfd(struct device *dev, struct device_attribute *attr,
 	} else {
 		dev_info(dev, "stub down\n");
 
+#ifdef MY_ABC_HERE
+	/* Skip the step to force shutdown socket and reset device */
+#else /* MY_ABC_HERE */
 		spin_lock_irq(&sdev->ud.lock);
 		if (sdev->ud.status != SDEV_ST_USED)
 			goto err;
 
 		spin_unlock_irq(&sdev->ud.lock);
+#endif /* MY_ABC_HERE */
 
 		usbip_event_add(&sdev->ud, SDEV_EVENT_DOWN);
 	}
@@ -530,7 +537,11 @@ static int stub_resume(struct usb_device *udev, pm_message_t message)
 #endif	/* CONFIG_PM */
 
 struct usb_device_driver stub_driver = {
+#ifdef MY_ABC_HERE
+	.name		= "usbip",
+#else /* MY_ABC_HERE */
 	.name		= "usbip-host",
+#endif /* MY_ABC_HERE */
 	.probe		= stub_probe,
 	.disconnect	= stub_disconnect,
 #ifdef CONFIG_PM

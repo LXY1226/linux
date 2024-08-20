@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/attr.c
  *
@@ -16,6 +19,9 @@
 #include <linux/evm.h>
 #include <linux/ima.h>
 
+#ifdef MY_ABC_HERE
+#include "synoacl_int.h"
+#endif /* MY_ABC_HERE */
 /**
  * inode_change_ok - check if attribute changes to an inode are allowed
  * @inode:	inode to check
@@ -194,8 +200,11 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 	int error;
 	struct timespec now;
 	unsigned int ia_valid = attr->ia_valid;
+#ifdef MY_ABC_HERE
+	int isSYNOACL = 0;
+#endif /* MY_ABC_HERE */
 
-	WARN_ON_ONCE(!mutex_is_locked(&inode->i_mutex));
+	WARN_ON_ONCE(!inode_is_locked(inode));
 
 	if (ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID | ATTR_TIMES_SET)) {
 		if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
@@ -210,6 +219,14 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 		if (IS_IMMUTABLE(inode))
 			return -EPERM;
 
+#ifdef MY_ABC_HERE
+		if (IS_SYNOACL(dentry)) {
+			error = synoacl_op_perm(dentry, MAY_WRITE_ATTR | MAY_WRITE_EXT_ATTR);
+			if (error) {
+				return error;
+			}
+		} else
+#endif /* MY_ABC_HERE */
 		if (!inode_owner_or_capable(inode)) {
 			error = inode_permission(inode, MAY_WRITE);
 			if (error)
@@ -277,12 +294,26 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 	if (error)
 		return error;
 
+#ifdef MY_ABC_HERE
+	isSYNOACL = IS_SYNOACL(dentry);
+	if (isSYNOACL) {
+		error = synoacl_op_inode_chg_ok(dentry, attr);
+		if (error) {
+			return error;
+		}
+	}
+#endif /* MY_ABC_HERE */
 	if (inode->i_op->setattr)
 		error = inode->i_op->setattr(dentry, attr);
 	else
 		error = simple_setattr(dentry, attr);
 
 	if (!error) {
+#ifdef MY_ABC_HERE
+		if (isSYNOACL) {
+			synoacl_op_setattr_post(dentry, attr);
+		}
+#endif /* MY_ABC_HERE */
 		fsnotify_change(dentry, ia_valid);
 		ima_inode_post_setattr(dentry);
 		evm_inode_post_setattr(dentry, ia_valid);

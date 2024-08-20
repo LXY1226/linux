@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/init.h>
+#include <linux/filter.h>
 
 #include <asm/sections.h>
 #include <asm/uaccess.h>
@@ -41,7 +42,8 @@ u32 __initdata __visible main_extable_sort_needed = 1;
 /* Sort the kernel's built-in exception table */
 void __init sort_main_extable(void)
 {
-	if (main_extable_sort_needed && __stop___ex_table > __start___ex_table) {
+	if (main_extable_sort_needed &&
+	    &__stop___ex_table > &__start___ex_table) {
 		pr_notice("Sorting __ex_table...\n");
 		sort_extable(__start___ex_table, __stop___ex_table);
 	}
@@ -104,6 +106,8 @@ int __kernel_text_address(unsigned long addr)
 		return 1;
 	if (is_ftrace_trampoline(addr))
 		return 1;
+	if (is_bpf_text_address(addr))
+		return 1;
 	/*
 	 * There might be init symbols in saved stacktraces.
 	 * Give those symbols a chance to be printed in
@@ -123,7 +127,11 @@ int kernel_text_address(unsigned long addr)
 		return 1;
 	if (is_module_text_address(addr))
 		return 1;
-	return is_ftrace_trampoline(addr);
+	if (is_ftrace_trampoline(addr))
+		return 1;
+	if (is_bpf_text_address(addr))
+		return 1;
+	return 0;
 }
 
 /*

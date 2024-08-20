@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Digital I/O driver for Technologic Systems TS-5500
  *
@@ -315,7 +318,12 @@ static void ts5500_disable_irq(struct ts5500_priv *priv)
 	else if (priv->hwirq == 1)
 		ts5500_clear_mask(BIT(6), 0x7d); /* LCD_RS on IRQ1 */
 	else
+#if defined(MY_ABC_HERE)
+		dev_err(priv->gpio_chip.parent, "invalid hwirq %d\n",
+			priv->hwirq);
+#else /* MY_ABC_HERE */
 		dev_err(priv->gpio_chip.dev, "invalid hwirq %d\n", priv->hwirq);
+#endif /* MY_ABC_HERE */
 	spin_unlock_irqrestore(&priv->lock, flags);
 }
 
@@ -346,7 +354,11 @@ static int ts5500_dio_probe(struct platform_device *pdev)
 
 	priv->gpio_chip.owner = THIS_MODULE;
 	priv->gpio_chip.label = name;
+#if defined(MY_ABC_HERE)
+	priv->gpio_chip.parent = dev;
+#else /* MY_ABC_HERE */
 	priv->gpio_chip.dev = dev;
+#endif /* MY_ABC_HERE */
 	priv->gpio_chip.direction_input = ts5500_gpio_input;
 	priv->gpio_chip.direction_output = ts5500_gpio_output;
 	priv->gpio_chip.get = ts5500_gpio_get;

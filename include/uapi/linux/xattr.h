@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
   File: linux/xattr.h
 
@@ -24,7 +27,11 @@
 #define XATTR_OS2_PREFIX "os2."
 #define XATTR_OS2_PREFIX_LEN (sizeof(XATTR_OS2_PREFIX) - 1)
 
+#ifdef MY_ABC_HERE
+#define XATTR_MAC_OSX_PREFIX ""
+#else
 #define XATTR_MAC_OSX_PREFIX "osx."
+#endif /* MY_ABC_HERE */
 #define XATTR_MAC_OSX_PREFIX_LEN (sizeof(XATTR_MAC_OSX_PREFIX) - 1)
 
 #define XATTR_BTRFS_PREFIX "btrfs."
@@ -41,6 +48,29 @@
 
 #define XATTR_USER_PREFIX "user."
 #define XATTR_USER_PREFIX_LEN (sizeof(XATTR_USER_PREFIX) - 1)
+
+#ifdef MY_ABC_HERE
+#define XATTR_SYNO_PREFIX "syno."
+#define XATTR_SYNO_PREFIX_LEN (sizeof (XATTR_SYNO_PREFIX) - 1)
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+#define XATTR_SYNO_ARCHIVE_BIT "archive_bit"
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define XATTR_SYNO_ARCHIVE_VERSION "archive_version"
+#define XATTR_SYNO_ARCHIVE_VERSION_VOLUME "archive_version_volume"
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define XATTR_SYNO_CREATE_TIME "create_time"
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+#define XATTR_SYNO_LOCKER_SUFFIX                  "w"
+#define XATTR_SYNO_LOCKER_SUFFIX_LEN              (sizeof(XATTR_SYNO_LOCKER_SUFFIX) - 1)
+#define XATTR_SYNO_LOCKER                         (XATTR_SYNO_PREFIX XATTR_SYNO_LOCKER_SUFFIX)
+#define XATTR_SYNO_LOCKER_LEN                     (sizeof(XATTR_SYNO_LOCKER) - 1)
+#endif /* MY_DEF_HERE */
 
 /* Security namespace */
 #define XATTR_EVM_SUFFIX "evm"

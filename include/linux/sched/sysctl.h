@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _SCHED_SYSCTL_H
 #define _SCHED_SYSCTL_H
 
@@ -6,6 +9,10 @@ extern int	     sysctl_hung_task_check_count;
 extern unsigned int  sysctl_hung_task_panic;
 extern unsigned long sysctl_hung_task_timeout_secs;
 extern int sysctl_hung_task_warnings;
+#ifdef MY_ABC_HERE
+extern int sysctl_hung_task_warnings_default;
+extern int sysctl_hung_task_warnings_reset_period;
+#endif /* MY_ABC_HERE */
 extern int proc_dohung_task_timeout_secs(struct ctl_table *table, int write,
 					 void __user *buffer,
 					 size_t *lenp, loff_t *ppos);

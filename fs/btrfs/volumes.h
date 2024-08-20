@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2007 Oracle.  All rights reserved.
  *
@@ -28,7 +31,7 @@
 
 extern struct mutex uuid_mutex;
 
-#define BTRFS_STRIPE_LEN	(64 * 1024)
+#define BTRFS_STRIPE_LEN	SZ_64K
 
 struct buffer_head;
 struct btrfs_pending_bios {
@@ -228,6 +231,8 @@ BTRFS_DEVICE_GETSET_FUNCS(bytes_used);
 
 struct btrfs_fs_devices {
 	u8 fsid[BTRFS_FSID_SIZE]; /* FS specific uuid */
+	u8 metadata_uuid[BTRFS_FSID_SIZE];
+	bool fsid_change;
 
 	u64 num_devices;
 	u64 open_devices;
@@ -235,6 +240,10 @@ struct btrfs_fs_devices {
 	u64 missing_devices;
 	u64 total_rw_bytes;
 	u64 total_devices;
+
+	/* Highest generation number of seen devices */
+	u64 latest_generation;
+
 	struct block_device *latest_bdev;
 
 	/* all of the devices in the FS, protected by a mutex
@@ -266,9 +275,26 @@ struct btrfs_fs_devices {
 	struct kobject fsid_kobj;
 	struct kobject *device_dir_kobj;
 	struct completion kobj_unregister;
+#ifdef MY_DEF_HERE
+	bool rbd_enabled;
+#endif /* MY_DEF_HERE */
 };
 
 #define BTRFS_BIO_INLINE_CSUM_SIZE	64
+
+#define BTRFS_MAX_DEVS(r) ((BTRFS_LEAF_DATA_SIZE(r)		\
+			- sizeof(struct btrfs_chunk))		\
+			/ sizeof(struct btrfs_stripe) + 1)
+
+#define BTRFS_MAX_DEVS_SYS_CHUNK ((BTRFS_SYSTEM_CHUNK_ARRAY_SIZE	\
+				- 2 * sizeof(struct btrfs_disk_key)	\
+				- 2 * sizeof(struct btrfs_chunk))	\
+				/ sizeof(struct btrfs_stripe) + 1)
+
+#ifdef MY_DEF_HERE
+#define BTRFS_BIO_SHOULD_ABORT_RETRY ((u8)-2)
+#define BTRFS_BIO_RETRY_ABORTED ((u8)-1)
+#endif /* MY_DEF_HERE */
 
 /*
  * we need the mirror number and stripe index to be passed around
@@ -285,9 +311,19 @@ struct btrfs_io_bio {
 	unsigned int stripe_index;
 	u64 logical;
 	u8 *csum;
+#ifdef MY_DEF_HERE
+	/*
+	 * In retry mode, the first 32 bits is the correct csum, and
+	 * the second 32 bits is bad csum from previous retry.
+	 */
+#endif /* MY_DEF_HERE */
 	u8 csum_inline[BTRFS_BIO_INLINE_CSUM_SIZE];
 	u8 *csum_allocated;
 	btrfs_io_bio_end_io_t *end_io;
+#ifdef MY_DEF_HERE
+	// Must be placed before bio since bio has inline data.
+	u8 nr_retry;
+#endif /* MY_DEF_HERE */
 	struct bio bio;
 };
 
@@ -353,7 +389,7 @@ struct map_lookup {
 	u64 type;
 	int io_align;
 	int io_width;
-	int stripe_len;
+	u64 stripe_len;
 	int sector_size;
 	int num_stripes;
 	int sub_stripes;
@@ -362,52 +398,6 @@ struct map_lookup {
 
 #define map_lookup_size(n) (sizeof(struct map_lookup) + \
 			    (sizeof(struct btrfs_bio_stripe) * (n)))
-
-/*
- * Restriper's general type filter
- */
-#define BTRFS_BALANCE_DATA		(1ULL << 0)
-#define BTRFS_BALANCE_SYSTEM		(1ULL << 1)
-#define BTRFS_BALANCE_METADATA		(1ULL << 2)
-
-#define BTRFS_BALANCE_TYPE_MASK		(BTRFS_BALANCE_DATA |	    \
-					 BTRFS_BALANCE_SYSTEM |	    \
-					 BTRFS_BALANCE_METADATA)
-
-#define BTRFS_BALANCE_FORCE		(1ULL << 3)
-#define BTRFS_BALANCE_RESUME		(1ULL << 4)
-
-/*
- * Balance filters
- */
-#define BTRFS_BALANCE_ARGS_PROFILES	(1ULL << 0)
-#define BTRFS_BALANCE_ARGS_USAGE	(1ULL << 1)
-#define BTRFS_BALANCE_ARGS_DEVID	(1ULL << 2)
-#define BTRFS_BALANCE_ARGS_DRANGE	(1ULL << 3)
-#define BTRFS_BALANCE_ARGS_VRANGE	(1ULL << 4)
-#define BTRFS_BALANCE_ARGS_LIMIT	(1ULL << 5)
-#define BTRFS_BALANCE_ARGS_LIMIT_RANGE	(1ULL << 6)
-#define BTRFS_BALANCE_ARGS_STRIPES_RANGE (1ULL << 7)
-#define BTRFS_BALANCE_ARGS_USAGE_RANGE	(1ULL << 10)
-
-#define BTRFS_BALANCE_ARGS_MASK			\
-	(BTRFS_BALANCE_ARGS_PROFILES |		\
-	 BTRFS_BALANCE_ARGS_USAGE |		\
-	 BTRFS_BALANCE_ARGS_DEVID | 		\
-	 BTRFS_BALANCE_ARGS_DRANGE |		\
-	 BTRFS_BALANCE_ARGS_VRANGE |		\
-	 BTRFS_BALANCE_ARGS_LIMIT |		\
-	 BTRFS_BALANCE_ARGS_LIMIT_RANGE |	\
-	 BTRFS_BALANCE_ARGS_STRIPES_RANGE |	\
-	 BTRFS_BALANCE_ARGS_USAGE_RANGE)
-
-/*
- * Profile changing flags.  When SOFT is set we won't relocate chunk if
- * it already has the target profile (even though it may be
- * half-filled).
- */
-#define BTRFS_BALANCE_ARGS_CONVERT	(1ULL << 8)
-#define BTRFS_BALANCE_ARGS_SOFT		(1ULL << 9)
 
 struct btrfs_balance_args;
 struct btrfs_balance_progress;
@@ -421,6 +411,13 @@ struct btrfs_balance_control {
 	u64 flags;
 
 	struct btrfs_balance_progress stat;
+#ifdef MY_DEF_HERE
+	u64 total_chunk_used;
+#endif /* SYNO_BTRFS_BALANCE_DRY_RUN */
+#ifdef MY_DEF_HERE
+	u64 fast_key_offset;         // 0: normal balance; 1: auto select bg; otherwise: bg key offset provided by progs
+#endif /* MY_DEF_HERE */
+
 };
 
 int btrfs_account_dev_extents_size(struct btrfs_device *device, u64 start,
@@ -434,15 +431,24 @@ int btrfs_map_sblock(struct btrfs_fs_info *fs_info, int rw,
 		     u64 logical, u64 *length,
 		     struct btrfs_bio **bbio_ret, int mirror_num,
 		     int need_raid_map);
-int btrfs_rmap_block(struct btrfs_mapping_tree *map_tree,
+int btrfs_rmap_block(struct btrfs_fs_info *fs_info,
 		     u64 chunk_start, u64 physical, u64 devid,
 		     u64 **logical, int *naddrs, int *stripe_len);
 int btrfs_read_sys_array(struct btrfs_root *root);
 int btrfs_read_chunk_tree(struct btrfs_root *root);
 int btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 		      struct btrfs_root *extent_root, u64 type);
+#ifdef MY_DEF_HERE
+int btrfs_alloc_chunk_with_info(struct btrfs_trans_handle *trans,
+		      struct btrfs_root *extent_root, u64 type,
+		      u64 *ret_start, u64 *ret_num_bytes);
+#endif /* MY_DEF_HERE */
 void btrfs_mapping_init(struct btrfs_mapping_tree *tree);
 void btrfs_mapping_tree_free(struct btrfs_mapping_tree *tree);
+#ifdef MY_DEF_HERE
+int btrfs_map_bio_log_tree(struct btrfs_root *root, int rw, struct bio *bio,
+		  int mirror_num, int async_submit);
+#endif /* MY_DEF_HERE */
 int btrfs_map_bio(struct btrfs_root *root, int rw, struct bio *bio,
 		  int mirror_num, int async_submit);
 int btrfs_open_devices(struct btrfs_fs_devices *fs_devices,
@@ -500,7 +506,7 @@ void btrfs_destroy_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 void btrfs_init_dev_replace_tgtdev_for_resume(struct btrfs_fs_info *fs_info,
 					      struct btrfs_device *tgtdev);
 void btrfs_scratch_superblocks(struct block_device *bdev, char *device_path);
-int btrfs_is_parity_mirror(struct btrfs_mapping_tree *map_tree,
+int btrfs_is_parity_mirror(struct btrfs_fs_info *fs_info,
 			   u64 logical, u64 len, int mirror_num);
 unsigned long btrfs_full_stripe_len(struct btrfs_root *root,
 				    struct btrfs_mapping_tree *map_tree,
@@ -515,6 +521,8 @@ static inline int btrfs_dev_stats_dirty(struct btrfs_device *dev)
 {
 	return atomic_read(&dev->dev_stats_ccnt);
 }
+struct extent_map *btrfs_get_chunk_map(struct btrfs_fs_info *fs_info,
+				       u64 logical, u64 length);
 
 static inline void btrfs_dev_stat_inc(struct btrfs_device *dev,
 				      int index)
@@ -572,6 +580,5 @@ static inline void unlock_chunks(struct btrfs_root *root)
 struct list_head *btrfs_get_fs_uuids(void);
 void btrfs_set_fs_info_ptr(struct btrfs_fs_info *fs_info);
 void btrfs_reset_fs_info_ptr(struct btrfs_fs_info *fs_info);
-void btrfs_close_one_device(struct btrfs_device *device);
 
 #endif

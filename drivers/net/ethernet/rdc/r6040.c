@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * RDC R6040 Fast Ethernet MAC support
  *
@@ -1046,8 +1049,13 @@ static int r6040_mii_probe(struct net_device *dev)
 		return -ENODEV;
 	}
 
+#if defined(MY_ABC_HERE)
+	phydev = phy_connect(dev, phydev_name(phydev), &r6040_adjust_link,
+			     PHY_INTERFACE_MODE_MII);
+#else /* MY_ABC_HERE */
 	phydev = phy_connect(dev, dev_name(&phydev->dev), &r6040_adjust_link,
 			     PHY_INTERFACE_MODE_MII);
+#endif /* MY_ABC_HERE */
 
 	if (IS_ERR(phydev)) {
 		dev_err(&lp->pdev->dev, "could not attach to PHY\n");
@@ -1068,9 +1076,13 @@ static int r6040_mii_probe(struct net_device *dev)
 	lp->old_link = 0;
 	lp->old_duplex = -1;
 
+#if defined(MY_ABC_HERE)
+	phy_attached_info(phydev);
+#else /* MY_ABC_HERE */
 	dev_info(&lp->pdev->dev, "attached PHY driver [%s] "
 		"(mii_bus:phy_addr=%s)\n",
 		phydev->drv->name, dev_name(&phydev->dev));
+#endif /* MY_ABC_HERE */
 
 	return 0;
 }
@@ -1084,7 +1096,11 @@ static int r6040_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	static int card_idx = -1;
 	int bar = 0;
 	u16 *adrp;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int i;
+#endif /* MY_ABC_HERE */
 
 	pr_info("%s\n", version);
 
@@ -1196,6 +1212,9 @@ static int r6040_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	lp->mii_bus->name = "r6040_eth_mii";
 	snprintf(lp->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		dev_name(&pdev->dev), card_idx);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	lp->mii_bus->irq = kmalloc_array(PHY_MAX_ADDR, sizeof(int), GFP_KERNEL);
 	if (!lp->mii_bus->irq) {
 		err = -ENOMEM;
@@ -1204,11 +1223,16 @@ static int r6040_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		lp->mii_bus->irq[i] = PHY_POLL;
+#endif /* MY_ABC_HERE */
 
 	err = mdiobus_register(lp->mii_bus);
 	if (err) {
 		dev_err(&pdev->dev, "failed to register MII bus\n");
+#if defined(MY_ABC_HERE)
+		goto err_out_mdio;
+#else /* MY_ABC_HERE */
 		goto err_out_mdio_irq;
+#endif /* MY_ABC_HERE */
 	}
 
 	err = r6040_mii_probe(dev);
@@ -1227,8 +1251,12 @@ static int r6040_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 err_out_mdio_unregister:
 	mdiobus_unregister(lp->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 err_out_mdio_irq:
 	kfree(lp->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 err_out_mdio:
 	mdiobus_free(lp->mii_bus);
 err_out_unmap:
@@ -1251,7 +1279,11 @@ static void r6040_remove_one(struct pci_dev *pdev)
 
 	unregister_netdev(dev);
 	mdiobus_unregister(lp->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(lp->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 	mdiobus_free(lp->mii_bus);
 	netif_napi_del(&lp->napi);
 	pci_iounmap(pdev, lp->base);

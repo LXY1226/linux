@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * MTD SPI driver for ST M25Pxx (and similar) serial flash chips
  *
@@ -33,6 +36,23 @@ struct m25p {
 	struct spi_nor		spi_nor;
 	u8			command[MAX_CMD_SIZE];
 };
+
+#ifdef MY_ABC_HERE
+static int unlock_chip(struct spi_nor *nor, loff_t ofs, uint64_t len)
+{
+	return 0;
+}
+
+static int lock_chip(struct spi_nor *nor, loff_t ofs, uint64_t len)
+{
+	return 0;
+}
+
+static int is_locked(struct spi_nor *nor, loff_t ofs, uint64_t len)
+{
+	return 0;
+}
+#endif /* MY_ABC_HERE */
 
 static int m25p80_read_reg(struct spi_nor *nor, u8 code, u8 *val, int len)
 {
@@ -197,6 +217,11 @@ static int m25p_probe(struct spi_device *spi)
 	nor->erase = m25p80_erase;
 	nor->write_reg = m25p80_write_reg;
 	nor->read_reg = m25p80_read_reg;
+#ifdef MY_ABC_HERE
+	nor->flash_lock    = lock_chip;
+	nor->flash_unlock  = unlock_chip;
+	nor->flash_is_locked  = is_locked;
+#endif /* MY_ABC_HERE */
 
 	nor->dev = &spi->dev;
 	nor->flash_node = spi->dev.of_node;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Read flash partition table from command line
  *
@@ -333,7 +336,11 @@ static int mtdpart_setup_real(char *s)
  * the first one in the chain if a NULL mtd_id is passed in.
  */
 static int parse_cmdline_partitions(struct mtd_info *master,
+#if defined(MY_DEF_HERE)
+				    const struct mtd_partition **pparts,
+#else /* MY_DEF_HERE */
 				    struct mtd_partition **pparts,
+#endif /* MY_DEF_HERE */
 				    struct mtd_part_parser_data *data)
 {
 	unsigned long long offset;

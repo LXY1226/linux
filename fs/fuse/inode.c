@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
   FUSE: Filesystem in Userspace
   Copyright (C) 2001-2008  Miklos Szeredi <miklos@szeredi.hu>
@@ -20,6 +23,9 @@
 #include <linux/random.h>
 #include <linux/sched.h>
 #include <linux/exportfs.h>
+#ifdef MY_ABC_HERE
+#include <linux/xattr.h>
+#endif /* CONFIG_SYNO_FUSE_ARCHIVE_VESION */
 
 MODULE_AUTHOR("Miklos Szeredi <miklos@szeredi.hu>");
 MODULE_DESCRIPTION("Filesystem in Userspace");
@@ -123,6 +129,11 @@ static void fuse_destroy_inode(struct inode *inode)
 
 static void fuse_evict_inode(struct inode *inode)
 {
+#ifdef MY_ABC_HERE
+	if (AGGREGATE_RECVFILE_DOING & inode->aggregate_flag) {
+		flush_aggregate_recvfile(-1);
+	}
+#endif /* MY_ABC_HERE */
 	truncate_inode_pages_final(&inode->i_data);
 	clear_inode(inode);
 	if (inode->i_sb->s_flags & MS_ACTIVE) {
@@ -229,6 +240,11 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 		bool inval = false;
 
 		if (oldsize != attr->size) {
+#ifdef MY_ABC_HERE
+			if (AGGREGATE_RECVFILE_DOING & inode->aggregate_flag) {
+				flush_aggregate_recvfile(-1);
+			}
+#endif /* MY_ABC_HERE */
 			truncate_pagecache(inode, attr->size);
 			inval = true;
 		} else if (fc->auto_inval_data) {
@@ -312,7 +328,7 @@ struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 		unlock_new_inode(inode);
 	} else if ((inode->i_mode ^ attr->mode) & S_IFMT) {
 		/* Inode has changed type, any I/O on the old should fail */
-		make_bad_inode(inode);
+		fuse_make_bad(inode);
 		iput(inode);
 		goto retry;
 	}
@@ -353,6 +369,9 @@ int fuse_reverse_inval_inode(struct super_block *sb, u64 nodeid,
 
 static void fuse_umount_begin(struct super_block *sb)
 {
+#ifdef MY_ABC_HERE
+	flush_aggregate_recvfile(-1);
+#endif /* MY_ABC_HERE */
 	fuse_abort_conn(get_fuse_conn_super(sb));
 }
 
@@ -583,6 +602,54 @@ static void fuse_pqueue_init(struct fuse_pqueue *fpq)
 	fpq->connected = 1;
 }
 
+#ifdef MY_ABC_HERE
+static int fuse_syno_set_sb_archive_ver(struct super_block *sb, u32 archive_version)
+{
+	int err = 0;
+	struct syno_xattr_archive_version value;
+	struct dentry *root = sb->s_root;
+
+	if (!IS_GLUSTER_FS_SB(sb)) {
+		return -EOPNOTSUPP;
+	}
+
+	value.v_magic = cpu_to_le16(0x2552);
+	value.v_struct_version = cpu_to_le16(1);
+	value.v_archive_version = cpu_to_le32(archive_version);
+
+	err = fuse_setxattr(root, XATTR_SYNO_PREFIX XATTR_SYNO_ARCHIVE_VERSION_VOLUME_GLUSTER,
+				        &value, sizeof(value), 0);
+
+	return err;
+}
+
+static int fuse_syno_get_sb_archive_ver(struct super_block *sb, u32 *version)
+{
+	int err = 0;
+	struct syno_xattr_archive_version value;
+	struct dentry *root = sb->s_root;
+
+	if (!IS_GLUSTER_FS_SB(sb)) {
+		return -EOPNOTSUPP;
+	}
+
+	memset(&value, 0, sizeof(value));
+	err = fuse_getxattr(root, XATTR_SYNO_PREFIX XATTR_SYNO_ARCHIVE_VERSION_VOLUME_GLUSTER,
+				        &value, sizeof(value));
+	if (0 < err) {
+		*version = le32_to_cpu(value.v_archive_version);
+		err = 0;
+	} else {
+		if (-ENODATA == err) {
+			err = 0;
+		}
+		*version = 0;
+	}
+
+	return err;
+}
+#endif /* MY_ABC_HERE */
+
 void fuse_conn_init(struct fuse_conn *fc)
 {
 	memset(fc, 0, sizeof(*fc));
@@ -663,8 +730,13 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 
 		name.len = 1;
 		name.name = ".";
+#ifdef MY_ABC_HERE
+		err = fuse_lookup_name(sb, handle->nodeid, &name, &outarg,
+				       &inode, NULL, 0);
+#else
 		err = fuse_lookup_name(sb, handle->nodeid, &name, &outarg,
 				       &inode);
+#endif /* MY_ABC_HERE */
 		if (err && err != -ENOENT)
 			goto out_err;
 		if (err || !inode) {
@@ -766,8 +838,13 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 
 	name.len = 2;
 	name.name = "..";
+#ifdef MY_ABC_HERE
+	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
+			       &name, &outarg, &inode, NULL, 0);
+#else
 	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
 			       &name, &outarg, &inode);
+#endif /* MY_ABC_HERE */
 	if (err) {
 		if (err == -ENOENT)
 			return ERR_PTR(-ESTALE);
@@ -799,6 +876,11 @@ static const struct super_operations fuse_super_operations = {
 	.umount_begin	= fuse_umount_begin,
 	.statfs		= fuse_statfs,
 	.show_options	= fuse_show_options,
+#ifdef MY_ABC_HERE
+	.syno_set_sb_archive_ver = fuse_syno_set_sb_archive_ver,
+	.syno_get_sb_archive_ver = fuse_syno_get_sb_archive_ver,
+#endif /* MY_ABC_HERE */
+
 };
 
 static void sanitize_global_limit(unsigned *limit)

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2007 Oracle.  All rights reserved.
  *
@@ -33,11 +36,9 @@
  * new data the application may have written before commit.
  */
 #define BTRFS_INODE_ORDERED_DATA_CLOSE		0
-#define BTRFS_INODE_ORPHAN_META_RESERVED	1
 #define BTRFS_INODE_DUMMY			2
 #define BTRFS_INODE_IN_DEFRAG			3
 #define BTRFS_INODE_DELALLOC_META_RESERVED	4
-#define BTRFS_INODE_HAS_ORPHAN_ITEM		5
 #define BTRFS_INODE_HAS_ASYNC_EXTENT		6
 #define BTRFS_INODE_NEEDS_FULL_SYNC		7
 #define BTRFS_INODE_COPY_EVERYTHING		8
@@ -55,6 +56,22 @@
 #define BTRFS_INODE_BTREE_ERR		        12
 #define BTRFS_INODE_BTREE_LOG1_ERR		13
 #define BTRFS_INODE_BTREE_LOG2_ERR		14
+#ifdef MY_DEF_HERE
+#define BTRFS_INODE_SNAP_FLUSH			15
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+/* these two bits are mutually exclusive */
+#define BTRFS_INODE_LOCKER_NOLOCK		27
+#define BTRFS_INODE_LOCKER_LOCKABLE		28
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+#define BTRFS_INODE_USRQUOTA_META_RESERVED	29
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+#define BTRFS_INODE_SYNO_WRITEBACK_LRU_LIST	30
+#define BTRFS_INODE_SYNO_WRITEBACK_RUNNING	31
+#endif /* MY_DEF_HERE */
 
 /* in memory btrfs inode */
 struct btrfs_inode {
@@ -69,7 +86,8 @@ struct btrfs_inode {
 	/*
 	 * Lock for counters and all fields used to determine if the inode is in
 	 * the log or not (last_trans, last_sub_trans, last_log_commit,
-	 * logged_trans).
+	 * logged_trans), to access/update new_delalloc_bytes and to update the
+	 * VFS' inode number of bytes used.
 	 */
 	spinlock_t lock;
 
@@ -98,6 +116,19 @@ struct btrfs_inode {
 	 * to walk them all.
 	 */
 	struct list_head delalloc_inodes;
+
+#ifdef MY_DEF_HERE
+	/*
+	 * likely delalloc_inodes, for async flush
+	 * 1. data reclaim
+	 * 2. avoid deadlock
+	 */
+	struct list_head syno_delalloc_inodes;
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	struct list_head syno_dirty_lru_inode;
+#endif /* MY_DEF_HERE */
 
 	/* node for the red-black tree that links inodes in subvolume root */
 	struct rb_node rb_node;
@@ -136,6 +167,13 @@ struct btrfs_inode {
 	u64 delalloc_bytes;
 
 	/*
+	 * Total number of bytes pending delalloc that fall within a file
+	 * range that is either a hole or beyond EOF (and no prealloc extent
+	 * exists in the range). This is always <= delalloc_bytes.
+	 */
+	u64 new_delalloc_bytes;
+
+	/*
 	 * total number of bytes pending defrag, used by stat to check whether
 	 * it needs COW.
 	 */
@@ -165,6 +203,17 @@ struct btrfs_inode {
 	u64 last_unlink_trans;
 
 	/*
+	 * The id/generation of the last transaction where this inode was
+	 * either the source or the destination of a clone/dedupe operation.
+	 * Used when logging an inode to know if there are shared extents that
+	 * need special care when logging checksum items, to avoid duplicate
+	 * checksum items in a log (which can lead to a corruption where we end
+	 * up with missing checksum ranges after log replay).
+	 * Protected by the vfs inode lock.
+	 */
+	u64 last_reflink_trans;
+
+	/*
 	 * Number of bytes outstanding that are going to need csums.  This is
 	 * used in ENOSPC accounting.
 	 */
@@ -192,7 +241,62 @@ struct btrfs_inode {
 	/* File creation time. */
 	struct timespec i_otime;
 
+	/* Hook into fs_info->delayed_iputs */
+	struct list_head delayed_iput;
+	long delayed_iput_count;
+
+	/*
+	 * To avoid races between lockless (i_mutex not held) direct IO writes
+	 * and concurrent fsync requests. Direct IO writes must acquire read
+	 * access on this semaphore for creating an extent map and its
+	 * corresponding ordered extent. The fast fsync path must acquire write
+	 * access on this semaphore before it collects ordered extents and
+	 * extent maps.
+	 */
+	struct rw_semaphore dio_sem;
+
 	struct inode vfs_inode;
+
+#ifdef MY_DEF_HERE
+	union {
+		enum locker_state __locker_state;
+		const enum locker_state locker_state;
+	};
+	union {
+		time64_t __locker_update_time;          // in volume clock
+		const time64_t locker_update_time;
+	};
+	union {
+		time64_t __locker_period_begin;         // in volume clock
+		const time64_t locker_period_begin;
+	};
+	union {
+		time64_t __locker_period_end;           // in volume clock
+		const time64_t locker_period_end;
+	};
+	bool locker_dirty;
+	spinlock_t locker_lock;
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	struct list_head free_extent_map_inode;
+	atomic_t free_extent_map_counts;
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	atomic_t syno_uq_refs;
+	u64 syno_uq_rfer_used;
+	u64 syno_uq_reserved;
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	struct list_head syno_rbd_meta_file;
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+	// For chown.
+	u64 uq_reserved;
+#endif /* MY_DEF_HERE */
 };
 
 extern unsigned char btrfs_filetype_table[];
@@ -278,6 +382,17 @@ static inline int btrfs_inode_in_log(struct inode *inode, u64 generation)
 
 #define BTRFS_DIO_ORIG_BIO_SUBMITTED	0x1
 
+/*
+ * Check if the inode has flags compatible with compression
+ */
+static inline bool btrfs_inode_can_compress(const struct btrfs_inode *inode)
+{
+	if (inode->flags & BTRFS_INODE_NODATACOW ||
+	    inode->flags & BTRFS_INODE_NODATASUM)
+		return false;
+	return true;
+}
+
 struct btrfs_dio_private {
 	struct inode *inode;
 	unsigned long flags;
@@ -299,7 +414,7 @@ struct btrfs_dio_private {
 	struct bio *dio_bio;
 
 	/*
-	 * The original bio may be splited to several sub-bios, this is
+	 * The original bio may be split to several sub-bios, this is
 	 * done during endio of sub-bios
 	 */
 	int (*subio_endio)(struct inode *, struct btrfs_io_bio *, int);
@@ -323,6 +438,56 @@ static inline void btrfs_inode_resume_unlocked_dio(struct inode *inode)
 		  &BTRFS_I(inode)->runtime_flags);
 }
 
-bool btrfs_page_exists_in_range(struct inode *inode, loff_t start, loff_t end);
+static inline bool btrfs_page_exists_in_range(struct inode *inode,
+						loff_t start, loff_t end)
+{
+	return filemap_range_has_page(inode->i_mapping, start, end);
+}
+
+#ifdef MY_DEF_HERE
+static inline bool btrfs_usrquota_fast_chown_enable(struct inode *inode)
+{
+	if (!inode || !BTRFS_I(inode)->root || !BTRFS_I(inode)->root->fs_info)
+		return false;
+#ifdef MY_DEF_HERE
+	if (btrfs_root_disable_quota(BTRFS_I(inode)->root))
+		return false;
+#endif /* MY_DEF_HERE */
+	if (!BTRFS_I(inode)->root->fs_info->syno_usrquota_v1_enabled)
+		return false;
+	if (!btrfs_usrquota_compat_inode_quota(BTRFS_I(inode)->root->fs_info))
+		return false;
+	if (!(BTRFS_I(inode)->flags & BTRFS_INODE_UQ_REF_USED))
+		return false;
+	return true;
+}
+static inline struct inode *syno_usrquota_inode_get(struct inode *inode)
+{
+	if (!btrfs_usrquota_fast_chown_enable(inode))
+		return NULL;
+	inode = igrab(inode);
+	if (inode)
+		atomic_inc(&BTRFS_I(inode)->syno_uq_refs);
+	return inode;
+}
+static inline void syno_usrquota_inode_put(struct inode *inode)
+{
+	u64 to_free = 0;
+	if (!btrfs_usrquota_fast_chown_enable(inode))
+		return;
+	WARN_ON(atomic_read(&BTRFS_I(inode)->syno_uq_refs) == 0);
+	if (atomic_dec_and_test(&BTRFS_I(inode)->syno_uq_refs)) {
+		spin_lock(&BTRFS_I(inode)->lock);
+		if (test_and_clear_bit(BTRFS_INODE_USRQUOTA_META_RESERVED,
+			       &BTRFS_I(inode)->runtime_flags)) {
+			to_free = btrfs_calc_trans_metadata_size(BTRFS_I(inode)->root, 1);
+		}
+		spin_unlock(&BTRFS_I(inode)->lock);
+		if (to_free)
+			btrfs_block_rsv_release(BTRFS_I(inode)->root, &BTRFS_I(inode)->root->fs_info->delalloc_block_rsv, to_free);
+	}
+	btrfs_add_delayed_iput(inode);
+}
+#endif /* MY_DEF_HERE */
 
 #endif

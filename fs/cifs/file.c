@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   fs/cifs/file.c
  *
@@ -331,7 +334,11 @@ cifs_new_fileinfo(struct cifs_fid *fid, struct file *file,
 	 * If the server returned a read oplock and we have mandatory brlocks,
 	 * set oplock level to None.
 	 */
+#ifdef MY_ABC_HERE
+	if (server->ops->is_read_op(server, oplock) && cifs_has_mand_locks(cinode)) {
+#else
 	if (server->ops->is_read_op(oplock) && cifs_has_mand_locks(cinode)) {
+#endif /* MY_ABC_HERE */
 		cifs_dbg(FYI, "Reset oplock val from read to None due to mand locks\n");
 		oplock = 0;
 	}
@@ -2326,7 +2333,7 @@ int cifs_strict_fsync(struct file *file, loff_t start, loff_t end,
 	rc = filemap_write_and_wait_range(inode->i_mapping, start, end);
 	if (rc)
 		return rc;
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	xid = get_xid();
 
@@ -2351,7 +2358,7 @@ int cifs_strict_fsync(struct file *file, loff_t start, loff_t end,
 	}
 
 	free_xid(xid);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return rc;
 }
 
@@ -2368,7 +2375,7 @@ int cifs_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	rc = filemap_write_and_wait_range(inode->i_mapping, start, end);
 	if (rc)
 		return rc;
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	xid = get_xid();
 
@@ -2385,7 +2392,7 @@ int cifs_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	}
 
 	free_xid(xid);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 	return rc;
 }
 
@@ -2731,7 +2738,7 @@ cifs_writev(struct kiocb *iocb, struct iov_iter *from)
 	 * with a brlock that prevents writing.
 	 */
 	down_read(&cinode->lock_sem);
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	rc = generic_write_checks(iocb, from);
 	if (rc <= 0)
@@ -2744,7 +2751,7 @@ cifs_writev(struct kiocb *iocb, struct iov_iter *from)
 	else
 		rc = -EACCES;
 out:
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 
 	if (rc > 0) {
 		ssize_t err = generic_write_sync(file, iocb->ki_pos - rc, rc);
@@ -3206,6 +3213,13 @@ cifs_read(struct file *file, char *read_data, size_t read_size, loff_t *offset)
 	}
 	open_file = file->private_data;
 	tcon = tlink_tcon(open_file->tlink);
+#ifdef MY_ABC_HERE
+	// CID 45269: Derefernce before null check
+	if (!tcon->ses) {
+		free_xid(xid);
+		return -ENOSYS;
+	}
+#endif /* MY_ABC_HERE */
 	server = tcon->ses->server;
 
 	if (!server->ops->sync_read) {

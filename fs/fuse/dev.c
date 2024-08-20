@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
   FUSE: Filesystem in Userspace
   Copyright (C) 2001-2008  Miklos Szeredi <miklos@szeredi.hu>
@@ -601,6 +604,43 @@ ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args)
 	return ret;
 }
 
+#ifdef MY_ABC_HERE
+/* Since fuse_simple_request limit the number of output arguments to one,
+   and syno stat needs two numargs, just copy it and remove that limitation.
+   Also copy output argument to args.*/
+ssize_t fuse_send_syno_request(struct fuse_conn *fc, struct fuse_args *args)
+{
+	struct fuse_req *req;
+	ssize_t ret;
+
+	req = fuse_get_req(fc, 0);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	/* Needs to be done after fuse_get_req() so that fc->minor is valid */
+	fuse_adjust_compat(fc, args);
+
+	req->in.h.opcode = args->in.h.opcode;
+	req->in.h.nodeid = args->in.h.nodeid;
+	req->in.numargs = args->in.numargs;
+	memcpy(req->in.args, args->in.args,
+	       args->in.numargs * sizeof(struct fuse_in_arg));
+	req->out.argvar = args->out.argvar;
+	req->out.numargs = args->out.numargs;
+	memcpy(req->out.args, args->out.args,
+	       args->out.numargs * sizeof(struct fuse_arg));
+	fuse_request_send(fc, req);
+	ret = req->out.h.error;
+	if (!ret) {
+		memcpy(args->out.args, req->out.args,
+		    req->out.numargs * sizeof(struct fuse_arg));
+	}
+	fuse_put_request(fc, req);
+
+	return ret;
+}
+#endif /* MY_ABC_HERE */
+
 /*
  * Called under fc->lock
  *
@@ -1010,7 +1050,17 @@ static int fuse_copy_page(struct fuse_copy_state *cs, struct page **pagep,
 
 	while (count) {
 		if (cs->write && cs->pipebufs && page) {
-			return fuse_ref_page(cs, page, offset, count);
+			/*
+			 * Can't control lifetime of pipe buffers, so always
+			 * copy user pages.
+			 */
+			if (cs->req->user_pages) {
+				err = fuse_copy_fill(cs);
+				if (err)
+					return err;
+			} else {
+				return fuse_ref_page(cs, page, offset, count);
+			}
 		} else if (!cs->len) {
 			if (cs->move_pages && page &&
 			    offset == 0 && count == PAGE_SIZE) {

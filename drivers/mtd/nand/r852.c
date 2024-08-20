@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright © 2009 - Maxim Levitsky
  * driver for Ricoh xD readers
@@ -64,7 +67,11 @@ static inline void r852_write_reg_dword(struct r852_device *dev,
 /* returns pointer to our private structure */
 static inline struct r852_device *r852_get_dev(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	return chip->priv;
 }
 

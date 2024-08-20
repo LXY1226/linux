@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2001 Sistina Software (UK) Limited.
  * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
@@ -79,6 +82,10 @@ typedef void (*dm_status_fn) (struct dm_target *ti, status_type_t status_type,
 
 typedef int (*dm_message_fn) (struct dm_target *ti, unsigned argc, char **argv);
 
+#ifdef MY_ABC_HERE
+typedef int (*dm_extra_ioctl_fn) (struct dm_target *ti,
+		unsigned int cmd, unsigned long arg);
+#endif /* MY_ABC_HERE */
 typedef int (*dm_prepare_ioctl_fn) (struct dm_target *ti,
 			    struct block_device **bdev, fmode_t *mode);
 
@@ -105,6 +112,11 @@ typedef int (*iterate_devices_callout_fn) (struct dm_target *ti,
 typedef int (*dm_iterate_devices_fn) (struct dm_target *ti,
 				      iterate_devices_callout_fn fn,
 				      void *data);
+#ifdef MY_ABC_HERE
+typedef int (*dm_handle_4kn_target_support_fn) (struct dm_target *ti,
+				      iterate_devices_callout_fn fn,
+				      void *data);
+#endif /* MY_ABC_HERE */
 
 typedef void (*dm_io_hints_fn) (struct dm_target *ti,
 				struct queue_limits *limits);
@@ -115,6 +127,10 @@ typedef void (*dm_io_hints_fn) (struct dm_target *ti,
  *    1: The target can't handle the next I/O immediately.
  */
 typedef int (*dm_busy_fn) (struct dm_target *ti);
+
+#ifdef MY_ABC_HERE
+typedef int (*dm_support_noclone_fn) (struct dm_target *ti);
+#endif /* MY_ABC_HERE */
 
 void dm_error(const char *message);
 
@@ -158,11 +174,20 @@ struct target_type {
 	dm_resume_fn resume;
 	dm_status_fn status;
 	dm_message_fn message;
+#ifdef MY_ABC_HERE
+	dm_extra_ioctl_fn extra_ioctl;
+#endif /* MY_ABC_HERE */
 	dm_prepare_ioctl_fn prepare_ioctl;
 	dm_busy_fn busy;
 	dm_iterate_devices_fn iterate_devices;
+#ifdef MY_ABC_HERE
+	dm_handle_4kn_target_support_fn handle_4kn_target_support;
+#endif /* MY_ABC_HERE */
 	dm_io_hints_fn io_hints;
-
+#ifdef MY_ABC_HERE
+	dm_support_noclone_fn support_noclone;
+	dm_map_fn noclone_map;
+#endif /* MY_ABC_HERE */
 	/* For internal device-mapper use. */
 	struct list_head list;
 };
@@ -231,6 +256,14 @@ struct dm_target {
 	 * The bio number can be accessed with dm_bio_get_target_bio_nr.
 	 */
 	unsigned num_write_same_bios;
+
+#ifdef MY_ABC_HERE
+	/*
+	 * The number of UNUSED_HINT bios that will be submitted to the target.
+	 * The bio number can be accessed with dm_bio_get_target_bio_nr.
+	 */
+	unsigned num_unused_hint_bios;
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * The minimum number of extra bytes allocated in each bio for the
@@ -367,6 +400,8 @@ void dm_consume_args(struct dm_arg_set *as, unsigned num_args);
  */
 #define DM_ANY_MINOR (-1)
 int dm_create(int minor, struct mapped_device **md);
+int syno_dm_create_with_custom_name(int minor, unsigned int flags,
+									struct mapped_device **result);
 
 /*
  * Reference counting for md.
@@ -387,6 +422,10 @@ void *dm_get_mdptr(struct mapped_device *md);
  */
 int dm_suspend(struct mapped_device *md, unsigned suspend_flags);
 int dm_resume(struct mapped_device *md);
+#ifdef MY_ABC_HERE
+int dm_active_get(struct mapped_device *md);
+int dm_active_set(struct mapped_device *md, int value);
+#endif /* MY_ABC_HERE */
 
 /*
  * Event functions.
@@ -600,5 +639,9 @@ static inline unsigned long to_bytes(sector_t n)
 {
 	return (n << SECTOR_SHIFT);
 }
+
+#ifdef MY_ABC_HERE
+#define SYNO_DM_IO_RESERVERD_IO_MASK 0xf
+#endif /* MY_ABC_HERE */
 
 #endif	/* _LINUX_DEVICE_MAPPER_H */

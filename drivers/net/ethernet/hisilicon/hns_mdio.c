@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (c) 2014-2015 Hisilicon Limited.
  *
@@ -467,10 +470,14 @@ static int hns_mdio_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "no syscon hisilicon,peri-c-subctrl\n");
 		mdio_dev->subctrl_vbase = NULL;
 	}
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	new_bus->irq = devm_kcalloc(&pdev->dev, PHY_MAX_ADDR,
 				    sizeof(int), GFP_KERNEL);
 	if (!new_bus->irq)
 		return -ENOMEM;
+#endif /* MY_ABC_HERE */
 
 	new_bus->parent = &pdev->dev;
 	platform_set_drvdata(pdev, new_bus);

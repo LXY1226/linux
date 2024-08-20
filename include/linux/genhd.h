@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_GENHD_H
 #define _LINUX_GENHD_H
 
@@ -127,6 +130,9 @@ struct hd_struct {
 #endif
 	struct percpu_ref ref;
 	struct rcu_head rcu_head;
+#ifdef MY_ABC_HERE
+	unsigned auto_remap;
+#endif /* MY_ABC_HERE */
 };
 
 #define GENHD_FL_REMOVABLE			1
@@ -162,6 +168,15 @@ struct disk_part_tbl {
 };
 
 struct disk_events;
+#ifdef MY_DEF_HERE
+enum syno_disk_seq_stat {
+	SYNO_DISK_SEQ_STAT_NEAR_SEQ = 0,
+	SYNO_DISK_SEQ_STAT_SEQ = 1,
+	SYNO_DISK_SEQ_STAT_END = 2, /* Your new added entry SHOULD NOT PASS THE END! */
+};
+
+#define SYNO_BLOCK_RESPONSE_BUCKETS_END 4
+#endif /* MY_DEF_HERE */
 
 #if defined(CONFIG_BLK_DEV_INTEGRITY)
 
@@ -175,7 +190,61 @@ struct blk_integrity {
 
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
 
-struct gendisk {
+#ifdef MY_ABC_HERE
+#ifdef MY_DEF_HERE
+typedef struct _syno_multipath_target_sysfs SYNO_MPATH_TARGET_SYSFS;
+#endif
+#ifdef MY_DEF_HERE
+typedef enum _tag_SYNO_MPATH_COHERENT_ACTION {
+	MPATH_COHERENT_ACTION_DISK_STANDBY_SET,
+	MPATH_COHERENT_ACTION_DISK_STANDBY_CLEAR,
+	MPATH_COHERENT_ACTION_MAX,
+} SYNO_MPATH_COHERENT_ACTION;
+struct syno_mulitpath_coherent_work {
+	struct gendisk *dm_disk;
+	struct gendisk *initiating_disk;
+	SYNO_MPATH_COHERENT_ACTION action;
+	struct work_struct work;
+	void *data;
+};
+#endif /* MY_DEF_HERE */
+
+struct syno_gendisk_operations {
+	bool (*is_device_disappear)(struct gendisk *);
+	int (*get_device_index)(struct gendisk *);
+#ifdef MY_DEF_HERE
+	int (*reg_sysfs_to_multipath_dm)(struct gendisk *, SYNO_MPATH_TARGET_SYSFS *);
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	void (*multipath_dm_target_blkdev_ioctl)(struct block_device *bdev, fmode_t mode, unsigned cmd, unsigned long arg);
+#endif
+#ifdef MY_ABC_HERE
+	int (*autoremap_stackable_dev_target_set)(struct block_device*, unsigned char);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	int (*check_device_status)(struct gendisk *, unsigned int flags);
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	int (*multipath_dm_coherent_work_send)(struct syno_mulitpath_coherent_work *coherent_work);
+#endif
+#ifdef MY_DEF_HERE
+	void (*scsi_standby_flag_set)(struct gendisk *);
+	void (*scsi_standby_flag_clear)(struct gendisk *);
+#endif
+};
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+struct syno_mulitpath_disk_info {
+	bool multipath_slave;
+	int holder_syno_index;
+	struct gendisk *dm_disk;
+	spinlock_t mpath_info_lock;
+};
+#endif /* MY_DEF_HERE */
+
+struct gendisk
+{
 	/* major, first_minor and minors are input parameters only,
 	 * don't use directly.  Use disk_devt() and disk_max_parts().
 	 */
@@ -213,6 +282,27 @@ struct gendisk {
 	struct kobject integrity_kobj;
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
 	int node_id;
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	int systemDisk;
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	sector_t end_sector;
+	unsigned long seq_ios[SYNO_DISK_SEQ_STAT_END];
+	unsigned char block_latency_uuid[16];
+	u64 u64CplCmdCnt[2];
+	u64 u64RespTimeSum[2];
+	u64 u64WaitTime[2];
+	u64 u64RespTimeBuckets[2][SYNO_BLOCK_RESPONSE_BUCKETS_END][32];
+#endif /* MY_DEF_HERE */
+#ifdef MY_ABC_HERE
+	unsigned char auto_remap;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	const struct syno_gendisk_operations *syno_ops;
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	struct syno_mulitpath_disk_info *mpath_info;
+#endif /* MY_ABC_HERE */
 };
 
 static inline struct gendisk *part_to_disk(struct hd_struct *part)
@@ -764,5 +854,10 @@ static inline int blk_part_pack_uuid(const u8 *uuid_str, u8 *to)
 	return -EINVAL;
 }
 #endif /* CONFIG_BLOCK */
+#ifdef MY_ABC_HERE
+#define SYNO_DEVICE_STATUS_IS_RBD_ENABLED		((1U << 0))
+
+bool IsSynoRbdDeviceEnabled(struct block_device *bdev);
+#endif /* MY_ABC_HERE */
 
 #endif /* _LINUX_GENHD_H */

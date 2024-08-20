@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * File:	portdrv.h
  * Purpose:	PCI Express Port Bus Driver's Internal Data Structures
@@ -11,7 +14,11 @@
 
 #include <linux/compiler.h>
 
-#define PCIE_PORT_DEVICE_MAXSERVICES   4
+#ifdef MY_DEF_HERE
+#define PCIE_PORT_DEVICE_MAXSERVICES   6
+#else /* MY_DEF_HERE */
+#define PCIE_PORT_DEVICE_MAXSERVICES   5
+#endif /* MY_DEF_HERE */
 /*
  * According to the PCI Express Base Specification 2.0, the indices of
  * the MSI-X table entries used by port services must not exceed 31

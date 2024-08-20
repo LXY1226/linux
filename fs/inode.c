@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * (C) 1997 Linus Torvalds
  * (C) 1999 Andrea Arcangeli <andrea@suse.de> (dynamic inode allocation)
@@ -51,6 +54,9 @@
  * iunique_lock
  *   inode_hash_lock
  */
+#ifdef MY_ABC_HERE
+#include "synoacl_int.h"
+#endif /* MY_ABC_HERE */
 
 static unsigned int i_hash_mask __read_mostly;
 static unsigned int i_hash_shift __read_mostly;
@@ -155,6 +161,16 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_rdev = 0;
 	inode->dirtied_when = 0;
 
+#ifdef MY_ABC_HERE
+	inode->i_archive_bit = 0; /* set archive bit on creation */
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	inode->i_archive_version = 0;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	inode->i_create_time.tv_sec = 0;
+	inode->i_create_time.tv_nsec = 0;
+#endif /* MY_ABC_HERE */
 #ifdef CONFIG_CGROUP_WRITEBACK
 	inode->i_wb_frn_winner = 0;
 	inode->i_wb_frn_avg_time = 0;
@@ -168,6 +184,10 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 
 	mutex_init(&inode->i_mutex);
 	lockdep_set_class(&inode->i_mutex, &sb->s_type->i_mutex_key);
+#ifdef MY_ABC_HERE
+	mutex_init(&inode->i_syno_mutex);
+	lockdep_set_class(&inode->i_syno_mutex, &sb->s_type->i_syno_mutex_key);
+#endif /* MY_ABC_HERE */
 
 	atomic_set(&inode->i_dio_count, 0);
 
@@ -181,9 +201,12 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_private = NULL;
 	inode->i_mapping = mapping;
 	INIT_HLIST_HEAD(&inode->i_dentry);	/* buggered by rcu freeing */
-#ifdef CONFIG_FS_POSIX_ACL
+#ifdef MY_ABC_HERE
+	inode->i_syno_acl = ACL_NOT_CACHED;
+	inode->i_acl = ACL_NOT_CACHED;
+#elif defined(CONFIG_FS_POSIX_ACL)
 	inode->i_acl = inode->i_default_acl = ACL_NOT_CACHED;
-#endif
+#endif /* MY_ABC_HERE CONFIG_FS_POSIX_ACL */
 
 #ifdef CONFIG_FSNOTIFY
 	inode->i_fsnotify_mask = 0;
@@ -238,12 +261,15 @@ void __destroy_inode(struct inode *inode)
 		atomic_long_dec(&inode->i_sb->s_remove_count);
 	}
 
-#ifdef CONFIG_FS_POSIX_ACL
+#ifdef MY_ABC_HERE
+	if (inode->i_syno_acl && inode->i_syno_acl != ACL_NOT_CACHED)
+		syno_acl_release(inode->i_syno_acl);
+#elif defined(CONFIG_FS_POSIX_ACL)
 	if (inode->i_acl && inode->i_acl != ACL_NOT_CACHED)
 		posix_acl_release(inode->i_acl);
 	if (inode->i_default_acl && inode->i_default_acl != ACL_NOT_CACHED)
 		posix_acl_release(inode->i_default_acl);
-#endif
+#endif /* MY_ABC_HERE CONFIG_FS_POSIX_ACL */
 	this_cpu_dec(nr_inodes);
 }
 EXPORT_SYMBOL(__destroy_inode);
@@ -388,6 +414,9 @@ void __iget(struct inode *inode)
 {
 	atomic_inc(&inode->i_count);
 }
+#ifdef MY_DEF_HERE
+EXPORT_SYMBOL(__iget);
+#endif /* MY_DEF_HERE */
 
 /*
  * get additional reference to inode; caller must already hold one.
@@ -950,7 +979,13 @@ void unlock_new_inode(struct inode *inode)
 {
 	lockdep_annotate_inode_mutex_key(inode);
 	spin_lock(&inode->i_lock);
+#ifdef MY_ABC_HERE
+	if (!(inode->i_state & I_NEW)) {
+		printk(KERN_ERR "FS: inode->i_state is not I_NEW. File system should be remount read-only.\n");
+	}
+#else
 	WARN_ON(!(inode->i_state & I_NEW));
+#endif /* MY_ABC_HERE */
 	inode->i_state &= ~I_NEW;
 	smp_mb();
 	wake_up_bit(&inode->i_state, __I_NEW);
@@ -973,9 +1008,9 @@ void lock_two_nondirectories(struct inode *inode1, struct inode *inode2)
 		swap(inode1, inode2);
 
 	if (inode1 && !S_ISDIR(inode1->i_mode))
-		mutex_lock(&inode1->i_mutex);
+		inode_lock(inode1);
 	if (inode2 && !S_ISDIR(inode2->i_mode) && inode2 != inode1)
-		mutex_lock_nested(&inode2->i_mutex, I_MUTEX_NONDIR2);
+		inode_lock_nested(inode2, I_MUTEX_NONDIR2);
 }
 EXPORT_SYMBOL(lock_two_nondirectories);
 
@@ -987,9 +1022,9 @@ EXPORT_SYMBOL(lock_two_nondirectories);
 void unlock_two_nondirectories(struct inode *inode1, struct inode *inode2)
 {
 	if (inode1 && !S_ISDIR(inode1->i_mode))
-		mutex_unlock(&inode1->i_mutex);
+		inode_unlock(inode1);
 	if (inode2 && !S_ISDIR(inode2->i_mode) && inode2 != inode1)
-		mutex_unlock(&inode2->i_mutex);
+		inode_unlock(inode2);
 }
 EXPORT_SYMBOL(unlock_two_nondirectories);
 
@@ -1541,6 +1576,9 @@ EXPORT_SYMBOL(bmap);
 static int relatime_need_update(struct vfsmount *mnt, struct inode *inode,
 			     struct timespec now)
 {
+#ifdef MY_ABC_HERE
+	long relatime_period = 1;
+#endif /* MY_ABC_HERE */
 
 	if (!(mnt->mnt_flags & MNT_RELATIME))
 		return 1;
@@ -1559,8 +1597,16 @@ static int relatime_need_update(struct vfsmount *mnt, struct inode *inode,
 	 * Is the previous atime value older than a day? If yes,
 	 * update atime:
 	 */
+#ifdef MY_ABC_HERE
+	if (inode->i_sb->relatime_period > 0)
+		relatime_period = inode->i_sb->relatime_period;
+
+	if ((long)(now.tv_sec - inode->i_atime.tv_sec) >= relatime_period*24*60*60)
+		return 1;
+#else
 	if ((long)(now.tv_sec - inode->i_atime.tv_sec) >= 24*60*60)
 		return 1;
+#endif /* MY_ABC_HERE */
 	/*
 	 * Good, we can skip the atime update:
 	 */
@@ -1706,8 +1752,18 @@ EXPORT_SYMBOL(should_remove_suid);
 int dentry_needs_remove_privs(struct dentry *dentry)
 {
 	struct inode *inode = d_inode(dentry);
+#ifdef MY_ABC_HERE
+	/*
+	 * Compiler optimization makes this function return value become
+	 * incorretly. hence, we add modifier so that compiler won't
+	 * do any optimization on these variables
+	 */
+	volatile int mask = 0;
+	volatile int ret;
+#else
 	int mask = 0;
 	int ret;
+#endif /* MY_ABC_HERE */
 
 	if (IS_NOSEC(inode))
 		return 0;

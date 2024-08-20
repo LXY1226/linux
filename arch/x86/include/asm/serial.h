@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _ASM_X86_SERIAL_H
 #define _ASM_X86_SERIAL_H
 
@@ -18,12 +21,33 @@
 # define STD_COMX_FLAGS	(UPF_BOOT_AUTOCONF |	UPF_SKIP_TEST	| 0		)
 # define STD_COM4_FLAGS	(UPF_BOOT_AUTOCONF |	0		| 0		)
 #endif
+#ifdef MY_DEF_HERE
+	/* ApolloLake use HSUART, not legacy uart, don't config 0x3F8 serial port */ \
+#define SERIAL_PORT_DFNS								\
+	/* UART		CLK		PORT	IRQ	FLAGS			    */	\
+	{ .uart = 0,	BASE_BAUD,	0xFFF,	4,	STD_COMX_FLAGS	}, /* ttyS0 */	\
+	{ .uart = 0,	BASE_BAUD,	0x2F8,	3,	STD_COMX_FLAGS	}, /* ttyS1 */	\
+	{ .uart = 0,	BASE_BAUD,	0x3E8,	4,	STD_COMX_FLAGS	}, /* ttyS2 */	\
+	{ .uart = 0,	BASE_BAUD,	0x2E8,	3,	STD_COM4_FLAGS	}, /* ttyS3 */
 
+#else /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+#define SERIAL_PORT_DFNS								\
+	/* UART		CLK		PORT	IRQ	FLAGS			    */	\
+	{ .uart = 0,	BASE_BAUD,	0x2F8,	3,	STD_COMX_FLAGS	}, /* ttyS0 */	\
+	{ .uart = 0,	BASE_BAUD,	0x3F8,	4,	STD_COMX_FLAGS	}, /* ttyS1 */	\
+	{ .uart = 0,	BASE_BAUD,	0x3E8,	4,	STD_COMX_FLAGS	}, /* ttyS2 */	\
+	{ .uart = 0,	BASE_BAUD,	0x2E8,	3,	STD_COM4_FLAGS	}, /* ttyS3 */
+#else /* MY_DEF_HERE */
 #define SERIAL_PORT_DFNS								\
 	/* UART		CLK		PORT	IRQ	FLAGS			    */	\
 	{ .uart = 0,	BASE_BAUD,	0x3F8,	4,	STD_COMX_FLAGS	}, /* ttyS0 */	\
 	{ .uart = 0,	BASE_BAUD,	0x2F8,	3,	STD_COMX_FLAGS	}, /* ttyS1 */	\
 	{ .uart = 0,	BASE_BAUD,	0x3E8,	4,	STD_COMX_FLAGS	}, /* ttyS2 */	\
 	{ .uart = 0,	BASE_BAUD,	0x2E8,	3,	STD_COM4_FLAGS	}, /* ttyS3 */
+#endif /* MY_DEF_HERE */
+
+#endif /* MY_DEF_HERE */
 
 #endif /* _ASM_X86_SERIAL_H */

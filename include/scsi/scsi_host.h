@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _SCSI_SCSI_HOST_H
 #define _SCSI_SCSI_HOST_H
 
@@ -45,6 +48,23 @@ struct blk_queue_tags;
 
 #define DISABLE_CLUSTERING 0
 #define ENABLE_CLUSTERING 1
+
+#ifdef MY_ABC_HERE
+enum {
+	SYNO_PWR_OP_POWER_OFF 	= 0,
+	SYNO_PWR_OP_POWER_ON 	= (1 << 0),
+	SYNO_PWR_OP_DEEPSLEEP 	= (1 << 1),
+	SYNO_PWR_OP_WAKE	 	= (1 << 2),
+};
+#endif /* MY_ABC_HERE */
+
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+enum {
+	SYNO_PORT_TYPE_SATA = 1,
+	SYNO_PORT_TYPE_USB = 2,
+	SYNO_PORT_TYPE_SAS = 3,
+};
+#endif /* MY_ABC_HERE || defined(MY_DEF_HERE) */
 
 struct scsi_host_template {
 	struct module *module;
@@ -481,6 +501,52 @@ struct scsi_host_template {
 	 */
 	struct list_head legacy_hosts;
 
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	/*
+	 * This is an optional routine that allow low level driver can deside
+	 * target start index in scsi layer.
+	 *
+	 * @return : scsi index of what low level driver want
+	 * Status: OPTIONAL
+	 */
+	int  (* syno_index_get)(struct Scsi_Host *host, uint channel, uint id, uint lun);
+#endif /* MY_ABC_HERE || defined(MY_DEF_HERE) */
+#ifdef MY_ABC_HERE
+	/*
+	 * This is an optional routine that could power off host power.
+	 *
+	 * @return : 0 success, otherwise fail
+	 * Status: OPTIONAL
+	 */
+	int  (* syno_host_power_ctl)(struct Scsi_Host *host, u8 pwrOp);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	/*
+	 * This is an optional routine that could do ata port deep sleep
+	 *
+	 * @return : 0 success, otherwise fail
+	 * Status: OPTIONAL
+	 */
+	int  (* syno_host_set_deep_sleep)(struct Scsi_Host *host, const u8 blSet);
+	/*
+	 * This is an optional routine that could do ata port poweroff task
+	 *
+	 * @return : 0 success, otherwise fail
+	 * Status: OPTIONAL
+	 */
+	int  (* syno_host_poweroff_task)(struct Scsi_Host *host);
+	/*
+	 * This is an optional routine that could return the power control capability of the host
+	 *
+	 * @return : 1 support power control, otherwise not support
+	 * Status: OPTIONAL
+	 */
+	int  (* syno_host_support_pwr_ctl)(struct Scsi_Host *host);
+#endif /* MY_ABC_HERE */
+#if defined(MY_ABC_HERE) || defined(MY_DEF_HERE)
+	int  syno_port_type;
+#endif /* MY_ABC_HERE || defined(MY_DEF_HERE) */
+
 	/*
 	 * Vendor Identifier associated with the host
 	 *
@@ -489,6 +555,9 @@ struct scsi_host_template {
 	 *   scsi_netlink.h
 	 */
 	u64 vendor_id;
+#ifdef MY_DEF_HERE
+        unsigned char (* syno_get_disk_speed)(struct Scsi_Host *host, unsigned int phy_id);
+#endif /* MY_DEF_HERE */
 
 	/*
 	 * Additional per-command data allocated for the driver.
@@ -498,6 +567,14 @@ struct scsi_host_template {
 
 	/* temporary flag to disable blk-mq I/O path */
 	bool disable_blk_mq;
+
+#ifdef MY_DEF_HERE
+	int (*syno_set_sashost_disk_led)(struct scsi_device *, int);
+#endif
+
+#ifdef MY_DEF_HERE
+	void (*syno_device_list_set)(struct scsi_device *, int, const char*);
+#endif /* MY_DEF_HERE */
 };
 
 /*
@@ -733,6 +810,23 @@ struct Scsi_Host {
 	 * Needed just in case we have virtual hosts.
 	 */
 	struct device *dma_dev;
+
+#ifdef MY_ABC_HERE
+	spinlock_t	eunit_poweron_lock;
+	spinlock_t	*peunit_poweron_lock;
+	int		eunit_lock_configured;
+	unsigned int	uiata_eh_flag;
+	unsigned int	*puiata_eh_flag;
+	int		is_eunit_deepsleep;
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+	/*
+	 * Indicate is SSD cache device or not.
+	 * Only for nvc device.
+	 */
+	int is_nvc_ssd;
+#endif
 
 	/*
 	 * We should ensure that this is aligned, both for better performance

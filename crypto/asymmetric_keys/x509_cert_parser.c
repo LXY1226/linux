@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* X.509 certificate parser
  *
  * Copyright (C) 2012 Red Hat, Inc. All Rights Reserved.
@@ -518,8 +521,11 @@ int x509_decode_time(time64_t *_t,  size_t hdrlen,
 		if (vlen != 15)
 			goto unsupported_time;
 		year = DD2bin(p) * 100 + DD2bin(p);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		if (year >= 1950 && year <= 2049)
 			goto invalid_time;
+#endif /* MY_ABC_HERE */
 	} else {
 		goto unsupported_time;
 	}

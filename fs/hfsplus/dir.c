@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/hfsplus/dir.c
  *
@@ -37,6 +40,15 @@ static struct dentry *hfsplus_lookup(struct inode *dir, struct dentry *dentry,
 	int err;
 	u32 cnid, linkid = 0;
 	u16 type;
+#ifdef MY_ABC_HERE
+	int nfc = 0;
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_ABC_HERE
+	if (dentry->d_name.len > NAME_MAX) {
+		return ERR_PTR(-ENAMETOOLONG);
+	}
+#endif /* MY_ABC_HERE */
 
 	sb = dir->i_sb;
 
@@ -44,14 +56,26 @@ static struct dentry *hfsplus_lookup(struct inode *dir, struct dentry *dentry,
 	err = hfs_find_init(HFSPLUS_SB(sb)->cat_tree, &fd);
 	if (err)
 		return ERR_PTR(err);
+#ifdef MY_ABC_HERE
+NFC:
+	err = hfsplus_cat_build_key(sb, fd.search_key, dir->i_ino,
+			&dentry->d_name, nfc);
+#else
 	err = hfsplus_cat_build_key(sb, fd.search_key, dir->i_ino,
 			&dentry->d_name);
+#endif /* MY_ABC_HERE */
 	if (unlikely(err < 0))
 		goto fail;
 again:
 	err = hfs_brec_read(&fd, &entry, sizeof(entry));
 	if (err) {
 		if (err == -ENOENT) {
+#ifdef MY_ABC_HERE
+			if (!nfc) {
+				nfc = 1;
+				goto NFC;
+			}
+#endif /* MY_ABC_HERE */
 			hfs_find_exit(&fd);
 			/* No such entry */
 			inode = NULL;
@@ -100,9 +124,15 @@ again:
 					be32_to_cpu(entry.file.permissions.dev);
 				str.len = sprintf(name, "iNode%d", linkid);
 				str.name = name;
+#ifdef MY_ABC_HERE
+				err = hfsplus_cat_build_key(sb, fd.search_key,
+					HFSPLUS_SB(sb)->hidden_dir->i_ino,
+					&str, 0);
+#else
 				err = hfsplus_cat_build_key(sb, fd.search_key,
 					HFSPLUS_SB(sb)->hidden_dir->i_ino,
 					&str);
+#endif /* MY_ABC_HERE */
 				if (unlikely(err < 0))
 					goto fail;
 				goto again;
@@ -284,9 +314,9 @@ static int hfsplus_dir_release(struct inode *inode, struct file *file)
 {
 	struct hfsplus_readdir_data *rd = file->private_data;
 	if (rd) {
-		mutex_lock(&inode->i_mutex);
+		inode_lock(inode);
 		list_del(&rd->list);
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 		kfree(rd);
 	}
 	return 0;

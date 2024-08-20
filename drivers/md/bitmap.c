@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * bitmap.c two-level bitmap (C) Peter T. Breuer (ptb@ot.uc3m.es) 2003
  *
@@ -35,6 +38,15 @@ static inline char *bmname(struct bitmap *bitmap)
 	return bitmap->mddev ? mdname(bitmap->mddev) : "mdX";
 }
 
+#ifdef MY_DEF_HERE
+static inline struct buffer_head* bitmap_page_buffers(struct page *page) {
+	if (!page_has_buffers(page)) {
+		printk(KERN_ALERT "md/bitmap: no buffer head in page\n");
+		return NULL;
+	}
+	return page_buffers(page);
+}
+#endif /* MY_DEF_HERE */
 /*
  * check a page and, if necessary, allocate it (or hijack it if the alloc fails)
  *
@@ -293,7 +305,11 @@ static void write_page(struct bitmap *bitmap, struct page *page, int wait)
 		}
 	} else {
 
+#ifdef MY_DEF_HERE
+		bh = bitmap_page_buffers(page);
+#else /* MY_DEF_HERE */
 		bh = page_buffers(page);
+#endif /* MY_DEF_HERE */
 
 		while (bh && bh->b_blocknr) {
 			atomic_inc(&bitmap->pending_writes);
@@ -611,6 +627,11 @@ re_read:
 
 	chunksize = le32_to_cpu(sb->chunksize);
 	daemon_sleep = le32_to_cpu(sb->daemon_sleep) * HZ;
+#ifdef MY_DEF_HERE
+	if (daemon_sleep < 1) {
+		daemon_sleep = 5 * HZ;
+	}
+#endif /* MY_DEF_HERE */
 	write_behind = le32_to_cpu(sb->write_behind);
 	sectors_reserved = le32_to_cpu(sb->sectors_reserved);
 	/* Setup nodes/clustername only if bitmap version is
@@ -840,6 +861,9 @@ static void bitmap_file_unmap(struct bitmap_storage *store)
 static void bitmap_file_kick(struct bitmap *bitmap)
 {
 	char *path, *ptr = NULL;
+#ifdef MY_DEF_HERE
+	struct mddev *mddev = bitmap->mddev;
+#endif /* MY_DEF_HERE */
 
 	if (!test_and_set_bit(BITMAP_STALE, &bitmap->flags)) {
 		bitmap_update_sb(bitmap);
@@ -854,6 +878,10 @@ static void bitmap_file_kick(struct bitmap *bitmap)
 			      "%s: kicking failed bitmap file %s from array!\n",
 			      bmname(bitmap), IS_ERR(ptr) ? "" : ptr);
 
+#ifdef MY_DEF_HERE
+			mddev->bitmap_info.offset = BITMAP_ERR_OFFSET;
+			md_update_sb(mddev, 1);
+#endif /* MY_DEF_HERE */
 			kfree(path);
 		} else
 			printk(KERN_ALERT
@@ -1310,6 +1338,9 @@ void bitmap_daemon_work(struct mddev *mddev)
 			mddev->bitmap_info.daemon_sleep;
 	mutex_unlock(&mddev->bitmap_info.mutex);
 }
+#ifdef MY_DEF_HERE
+EXPORT_SYMBOL(bitmap_daemon_work);
+#endif /* MY_DEF_HERE */
 
 static bitmap_counter_t *bitmap_get_counter(struct bitmap_counts *bitmap,
 					    sector_t offset, sector_t *blocks,
@@ -1418,7 +1449,11 @@ int bitmap_startwrite(struct bitmap *bitmap, sector_t offset, unsigned long sect
 EXPORT_SYMBOL(bitmap_startwrite);
 
 void bitmap_endwrite(struct bitmap *bitmap, sector_t offset, unsigned long sectors,
+#ifdef MY_DEF_HERE
+		     int success, int behind, int cnt)
+#else /* MY_DEF_HERE */
 		     int success, int behind)
+#endif /* MY_DEF_HERE */
 {
 	if (!bitmap)
 		return;
@@ -1455,7 +1490,12 @@ void bitmap_endwrite(struct bitmap *bitmap, sector_t offset, unsigned long secto
 		if (COUNTER(*bmc) == COUNTER_MAX)
 			wake_up(&bitmap->overflow_wait);
 
+#ifdef MY_DEF_HERE
+		WARN_ON((*bmc) < cnt);
+		(*bmc) = (*bmc) - cnt;
+#else /* MY_DEF_HERE */
 		(*bmc)--;
+#endif /* MY_DEF_HERE */
 		if (*bmc <= 2) {
 			bitmap_set_pending(&bitmap->counts, offset);
 			bitmap->allclean = 0;
@@ -2112,9 +2152,17 @@ static ssize_t
 location_show(struct mddev *mddev, char *page)
 {
 	ssize_t len;
+#ifdef MY_DEF_HERE
+	if (mddev->bitmap_info.file && mddev->bitmap_info.offset != BITMAP_ERR_OFFSET)
+#else /* MY_DEF_HERE */
 	if (mddev->bitmap_info.file)
+#endif /* MY_DEF_HERE */
 		len = sprintf(page, "file");
+#ifdef MY_DEF_HERE
+	else if (mddev->bitmap_info.offset && mddev->bitmap_info.offset != BITMAP_ERR_OFFSET)
+#else /* MY_DEF_HERE */
 	else if (mddev->bitmap_info.offset)
+#endif /* MY_DEF_HERE */
 		len = sprintf(page, "%+lld", (long long)mddev->bitmap_info.offset);
 	else
 		len = sprintf(page, "none");
@@ -2134,7 +2182,11 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 	}
 
 	if (mddev->bitmap || mddev->bitmap_info.file ||
+#ifdef MY_DEF_HERE
+	    (mddev->bitmap_info.offset && mddev->bitmap_info.offset != BITMAP_ERR_OFFSET)) {
+#else /* MY_DEF_HERE */
 	    mddev->bitmap_info.offset) {
+#endif /* MY_DEF_HERE */
 		/* bitmap already configured.  Only option is to clear it */
 		if (strncmp(buf, "none", 4) != 0)
 			return -EBUSY;
@@ -2353,7 +2405,11 @@ static ssize_t metadata_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	if (mddev->bitmap ||
 	    mddev->bitmap_info.file ||
+#ifdef MY_DEF_HERE
+	    (mddev->bitmap_info.offset && mddev->bitmap_info.offset != BITMAP_ERR_OFFSET))
+#else /* MY_DEF_HERE */
 	    mddev->bitmap_info.offset)
+#endif /* MY_DEF_HERE */
 		return -EBUSY;
 	if (strncmp(buf, "external", 8) == 0)
 		mddev->bitmap_info.external = 1;

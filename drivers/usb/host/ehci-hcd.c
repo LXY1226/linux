@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Enhanced Host Controller Interface (EHCI) driver for USB.
  *
@@ -35,6 +38,9 @@
 #include <linux/interrupt.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
+#ifdef MY_ABC_HERE
+#include <linux/usb/syno_quirks.h>
+#endif /* MY_ABC_HERE */
 #include <linux/usb/otg.h>
 #include <linux/moduleparam.h>
 #include <linux/dma-mapping.h>

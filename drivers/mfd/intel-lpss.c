@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Intel Sunrisepoint LPSS core support.
  *
@@ -267,8 +270,11 @@ static void intel_lpss_init_dev(const struct intel_lpss *lpss)
 {
 	u32 value = LPSS_PRIV_SSP_REG_DIS_DMA_FIN;
 
+#ifdef MY_DEF_HERE
+#else
 	/* Set the device in reset state */
 	writel(0, lpss->priv + LPSS_PRIV_RESETS);
+#endif
 
 	intel_lpss_deassert_reset(lpss);
 

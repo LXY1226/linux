@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
  /*
  *	x86 SMP booting functions
  *
@@ -310,9 +313,15 @@ static bool match_smt(struct cpuinfo_x86 *c, struct cpuinfo_x86 *o)
 		int cpu1 = c->cpu_index, cpu2 = o->cpu_index;
 
 		if (c->phys_proc_id == o->phys_proc_id &&
-		    per_cpu(cpu_llc_id, cpu1) == per_cpu(cpu_llc_id, cpu2) &&
-		    c->compute_unit_id == o->compute_unit_id)
-			return topology_sane(c, o, "smt");
+		    per_cpu(cpu_llc_id, cpu1) == per_cpu(cpu_llc_id, cpu2)) {
+			if (c->cpu_core_id == o->cpu_core_id)
+				return topology_sane(c, o, "smt");
+
+			if ((c->cu_id != 0xff) &&
+			    (o->cu_id != 0xff) &&
+			    (c->cu_id == o->cu_id))
+				return topology_sane(c, o, "smt");
+		}
 
 	} else if (c->phys_proc_id == o->phys_proc_id &&
 		   c->cpu_core_id == o->cpu_core_id) {
@@ -1166,6 +1175,10 @@ static void __init smp_cpu_index_default(void)
 void __init native_smp_prepare_cpus(unsigned int max_cpus)
 {
 	unsigned int i;
+#ifdef MY_DEF_HERE
+	unsigned long flags;
+	unsigned char SynoMemoryTrainFailReason = 0;
+#endif /* MY_DEF_HERE */
 
 	smp_cpu_index_default();
 
@@ -1213,6 +1226,15 @@ void __init native_smp_prepare_cpus(unsigned int max_cpus)
 
 	pr_info("CPU%d: ", 0);
 	print_cpu_info(&cpu_data(0));
+#ifdef MY_DEF_HERE
+	spin_lock_irqsave(&rtc_lock, flags);
+	SynoMemoryTrainFailReason = CMOS_READ(CONFIG_SYNO_MRC_POSTCODE_CMOS_ADDR);
+	CMOS_WRITE(0xff, CONFIG_SYNO_MRC_POSTCODE_CMOS_ADDR);
+	spin_unlock_irqrestore(&rtc_lock, flags);
+	if (0xff != SynoMemoryTrainFailReason) {
+		pr_err("%s: this boot have memory training fail, last reason is 0x%02x\n", __func__, SynoMemoryTrainFailReason);
+	}
+#endif /* MY_DEF_HERE */
 
 	if (is_uv_system())
 		uv_system_init();
@@ -1425,7 +1447,6 @@ void play_dead_common(void)
 {
 	idle_task_exit();
 	reset_lazy_tlbstate();
-	amd_e400_remove_cpu(raw_smp_processor_id());
 
 	/* Ack it */
 	(void)cpu_report_death();

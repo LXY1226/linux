@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  drivers/mtd/nand/ams-delta.c
  *
@@ -64,7 +67,11 @@ static struct mtd_partition partition_info[] = {
 
 static void ams_delta_write_byte(struct mtd_info *mtd, u_char byte)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	void __iomem *io_base = this->priv;
 
 	writew(0, io_base + OMAP_MPUIO_IO_CNTL);
@@ -77,7 +84,11 @@ static void ams_delta_write_byte(struct mtd_info *mtd, u_char byte)
 static u_char ams_delta_read_byte(struct mtd_info *mtd)
 {
 	u_char res;
+#if defined(MY_ABC_HERE)
+	struct nand_chip *this = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *this = mtd->priv;
+#endif /* MY_ABC_HERE */
 	void __iomem *io_base = this->priv;
 
 	gpio_set_value(AMS_DELTA_GPIO_PIN_NAND_NRE, 0);

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Detect hard and soft lockups on a system
  *
@@ -54,10 +57,18 @@ int __read_mostly nmi_watchdog_enabled;
 int __read_mostly soft_watchdog_enabled;
 int __read_mostly watchdog_user_enabled;
 int __read_mostly watchdog_thresh = 10;
+#ifdef MY_DEF_HERE
+#define SYNO_HARDLOCKUP_WATCHDOG_THRESH 60
+#endif /* MY_DEF_HERE */
 
 #ifdef CONFIG_SMP
+#ifdef MY_ABC_HERE
+int __read_mostly sysctl_softlockup_all_cpu_backtrace = 1;
+int __read_mostly sysctl_hardlockup_all_cpu_backtrace = 1;
+#else
 int __read_mostly sysctl_softlockup_all_cpu_backtrace;
 int __read_mostly sysctl_hardlockup_all_cpu_backtrace;
+#endif
 #else
 #define sysctl_softlockup_all_cpu_backtrace 0
 #define sysctl_hardlockup_all_cpu_backtrace 0
@@ -105,6 +116,9 @@ static DEFINE_PER_CPU(bool, watchdog_nmi_touch);
 static DEFINE_PER_CPU(unsigned long, hrtimer_interrupts_saved);
 static DEFINE_PER_CPU(struct perf_event *, watchdog_ev);
 #endif
+#ifdef MY_ABC_HERE
+static DEFINE_PER_CPU(unsigned long, softlockup_counter);
+#endif /* MY_ABC_HERE */
 static unsigned long soft_lockup_nmi_warn;
 
 /* boot commands */
@@ -194,7 +208,11 @@ __setup("hardlockup_all_cpu_backtrace=", hardlockup_all_cpu_backtrace_setup);
  */
 static int get_softlockup_thresh(void)
 {
+#ifdef MY_ABC_HERE
+	return watchdog_thresh * 4;
+#else /* MY_ABC_HERE */
 	return watchdog_thresh * 2;
+#endif /* MY_ABC_HERE */
 }
 
 /*
@@ -216,7 +234,11 @@ static void set_sample_period(void)
 	 * and hard thresholds) to increment before the
 	 * hardlockup detector generates a warning
 	 */
+#ifdef MY_ABC_HERE
+	sample_period = (get_softlockup_thresh() / 2) * ((u64)NSEC_PER_SEC / 5);
+#else /* MY_ABC_HERE */
 	sample_period = get_softlockup_thresh() * ((u64)NSEC_PER_SEC / 5);
+#endif /* MY_ABC_HERE */
 }
 
 /* Commands for resetting the watchdog */
@@ -327,6 +349,10 @@ static void watchdog_overflow_callback(struct perf_event *event,
 	 * then this is a good indication the cpu is stuck
 	 */
 	if (is_hardlockup()) {
+#ifdef MY_DEF_HERE
+		/* save hardlockup_panic to avoid enable during printing calltrace */
+		unsigned int panic_backup = hardlockup_panic;
+#endif /* MY_DEF_HERE */
 		int this_cpu = smp_processor_id();
 
 		/* only print hardlockups once */
@@ -348,9 +374,12 @@ static void watchdog_overflow_callback(struct perf_event *event,
 		if (sysctl_hardlockup_all_cpu_backtrace &&
 				!test_and_set_bit(0, &hardlockup_allcpu_dumped))
 			trigger_allbutself_cpu_backtrace();
-
+#ifdef MY_DEF_HERE
+		if (panic_backup)
+#else /* MY_DEF_HERE */
 		if (hardlockup_panic)
-			panic("Hard LOCKUP");
+#endif /* MY_DEF_HERE */
+			nmi_panic("Hard LOCKUP");
 
 		__this_cpu_write(hard_watchdog_warn, true);
 		return;
@@ -449,6 +478,15 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 				return HRTIMER_RESTART;
 			}
 		}
+
+#ifdef MY_ABC_HERE
+		if (__this_cpu_read(softlockup_counter) >= CONFIG_SYNO_SOFTLOCKUP_COUNTER_MAX) {
+			__this_cpu_write(soft_watchdog_warn, false);
+			return HRTIMER_RESTART;
+		} else {
+			__this_cpu_inc(softlockup_counter);
+		}
+#endif /* MY_ABC_HERE */
 
 		pr_emerg("BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
 			smp_processor_id(), duration,
@@ -586,7 +624,11 @@ static int watchdog_nmi_enable(unsigned int cpu)
 		goto out_enable;
 
 	wd_attr = &wd_hw_attr;
+#ifdef MY_DEF_HERE
+	wd_attr->sample_period = hw_nmi_get_sample_period(SYNO_HARDLOCKUP_WATCHDOG_THRESH);
+#else /* MY_DEF_HERE */
 	wd_attr->sample_period = hw_nmi_get_sample_period(watchdog_thresh);
+#endif /* MY_DEF_HERE */
 
 	/* Try to register using hardware perf events */
 	event = perf_event_create_kernel_counter(wd_attr, cpu, NULL, watchdog_overflow_callback, NULL);
@@ -698,6 +740,17 @@ static int watchdog_park_threads(void)
 
 	return ret;
 }
+#ifdef MY_DEF_HERE
+/* update hrtimer for each watchdog enabled CPU */
+void watchdog_hrtimer_inc(void)
+{
+	int cpu;
+	for_each_watchdog_cpu(cpu) {
+		++per_cpu(hrtimer_interrupts, cpu);
+	}
+}
+EXPORT_SYMBOL(watchdog_hrtimer_inc);
+#endif /* MY_DEF_HERE */
 
 /*
  * unpark all watchdog threads that are specified in 'watchdog_cpumask'

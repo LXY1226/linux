@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Detect Hung Task
  *
@@ -37,7 +40,13 @@ int __read_mostly sysctl_hung_task_check_count = PID_MAX_LIMIT;
  */
 unsigned long __read_mostly sysctl_hung_task_timeout_secs = CONFIG_DEFAULT_HUNG_TASK_TIMEOUT;
 
+#ifdef MY_ABC_HERE
+int __read_mostly sysctl_hung_task_warnings_default = CONFIG_SYNO_DEFAULT_HUNG_TASK_WARNINGS;
+int __read_mostly sysctl_hung_task_warnings = CONFIG_SYNO_DEFAULT_HUNG_TASK_WARNINGS;
+int __read_mostly sysctl_hung_task_warnings_reset_period = CONFIG_SYNO_DEFAULT_HUNG_TASK_RESET_PERIOD;
+#else /* MY_ABC_HERE */
 int __read_mostly sysctl_hung_task_warnings = 10;
+#endif /* MY_ABC_HERE */
 
 static int __read_mostly did_panic;
 
@@ -71,6 +80,16 @@ hung_task_panic(struct notifier_block *this, unsigned long event, void *ptr)
 static struct notifier_block panic_block = {
 	.notifier_call = hung_task_panic,
 };
+
+#ifdef MY_ABC_HERE
+static void hung_task_warnings_reset(unsigned long data);
+static DEFINE_TIMER(reset_warnings_timer, hung_task_warnings_reset, 0, 0);
+static void hung_task_warnings_reset(unsigned long data)
+{
+	sysctl_hung_task_warnings = sysctl_hung_task_warnings_default;
+	mod_timer(&reset_warnings_timer, jiffies + HZ * sysctl_hung_task_warnings_reset_period * 60);
+}
+#endif /* MY_ABC_HERE */
 
 static void check_hung_task(struct task_struct *t, unsigned long timeout)
 {
@@ -246,6 +265,9 @@ static int __init hung_task_init(void)
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_block);
 	watchdog_task = kthread_run(watchdog, NULL, "khungtaskd");
 
+#ifdef MY_ABC_HERE
+	mod_timer(&reset_warnings_timer, jiffies + HZ * sysctl_hung_task_warnings_reset_period * 60);
+#endif /* MY_ABC_HERE */
 	return 0;
 }
 subsys_initcall(hung_task_init);

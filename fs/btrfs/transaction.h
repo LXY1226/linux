@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2007 Oracle.  All rights reserved.
  *
@@ -21,6 +24,9 @@
 #include "btrfs_inode.h"
 #include "delayed-ref.h"
 #include "ctree.h"
+#if defined(MY_DEF_HERE)
+#include "disk-io.h"
+#endif /* MY_DEF_HERE */
 
 enum btrfs_trans_state {
 	TRANS_STATE_RUNNING		= 0,
@@ -50,7 +56,6 @@ struct btrfs_transaction {
 	 */
 	atomic_t num_writers;
 	atomic_t use_count;
-	atomic_t pending_ordered;
 
 	unsigned long flags;
 
@@ -61,7 +66,6 @@ struct btrfs_transaction {
 	unsigned long start_time;
 	wait_queue_head_t writer_wait;
 	wait_queue_head_t commit_wait;
-	wait_queue_head_t pending_wait;
 	struct list_head pending_snapshots;
 	struct list_head pending_chunks;
 	struct list_head switch_commits;
@@ -81,6 +85,13 @@ struct btrfs_transaction {
 	struct list_head deleted_bgs;
 	spinlock_t dropped_roots_lock;
 	struct btrfs_delayed_ref_root delayed_refs;
+#ifdef MY_DEF_HERE
+	struct list_head quota_account_list;
+	spinlock_t quota_account_lock;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	struct rw_semaphore delayed_refs_rw_sem;
+#endif /* MY_DEF_HERE */
 	int aborted;
 };
 
@@ -129,23 +140,52 @@ struct btrfs_trans_handle {
 	 */
 	struct btrfs_root *root;
 	struct seq_list delayed_ref_elem;
+#ifdef MY_DEF_HERE
+#else
 	struct list_head qgroup_ref_list;
+#endif /* MY_DEF_HERE */
 	struct list_head new_bgs;
+#ifdef MY_DEF_HERE
+	struct btrfs_pending_snapshot *pending_snap;
+	bool pending_snap_rm;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	struct btrfs_delayed_ref_throttle_ticket *syno_delayed_ref_throttle_ticket;
+	bool check_throttle;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	bool syno_usage;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	void *syno_cache_protection_req;
+#endif /* MY_DEF_HERE */
+#ifdef MY_DEF_HERE
+	bool cleaner;
+#endif /* MY_DEF_HERE */
 };
 
 struct btrfs_pending_snapshot {
 	struct dentry *dentry;
 	struct inode *dir;
 	struct btrfs_root *root;
+	struct btrfs_root_item *root_item;
 	struct btrfs_root *snap;
 	struct btrfs_qgroup_inherit *inherit;
+	struct btrfs_path *path;
 	/* block reservation for the operation */
 	struct btrfs_block_rsv block_rsv;
 	u64 qgroup_reserved;
-	/* extra metadata reseration for relocation */
+#ifdef MY_DEF_HERE
+	u64 copy_limit_from;
+#endif /* MY_DEF_HERE */
+	/* extra metadata reservation for relocation */
 	int error;
 	bool readonly;
 	struct list_head list;
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+	/* Preallocated new_fs_root_args */
+	struct btrfs_new_fs_root_args *new_fs_root_args;
+#endif /* MY_DEF_HERE || MY_DEF_HERE */
 };
 
 static inline void btrfs_set_inode_last_trans(struct btrfs_trans_handle *trans,
@@ -181,8 +221,21 @@ static inline void btrfs_clear_skip_qgroup(struct btrfs_trans_handle *trans)
 	delayed_refs->qgroup_to_skip = 0;
 }
 
+#ifdef MY_DEF_HERE
+int btrfs_end_transaction_nosync_delayed(struct btrfs_trans_handle *trans,
+			  struct btrfs_root *root);
+#endif /* MY_DEF_HERE */
 int btrfs_end_transaction(struct btrfs_trans_handle *trans,
 			  struct btrfs_root *root);
+#ifdef MY_DEF_HERE
+struct btrfs_trans_handle *btrfs_start_transaction_with_cache_protection(struct btrfs_root *root, unsigned int num_items,
+				struct syno_cache_protection_parameter_command_generic *syno_cache_protection_command_generic);
+struct btrfs_trans_handle *btrfs_start_transaction_fallback_global_rsv_with_cache_protection(
+					struct btrfs_root *root,
+					unsigned int num_items,
+					int min_factor,
+					struct syno_cache_protection_parameter_command_generic *syno_cache_protection_command_generic);
+#endif /* MY_DEF_HERE */
 struct btrfs_trans_handle *btrfs_start_transaction(struct btrfs_root *root,
 						   unsigned int num_items);
 struct btrfs_trans_handle *btrfs_start_transaction_fallback_global_rsv(
@@ -192,6 +245,10 @@ struct btrfs_trans_handle *btrfs_start_transaction_fallback_global_rsv(
 struct btrfs_trans_handle *btrfs_start_transaction_lflush(
 					struct btrfs_root *root,
 					unsigned int num_items);
+#ifdef MY_DEF_HERE
+struct btrfs_trans_handle *btrfs_join_transaction_with_cache_protection(struct btrfs_root *root,
+				struct syno_cache_protection_parameter_command_generic *syno_cache_protection_command_generic);
+#endif /* MY_DEF_HERE */
 struct btrfs_trans_handle *btrfs_join_transaction(struct btrfs_root *root);
 struct btrfs_trans_handle *btrfs_join_transaction_nolock(struct btrfs_root *root);
 struct btrfs_trans_handle *btrfs_attach_transaction(struct btrfs_root *root);
@@ -201,6 +258,9 @@ struct btrfs_trans_handle *btrfs_start_ioctl_transaction(struct btrfs_root *root
 int btrfs_wait_for_commit(struct btrfs_root *root, u64 transid);
 
 void btrfs_add_dead_root(struct btrfs_root *root);
+#if defined(MY_DEF_HERE) || defined(MY_DEF_HERE)
+void btrfs_add_dead_root_head(struct btrfs_root *root);
+#endif /* MY_DEF_HERE || MY_DEF_HERE */
 int btrfs_defrag_root(struct btrfs_root *root);
 int btrfs_clean_one_deleted_snapshot(struct btrfs_root *root);
 int btrfs_commit_transaction(struct btrfs_trans_handle *trans,
@@ -210,13 +270,20 @@ int btrfs_commit_transaction_async(struct btrfs_trans_handle *trans,
 				   int wait_for_unblock);
 int btrfs_end_transaction_throttle(struct btrfs_trans_handle *trans,
 				   struct btrfs_root *root);
+#ifdef MY_DEF_HERE
+int btrfs_throttle_delayed_refs(struct btrfs_root *root, unsigned long delayed_ref_updates);
+#endif /* MY_DEF_HERE */
 int btrfs_should_end_transaction(struct btrfs_trans_handle *trans,
 				 struct btrfs_root *root);
 void btrfs_throttle(struct btrfs_root *root);
 int btrfs_record_root_in_trans(struct btrfs_trans_handle *trans,
 				struct btrfs_root *root);
 int btrfs_write_marked_extents(struct btrfs_root *root,
-				struct extent_io_tree *dirty_pages, int mark);
+				struct extent_io_tree *dirty_pages, int mark
+#ifdef MY_DEF_HERE
+				, u64 *total_count, u64 *total_size
+#endif /* MY_DEF_HERE */
+				);
 int btrfs_wait_marked_extents(struct btrfs_root *root,
 				struct extent_io_tree *dirty_pages, int mark);
 int btrfs_transaction_blocked(struct btrfs_fs_info *info);

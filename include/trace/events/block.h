@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM block
 
@@ -666,6 +669,40 @@ TRACE_EVENT(block_rq_remap,
 		  MAJOR(__entry->old_dev), MINOR(__entry->old_dev),
 		  (unsigned long long)__entry->old_sector, __entry->nr_bios)
 );
+
+#ifdef MY_ABC_HERE
+/**
+ * syno_md_endio - IO operation completed tracepoint by md
+ * @bio: struct bio
+ * @duration: number of jiffies
+ *
+ * The syno_md_endio tracepoint event indicates that some portion
+ * of operation bio has been completed by the md.
+ */
+TRACE_EVENT(syno_md_endio,
+	TP_PROTO(struct bio *bio, unsigned long duration),
+	TP_ARGS(bio, duration),
+
+	TP_STRUCT__entry(
+		__field(dev_t,	dev)
+		__field(sector_t, sector)
+		__field(unsigned, nr_sector)
+		__field(unsigned long, duration)
+	),
+
+	TP_fast_assign(
+		__entry->dev		= bio->bi_bdev->bd_dev;
+		__entry->sector		= bio->bi_iter.bi_sector;
+		__entry->nr_sector	= bio_sectors(bio);
+		__entry->duration	= duration;
+	),
+
+	TP_printk("dev:%d,%d, start:%llu + %u, latency_ms: %u",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  (unsigned long long)__entry->sector, __entry->nr_sector,
+		  jiffies_to_msecs(__entry->duration))
+);
+#endif /* MY_ABC_HERE */
 
 #endif /* _TRACE_BLOCK_H */
 

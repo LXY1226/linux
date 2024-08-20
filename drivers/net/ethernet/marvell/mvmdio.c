@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Driver for the MDIO interface of Marvell network interfaces.
  *
@@ -187,7 +190,11 @@ static int orion_mdio_probe(struct platform_device *pdev)
 	struct resource *r;
 	struct mii_bus *bus;
 	struct orion_mdio_dev *dev;
+#if defined(MY_ABC_HERE)
+	int ret;
+#else /* MY_ABC_HERE */
 	int i, ret;
+#endif /* MY_ABC_HERE */
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!r) {
@@ -207,6 +214,9 @@ static int orion_mdio_probe(struct platform_device *pdev)
 		 dev_name(&pdev->dev));
 	bus->parent = &pdev->dev;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->irq = devm_kmalloc_array(&pdev->dev, PHY_MAX_ADDR, sizeof(int),
 				      GFP_KERNEL);
 	if (!bus->irq)
@@ -215,6 +225,7 @@ static int orion_mdio_probe(struct platform_device *pdev)
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		bus->irq[i] = PHY_POLL;
 
+#endif /* MY_ABC_HERE */
 	dev = bus->priv;
 	dev->regs = devm_ioremap(&pdev->dev, r->start, resource_size(r));
 	if (!dev->regs) {

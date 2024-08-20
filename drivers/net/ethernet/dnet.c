@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Dave DNET Ethernet Controller driver
  *
@@ -255,15 +258,23 @@ static int dnet_mii_probe(struct net_device *dev)
 {
 	struct dnet *bp = netdev_priv(dev);
 	struct phy_device *phydev = NULL;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int phy_addr;
+#endif /* MY_ABC_HERE */
 
 	/* find the first phy */
+#if defined(MY_ABC_HERE)
+	phydev = phy_find_first(bp->mii_bus);
+#else /* MY_ABC_HERE */
 	for (phy_addr = 0; phy_addr < PHY_MAX_ADDR; phy_addr++) {
 		if (bp->mii_bus->phy_map[phy_addr]) {
 			phydev = bp->mii_bus->phy_map[phy_addr];
 			break;
 		}
 	}
+#endif /* MY_ABC_HERE */
 
 	if (!phydev) {
 		printk(KERN_ERR "%s: no PHY found\n", dev->name);
@@ -274,11 +285,19 @@ static int dnet_mii_probe(struct net_device *dev)
 
 	/* attach the mac to the phy */
 	if (bp->capabilities & DNET_HAS_RMII) {
+#if defined(MY_ABC_HERE)
+		phydev = phy_connect(dev, phydev_name(phydev),
+#else /* MY_ABC_HERE */
 		phydev = phy_connect(dev, dev_name(&phydev->dev),
+#endif /* MY_ABC_HERE */
 				     &dnet_handle_link_change,
 				     PHY_INTERFACE_MODE_RMII);
 	} else {
+#if defined(MY_ABC_HERE)
+		phydev = phy_connect(dev, phydev_name(phydev),
+#else /* MY_ABC_HERE */
 		phydev = phy_connect(dev, dev_name(&phydev->dev),
+#endif /* MY_ABC_HERE */
 				     &dnet_handle_link_change,
 				     PHY_INTERFACE_MODE_MII);
 	}
@@ -308,7 +327,11 @@ static int dnet_mii_probe(struct net_device *dev)
 
 static int dnet_mii_init(struct dnet *bp)
 {
+#if defined(MY_ABC_HERE)
+	int err;
+#else /* MY_ABC_HERE */
 	int err, i;
+#endif /* MY_ABC_HERE */
 
 	bp->mii_bus = mdiobus_alloc();
 	if (bp->mii_bus == NULL)
@@ -323,6 +346,9 @@ static int dnet_mii_init(struct dnet *bp)
 
 	bp->mii_bus->priv = bp;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bp->mii_bus->irq = devm_kmalloc(&bp->pdev->dev,
 					sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
 	if (!bp->mii_bus->irq) {
@@ -332,6 +358,7 @@ static int dnet_mii_init(struct dnet *bp)
 
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		bp->mii_bus->irq[i] = PHY_POLL;
+#endif /* MY_ABC_HERE */
 
 	if (mdiobus_register(bp->mii_bus)) {
 		err = -ENXIO;
@@ -892,9 +919,13 @@ static int dnet_probe(struct platform_device *pdev)
 	       (bp->capabilities & DNET_HAS_GIGABIT) ? "" : "no ",
 	       (bp->capabilities & DNET_HAS_DMA) ? "" : "no ");
 	phydev = bp->phy_dev;
+#if defined(MY_ABC_HERE)
+	phy_attached_info(phydev);
+#else /* MY_ABC_HERE */
 	dev_info(&pdev->dev, "attached PHY driver [%s] "
 	       "(mii_bus:phy_addr=%s, irq=%d)\n",
 	       phydev->drv->name, dev_name(&phydev->dev), phydev->irq);
+#endif /* MY_ABC_HERE */
 
 	return 0;
 

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Toumaz Xenif TZ1090 PDC GPIO handling.
  *
@@ -188,7 +191,11 @@ static int tz1090_pdc_gpio_probe(struct platform_device *pdev)
 
 	/* Set up GPIO chip */
 	priv->chip.label		= "tz1090-pdc-gpio";
+#if defined(MY_ABC_HERE)
+	priv->chip.parent			= &pdev->dev;
+#else /* MY_ABC_HERE */
 	priv->chip.dev			= &pdev->dev;
+#endif /* MY_ABC_HERE */
 	priv->chip.direction_input	= tz1090_pdc_gpio_direction_input;
 	priv->chip.direction_output	= tz1090_pdc_gpio_direction_output;
 	priv->chip.get			= tz1090_pdc_gpio_get;

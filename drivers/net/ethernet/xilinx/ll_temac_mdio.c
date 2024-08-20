@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * MDIO bus driver for the Xilinx TEMAC device
  *
@@ -92,7 +95,11 @@ int temac_mdio_setup(struct temac_local *lp, struct device_node *np)
 	bus->read = temac_mdio_read;
 	bus->write = temac_mdio_write;
 	bus->parent = lp->dev;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->irq = lp->mdio_irqs; /* preallocated IRQ table */
+#endif /* MY_ABC_HERE */
 
 	lp->mii_bus = bus;
 
@@ -114,7 +121,11 @@ int temac_mdio_setup(struct temac_local *lp, struct device_node *np)
 void temac_mdio_teardown(struct temac_local *lp)
 {
 	mdiobus_unregister(lp->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	kfree(lp->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 	mdiobus_free(lp->mii_bus);
 	lp->mii_bus = NULL;
 }

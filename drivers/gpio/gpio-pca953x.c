@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  PCA953x 4/8/16/24/40 bit I/O ports
  *
@@ -367,7 +370,11 @@ static void pca953x_setup_gpio(struct pca953x_chip *chip, int gpios)
 	gc->base = chip->gpio_start;
 	gc->ngpio = gpios;
 	gc->label = chip->client->name;
+#if defined(MY_ABC_HERE)
+	gc->parent = &chip->client->dev;
+#else /* MY_ABC_HERE */
 	gc->dev = &chip->client->dev;
+#endif /* MY_ABC_HERE */
 	gc->owner = THIS_MODULE;
 	gc->names = chip->names;
 }

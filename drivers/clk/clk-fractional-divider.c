@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2014 Intel Corporation
  *
@@ -16,7 +19,11 @@
 #include <linux/slab.h>
 #include <linux/rational.h>
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_fd(_hw) container_of(_hw, struct clk_fractional_divider, hw)
+#endif /* MY_ABC_HERE */
 
 static unsigned long clk_fd_recalc_rate(struct clk_hw *hw,
 					unsigned long parent_rate)

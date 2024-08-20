@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * drivers/net/phy/et1011c.c
  *
@@ -95,7 +98,11 @@ static struct phy_driver et1011c_driver[] = { {
 	.flags		= PHY_POLL,
 	.config_aneg	= et1011c_config_aneg,
 	.read_status	= et1011c_read_status,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver 	= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 } };
 
 module_phy_driver(et1011c_driver);

@@ -20,6 +20,7 @@
 #include <linux/pci.h>
 
 #include <asm/mce.h>
+#include <asm/smp.h>
 #include <asm/amd_nb.h>
 #include <asm/irq_vectors.h>
 
@@ -206,7 +207,7 @@ static u32 get_nbc_for_node(int node_id)
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 	u32 cores_per_node;
 
-	cores_per_node = c->x86_max_cores / amd_get_nodes_per_socket();
+	cores_per_node = (c->x86_max_cores * smp_num_siblings) / amd_get_nodes_per_socket();
 
 	return cores_per_node * node_id;
 }
@@ -275,7 +276,9 @@ static void do_inject(void)
 	 * only on the node base core. Refer to D18F3x44[NbMcaToMstCpuEn] for
 	 * Fam10h and later BKDGs.
 	 */
-	if (static_cpu_has(X86_FEATURE_AMD_DCM) && b == 4) {
+	if (static_cpu_has(X86_FEATURE_AMD_DCM) &&
+	    b == 4 &&
+	    boot_cpu_data.x86 < 0x17) {
 		toggle_nb_mca_mst_cpu(amd_get_nb_id(cpu));
 		cpu = get_nbc_for_node(amd_get_nb_id(cpu));
 	}
@@ -323,9 +326,16 @@ err:
 static int inj_bank_set(void *data, u64 val)
 {
 	struct mce *m = (struct mce *)data;
+	u8 n_banks;
+	u64 cap;
+
+	/* Get bank count on target CPU so we can handle non-uniform values. */
+	rdmsrl_on_cpu(m->extcpu, MSR_IA32_MCG_CAP, &cap);
+	n_banks = cap & MCG_BANKCNT_MASK;
+
 
 	if (val >= n_banks) {
-		pr_err("Non-existent MCE bank: %llu\n", val);
+		pr_err("MCA bank %llu non-existent on CPU%d\n", val, m->extcpu);
 		return -EINVAL;
 	}
 
@@ -411,10 +421,6 @@ static struct dfs_node {
 static int __init init_mce_inject(void)
 {
 	int i;
-	u64 cap;
-
-	rdmsrl(MSR_IA32_MCG_CAP, cap);
-	n_banks = cap & MCG_BANKCNT_MASK;
 
 	dfs_inj = debugfs_create_dir("mce-inject", NULL);
 	if (!dfs_inj)

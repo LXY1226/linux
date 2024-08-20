@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * acpi-cpufreq.c - ACPI Processor P-States Driver
  *
@@ -230,7 +233,16 @@ static unsigned extract_msr(u32 msr, struct acpi_cpufreq_data *data)
 	perf = to_perf_data(data);
 
 	cpufreq_for_each_entry(pos, data->freq_table)
+#ifdef MY_ABC_HERE
+		/*
+		 * The value of MSR_IA32_PERF_CTL (199h) may not match any state of P-State
+		 * table. The different part is "Voltage Target", this field is no use in
+		 * some Intel BIOS, so just compare "P-State Target".
+		 */
+		if ((msr & 0xff00) == (perf->states[pos->driver_data].status & 0xff00))
+#else /* MY_ABC_HERE */
 		if (msr == perf->states[pos->driver_data].status)
+#endif /* MY_ABC_HERE */
 			return pos->frequency;
 	return data->freq_table[0].frequency;
 }

@@ -1,7 +1,13 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef __LINUX_GPIO_H
 #define __LINUX_GPIO_H
 
 #include <linux/errno.h>
+#ifdef MY_DEF_HERE
+#include <linux/types.h>
+#endif /* MY_DEF_HERE */
 
 /* see Documentation/gpio/gpio-legacy.txt */
 
@@ -42,7 +48,31 @@ struct gpio {
 	const char	*label;
 };
 
+#ifdef MY_DEF_HERE
+extern u32 syno_pch_lpc_gpio_pin(int pin, int *pValue, int isWrite);
+#endif /* MY_DEF_HERE */
+
+
+#if defined(MY_ABC_HERE)
+extern void syno_gpio_direction_output(int pin, int pValue);
+extern void syno_gpio_direction_input(int pin);
+extern int syno_gpio_to_irq(int pin);
+extern int SYNO_GPIO_READ(int pin);
+extern void SYNO_GPIO_WRITE(int pin, int pValue);
+#endif /* MY_ABC_HERE */
+
 #ifdef CONFIG_GPIOLIB
+
+#ifdef MY_DEF_HERE
+extern int syno_gpio_value_set(int iPin, int iValue);
+extern int syno_gpio_value_get(int iPin, int *pValue);
+#endif /* MY_DEF_HERE */
+
+#ifdef MY_DEF_HERE
+extern void DBG_SpinupGroupListGpio(void);
+extern int SynoHaveRPDetectPin(void);
+extern int SynoAllRedundantPowerDetected(void);
+#endif /* MY_DEF_HERE */
 
 #ifdef CONFIG_ARCH_HAVE_CUSTOM_GPIO_H
 #include <asm/gpio.h>

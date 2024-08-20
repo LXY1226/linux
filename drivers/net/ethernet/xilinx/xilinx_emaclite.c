@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Xilinx EmacLite Linux driver for the Xilinx Ethernet MAC Lite device.
  *
@@ -122,7 +125,7 @@
  * @phy_dev:		pointer to the PHY device
  * @phy_node:		pointer to the PHY device node
  * @mii_bus:		pointer to the MII bus
- * @mdio_irqs:		IRQs table for MDIO bus
+ * @mdio_irqs(for not armada37xx 16.12):		IRQs table for MDIO bus
  * @last_link:		last link status
  * @has_mdio:		indicates whether MDIO is included in the HW
  */
@@ -143,7 +146,11 @@ struct net_local {
 	struct device_node *phy_node;
 
 	struct mii_bus *mii_bus;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int mdio_irqs[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE */
 
 	int last_link;
 	bool has_mdio;
@@ -841,7 +848,11 @@ static int xemaclite_mdio_setup(struct net_local *lp, struct device *dev)
 			dev_info(dev,
 				 "MDIO of the phy is not registered yet\n");
 		else
+#if defined(MY_ABC_HERE)
+			put_device(&phydev->mdio.dev);
+#else /* MY_ABC_HERE */
 			put_device(&phydev->dev);
+#endif /* MY_ABC_HERE */
 		return 0;
 	}
 
@@ -864,7 +875,11 @@ static int xemaclite_mdio_setup(struct net_local *lp, struct device *dev)
 	bus->read = xemaclite_mdio_read;
 	bus->write = xemaclite_mdio_write;
 	bus->parent = dev;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->irq = lp->mdio_irqs; /* preallocated IRQ table */
+#endif /* MY_ABC_HERE */
 
 	lp->mii_bus = bus;
 
@@ -1208,7 +1223,11 @@ static int xemaclite_of_remove(struct platform_device *of_dev)
 	/* Un-register the mii_bus, if configured */
 	if (lp->has_mdio) {
 		mdiobus_unregister(lp->mii_bus);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 		kfree(lp->mii_bus->irq);
+#endif /* MY_ABC_HERE */
 		mdiobus_free(lp->mii_bus);
 		lp->mii_bus = NULL;
 	}

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/fs/hfsplus/super.c
  *
@@ -53,6 +56,22 @@ static int hfsplus_system_read_inode(struct inode *inode)
 
 	return 0;
 }
+
+#ifdef MY_ABC_HERE
+// 3802 byte for 8K node_size
+static inline size_t hfsplus_get_maxinline_attrsize(struct hfs_btree *btree)
+{
+       unsigned int maxsize = btree->node_size;
+       // Copied from Apple open source /xnu-1699.26.8/bsd/hfs/hfs_xattr.c:2169
+       maxsize -= sizeof(struct hfs_bnode_desc);       /* minus node descriptor */
+       maxsize -= 3 * sizeof(u16);                     /* minus 3 index slots */
+       maxsize /= 2;                            /* 2 key/rec pairs minumum */
+       maxsize -= sizeof(struct hfsplus_attr_key);       /* minus maximum key size */
+       maxsize -= sizeof(struct hfsplus_attr_data) - 2;  /* minus data header */
+       maxsize &= 0xFFFFFFFE;                   /* multiple of 2 bytes */
+       return maxsize;
+}
+#endif /* MY_ABC_HERE */
 
 struct inode *hfsplus_iget(struct super_block *sb, unsigned long ino)
 {
@@ -379,6 +398,10 @@ static int hfsplus_fill_super(struct super_block *sb, void *data, int silent)
 	struct nls_table *nls = NULL;
 	u64 last_fs_block, last_fs_page;
 	int err;
+#ifdef MY_ABC_HERE
+	size_t max_attr_size = 0;
+	size_t cached_size = 0;
+#endif /* MY_ABC_HERE */
 
 	err = -ENOMEM;
 	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
@@ -487,6 +510,19 @@ static int hfsplus_fill_super(struct super_block *sb, void *data, int silent)
 		atomic_set(&sbi->attr_tree_state, HFSPLUS_VALID_ATTR_TREE);
 	}
 	sb->s_xattr = hfsplus_xattr_handlers;
+#ifdef MY_ABC_HERE
+	if (sbi->attr_tree) {
+		max_attr_size = hfsplus_get_maxinline_attrsize(sbi->attr_tree);
+		cached_size = offsetof(struct hfsplus_attr_inline_data, raw_bytes) + max_attr_size;
+		if (cached_size > hfsplus_get_attr_tree_cache_size()) {
+			err = hfsplus_recreate_attr_tree_cache(cached_size);
+			if (err) {
+				goto out_close_attr_tree;
+			}
+		}
+		err = -EINVAL;
+	}
+#endif /* MY_ABC_HERE */
 
 	inode = hfsplus_iget(sb, HFSPLUS_ALLOC_CNID);
 	if (IS_ERR(inode)) {
@@ -516,7 +552,11 @@ static int hfsplus_fill_super(struct super_block *sb, void *data, int silent)
 	err = hfs_find_init(sbi->cat_tree, &fd);
 	if (err)
 		goto out_put_root;
+#ifdef MY_ABC_HERE
+	err = hfsplus_cat_build_key(sb, fd.search_key, HFSPLUS_ROOT_CNID, &str, 0);
+#else
 	err = hfsplus_cat_build_key(sb, fd.search_key, HFSPLUS_ROOT_CNID, &str);
+#endif /* MY_ABC_HERE */
 	if (unlikely(err < 0))
 		goto out_put_root;
 	if (!hfs_brec_read(&fd, &entry, sizeof(entry))) {

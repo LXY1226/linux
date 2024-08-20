@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Marvell MVEBU pinctrl core driver
  *
@@ -26,9 +29,16 @@
 
 #include "pinctrl-mvebu.h"
 
+#if defined(MY_ABC_HERE)
+/* need to align with the Soc settings, changed by mvebu_pinctrl_set_mpps() */
+static unsigned mpps_per_reg = 8;
+static unsigned mpp_bits = 4;
+static unsigned mpp_mask = 0xf;
+#else /* MY_ABC_HERE */
 #define MPPS_PER_REG	8
 #define MPP_BITS	4
 #define MPP_MASK	0xf
+#endif /* MY_ABC_HERE */
 
 struct mvebu_pinctrl_function {
 	const char *name;
@@ -544,6 +554,45 @@ static int mvebu_pinctrl_build_functions(struct platform_device *pdev,
 
 	return 0;
 }
+
+#if defined(MY_ABC_HERE)
+/*
+ * set the number of pins per reg in the soc, only needed by those
+ * socs which doesn't align to the default settings
+ */
+int mvebu_pinctrl_set_mpps(unsigned int npins)
+{
+	mpps_per_reg = npins;
+	mpp_bits = 32/mpps_per_reg;
+	mpp_mask = ((1UL<<(mpp_bits))-1);
+
+	return 0;
+}
+
+int default_mpp_ctrl_get(void __iomem *base, unsigned int pid,
+				       unsigned long *config)
+{
+	unsigned off = (pid / mpps_per_reg) * mpp_bits;
+	unsigned shift = (pid % mpps_per_reg) * mpp_bits;
+
+	*config = (readl(base + off) >> shift) & mpp_mask;
+
+	return 0;
+}
+
+int default_mpp_ctrl_set(void __iomem *base, unsigned int pid,
+				       unsigned long config)
+{
+	unsigned off = (pid / mpps_per_reg) * mpp_bits;
+	unsigned shift = (pid % mpps_per_reg) * mpp_bits;
+	unsigned long reg;
+
+	reg = readl(base + off) & ~(mpp_mask << shift);
+	writel(reg | (config << shift), base + off);
+
+	return 0;
+}
+#endif /* MY_ABC_HERE */
 
 int mvebu_pinctrl_probe(struct platform_device *pdev)
 {

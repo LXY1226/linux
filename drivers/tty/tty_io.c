@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
@@ -1173,8 +1176,22 @@ static inline ssize_t do_tty_write(
 		if (size > chunk)
 			size = chunk;
 		ret = -EFAULT;
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+		if (0 == strcmp(tty->name, "ttyS1")) {
+			if (access_ok(VERIFY_READ, buf, size)) {
+				if (copy_from_user(tty->write_buf, buf, size)) {
+					printk(KERN_DEBUG "error attempted to copy_from_user\n");
+				}
+			} else {
+				memcpy(tty->write_buf, buf, size);
+			}
+		} else {
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 		if (copy_from_user(tty->write_buf, buf, size))
 			break;
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+		}
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 		ret = write(tty, file, tty->write_buf, size);
 		if (ret <= 0)
 			break;
@@ -1245,6 +1262,11 @@ static ssize_t tty_write(struct file *file, const char __user *buf,
 	struct tty_struct *tty = file_tty(file);
  	struct tty_ldisc *ld;
 	ssize_t ret;
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+#ifdef MY_ABC_HERE
+	char chFirstChar = '\0';
+#endif
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 
 	if (tty_paranoia_check(tty, file_inode(file), "tty_write"))
 		return -EIO;
@@ -1259,7 +1281,31 @@ static ssize_t tty_write(struct file *file, const char __user *buf,
 	if (!ld->ops->write)
 		ret = -EIO;
 	else
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+	{
+		if (0 == strcmp(tty->name, "ttyS1"))
+#ifdef MY_ABC_HERE
+		{
+			if (access_ok(VERIFY_READ, buf, 1)) {
+				if (copy_from_user(&chFirstChar, buf, 1)) {
+					printk(KERN_DEBUG "error attempted to copy_from_user\n");
+				}
+			} else {
+				memcpy(&chFirstChar, buf, 1);
+			}
+
+			if ('+' != chFirstChar) {
+#endif /* MY_ABC_HERE */
+			do_tty_write(ld->ops->write, tty, file, "-", 1);
+#ifdef MY_ABC_HERE
+			}
+		}
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 		ret = do_tty_write(ld->ops->write, tty, file, buf, count);
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+	}
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 	tty_ldisc_deref(ld);
 	return ret;
 }
@@ -3242,6 +3288,63 @@ int tty_put_char(struct tty_struct *tty, unsigned char ch)
 	return tty->ops->write(tty, &ch, 1);
 }
 EXPORT_SYMBOL_GPL(tty_put_char);
+
+#if defined(MY_ABC_HERE) && defined(MY_DEF_HERE)
+int syno_ttys_write(const int index, const char* szBuf)
+{
+	int err = -1;
+	struct tty_driver *drv = NULL;
+	struct tty_struct *tty = NULL;
+	char *szX64Buf = NULL;
+	size_t cbX64Buf = strlen(szBuf) + 2;
+
+	szX64Buf = kmalloc(cbX64Buf, GFP_KERNEL);
+	if (!szX64Buf) {
+		err = -ENOMEM;
+		goto Error;
+	}
+
+	mutex_lock(&tty_mutex);
+	list_for_each_entry(drv, &tty_drivers, tty_drivers) {
+		if (strcmp(drv->name, "ttyS")) {
+		    continue;
+		}
+		if (index < 0 || index >= drv->num) {
+		    continue;
+		}
+		if (NULL == drv->ttys || NULL == drv->ttys[index]) {
+		    continue;
+		}
+		tty = drv->ttys[index];
+	}
+	if (!IS_ERR(tty))
+		tty_kref_get(tty);
+	else
+		tty = NULL;
+	mutex_unlock(&tty_mutex);
+
+	if (!tty) {
+		err = -ENODEV;
+		goto Error;
+	}
+
+	memset(szX64Buf, 0, cbX64Buf);
+	snprintf(szX64Buf, cbX64Buf, "%c%s", '-', szBuf);
+
+	syno_uart_write(tty->port, szX64Buf, strlen(szX64Buf));
+
+	mutex_lock(&tty_mutex);
+	tty_kref_put(tty);
+	mutex_unlock(&tty_mutex);
+
+	err = 0;
+Error:
+	if (szX64Buf)
+		kfree(szX64Buf);
+	return err;
+}
+EXPORT_SYMBOL(syno_ttys_write);
+#endif /* MY_ABC_HERE && MY_DEF_HERE */
 
 struct class *tty_class;
 

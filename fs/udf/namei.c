@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * namei.c
  *
@@ -31,11 +34,22 @@
 #include <linux/crc-itu-t.h>
 #include <linux/exportfs.h>
 
+#ifdef MY_ABC_HERE
+static inline int udf_match(int len1, const unsigned char *name1, int len2,
+			    const unsigned char *name2, int is_caseless)
+#else
 static inline int udf_match(int len1, const unsigned char *name1, int len2,
 			    const unsigned char *name2)
+#endif /* MY_ABC_HERE */
 {
 	if (len1 != len2)
 		return 0;
+
+#ifdef MY_ABC_HERE
+	if (is_caseless) {
+		return !strncasecmp(name1, name2, len1);
+	}
+#endif /* MY_ABC_HERE */
 
 	return !memcmp(name1, name2, len1);
 }
@@ -267,8 +281,14 @@ static struct fileIdentDesc *udf_find_entry(struct inode *dir,
 			goto out_err;
 		}
 
+#ifdef MY_ABC_HERE
+		if (udf_match(flen, fname, child->len, child->name,
+					UDF_QUERY_FLAG(sb, SYNO_UDF_FLAG_CASELESS)))
+			goto out_ok;
+#else
 		if (udf_match(flen, fname, child->len, child->name))
 			goto out_ok;
+#endif /* MY_ABC_HERE */
 	}
 
 	fi = NULL;

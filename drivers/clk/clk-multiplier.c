@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2015 Maxime Ripard <maxime.ripard@free-electrons.com>
  *
@@ -14,7 +17,11 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_multiplier(_hw) container_of(_hw, struct clk_multiplier, hw)
+#endif /* MY_ABC_HERE */
 
 static unsigned long __get_mult(struct clk_multiplier *mult,
 				unsigned long rate,

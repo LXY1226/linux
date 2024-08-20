@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * net/dsa/mv88e6060.c - Driver for Marvell 88e6060 switch chips
  * Copyright (c) 2008-2009 Marvell Semiconductor
@@ -19,12 +22,18 @@
 
 static int reg_read(struct dsa_switch *ds, int addr, int reg)
 {
+#if defined(MY_ABC_HERE)
+	struct mv88e6060_priv *priv = ds_to_priv(ds);
+
+	return mdiobus_read_nested(priv->bus, priv->sw_addr + addr, reg);
+#else /* MY_ABC_HERE */
 	struct mii_bus *bus = dsa_host_dev_to_mii_bus(ds->master_dev);
 
 	if (bus == NULL)
 		return -EINVAL;
 
 	return mdiobus_read_nested(bus, ds->pd->sw_addr + addr, reg);
+#endif /* MY_ABC_HERE */
 }
 
 #define REG_READ(addr, reg)					\
@@ -40,12 +49,18 @@ static int reg_read(struct dsa_switch *ds, int addr, int reg)
 
 static int reg_write(struct dsa_switch *ds, int addr, int reg, u16 val)
 {
+#if defined(MY_ABC_HERE)
+	struct mv88e6060_priv *priv = ds_to_priv(ds);
+
+	return mdiobus_write_nested(priv->bus, priv->sw_addr + addr, reg, val);
+#else /* MY_ABC_HERE */
 	struct mii_bus *bus = dsa_host_dev_to_mii_bus(ds->master_dev);
 
 	if (bus == NULL)
 		return -EINVAL;
 
 	return mdiobus_write_nested(bus, ds->pd->sw_addr + addr, reg, val);
+#endif /* MY_ABC_HERE */
 }
 
 #define REG_WRITE(addr, reg, val)				\
@@ -57,6 +72,11 @@ static int reg_write(struct dsa_switch *ds, int addr, int reg, u16 val)
 			return __ret;				\
 	})
 
+#if defined(MY_ABC_HERE)
+static const char *mv88e6060_get_name(struct mii_bus *bus, int sw_addr)
+{
+	int ret;
+#else /* MY_ABC_HERE */
 static char *mv88e6060_probe(struct device *host_dev, int sw_addr)
 {
 	struct mii_bus *bus = dsa_host_dev_to_mii_bus(host_dev);
@@ -64,6 +84,7 @@ static char *mv88e6060_probe(struct device *host_dev, int sw_addr)
 
 	if (bus == NULL)
 		return NULL;
+#endif /* MY_ABC_HERE */
 
 	ret = mdiobus_read(bus, sw_addr + REG_PORT(0), PORT_SWITCH_ID);
 	if (ret >= 0) {
@@ -78,6 +99,29 @@ static char *mv88e6060_probe(struct device *host_dev, int sw_addr)
 
 	return NULL;
 }
+
+#if defined(MY_ABC_HERE)
+static const char *mv88e6060_drv_probe(struct device *dsa_dev,
+				       struct device *host_dev, int sw_addr,
+				       void **_priv)
+{
+	struct mii_bus *bus = dsa_host_dev_to_mii_bus(host_dev);
+	struct mv88e6060_priv *priv;
+	const char *name;
+
+	name = mv88e6060_get_name(bus, sw_addr);
+	if (name) {
+		priv = devm_kzalloc(dsa_dev, sizeof(*priv), GFP_KERNEL);
+		if (!priv)
+			return NULL;
+		*_priv = priv;
+		priv->bus = bus;
+		priv->sw_addr = sw_addr;
+	}
+
+	return name;
+}
+#endif /* MY_ABC_HERE */
 
 static int mv88e6060_switch_reset(struct dsa_switch *ds)
 {
@@ -155,7 +199,11 @@ static int mv88e6060_setup_port(struct dsa_switch *ds, int p)
 	REG_WRITE(addr, PORT_VLAN_MAP,
 		  ((p & 0xf) << PORT_VLAN_MAP_DBNUM_SHIFT) |
 		   (dsa_is_cpu_port(ds, p) ?
+#if defined(MY_ABC_HERE)
+			ds->enabled_port_mask :
+#else /* MY_ABC_HERE */
 			ds->phys_port_mask :
+#endif /* MY_ABC_HERE */
 			BIT(ds->dst->cpu_port)));
 
 	/* Port Association Vector: when learning source addresses
@@ -234,7 +282,11 @@ mv88e6060_phy_write(struct dsa_switch *ds, int port, int regnum, u16 val)
 
 static struct dsa_switch_driver mv88e6060_switch_driver = {
 	.tag_protocol	= DSA_TAG_PROTO_TRAILER,
+#if defined(MY_ABC_HERE)
+	.probe		= mv88e6060_drv_probe,
+#else /* MY_ABC_HERE */
 	.probe		= mv88e6060_probe,
+#endif /* MY_ABC_HERE */
 	.setup		= mv88e6060_setup,
 	.set_addr	= mv88e6060_set_addr,
 	.phy_read	= mv88e6060_phy_read,

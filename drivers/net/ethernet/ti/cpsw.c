@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Texas Instruments Ethernet Switch Driver
  *
@@ -2078,8 +2081,14 @@ static int cpsw_probe_dt(struct cpsw_platform_data *data,
 			phy_dev = of_phy_find_device(phy_node);
 			if (!phy_dev)
 				return -ENODEV;
+#if defined(MY_ABC_HERE)
+			snprintf(slave_data->phy_id, sizeof(slave_data->phy_id),
+				 PHY_ID_FMT, phy_dev->mdio.bus->id,
+				 phy_dev->mdio.addr);
+#else /* MY_ABC_HERE */
 			snprintf(slave_data->phy_id, sizeof(slave_data->phy_id),
 				 PHY_ID_FMT, phy_dev->bus->id, phy_dev->addr);
+#endif /* MY_ABC_HERE */
 		} else if (parp) {
 			u32 phyid;
 			struct device_node *mdio_node;

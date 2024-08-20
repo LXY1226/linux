@@ -519,7 +519,7 @@ static void mod_rq_state(struct drbd_request *req, struct bio_and_error *m,
 		/* Completion does it's own kref_put.  If we are going to
 		 * kref_sub below, we need req to be still around then. */
 		int at_least = k_put + !!c_put;
-		int refcount = atomic_read(&req->kref.refcount);
+		int refcount = kref_read(&req->kref);
 		if (refcount < at_least)
 			drbd_err(device,
 				"mod_rq_state: Logic BUG: %x -> %x: refcount = %d, should be >= %d\n",
@@ -937,7 +937,7 @@ static bool remote_due_to_read_balancing(struct drbd_device *device, sector_t se
 
 	switch (rbm) {
 	case RB_CONGESTED_REMOTE:
-		bdi = &device->ldev->backing_bdev->bd_disk->queue->backing_dev_info;
+		bdi = device->ldev->backing_bdev->bd_disk->queue->backing_dev_info;
 		return bdi_read_congested(bdi);
 	case RB_LEAST_PENDING:
 		return atomic_read(&device->local_cnt) >

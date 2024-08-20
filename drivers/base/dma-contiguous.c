@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Contiguous Memory Allocator for DMA mapping framework
  * Copyright (c) 2010-2011 by Samsung Electronics.
@@ -34,7 +37,21 @@
 #define CMA_SIZE_MBYTES 0
 #endif
 
+#ifdef CONFIG_SYNO_NTB_CMA_SIZE
+#define NTB_CMA_SIZE_MBYTES CONFIG_SYNO_NTB_CMA_SIZE
+#else
+#define NTB_CMA_SIZE_MBYTES 0
+#endif /* CONFIG_SYNO_NTB_CMA_SIZE */
+
 struct cma *dma_contiguous_default_area;
+#ifdef MY_DEF_HERE
+struct cma *dma_contiguous_syno_ntb_area;
+EXPORT_SYMBOL(dma_contiguous_syno_ntb_area);
+#endif /* MY_DEF_HERE */
+
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+of_cma_info_t of_cma_info;
+#endif
 
 /*
  * Default global CMA area size can be defined in kernel's .config.
@@ -110,8 +127,37 @@ void __init dma_contiguous_reserve(phys_addr_t limit)
 	phys_addr_t selected_base = 0;
 	phys_addr_t selected_limit = limit;
 	bool fixed = false;
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+	int i = 0;
+#endif
 
 	pr_debug("%s(limit %08lx)\n", __func__, (unsigned long)limit);
+
+#if defined(CONFIG_RTD129X) && defined(CONFIG_CMA_AREAS)
+	if( of_cma_info.region_enable && of_cma_info.region_cnt ) {
+		for( i=0; i<of_cma_info.region_cnt; i++) {
+			selected_size  = of_cma_info.region[i].size;
+			selected_base  = of_cma_info.region[i].base;
+			selected_limit = selected_size+selected_base;
+			pr_info("fdt region %d\n", i);
+			pr_debug("%s: reserving %ld MiB for global area\n", __func__,
+				(unsigned long)selected_size / SZ_1M);
+
+			dma_contiguous_reserve_area(
+				selected_size,
+				selected_base,
+				selected_limit,
+				&dma_contiguous_default_area,
+				1/*alwasy fixed base*/);
+		}
+		return;
+	}
+#endif
+
+#ifdef MY_DEF_HERE
+	dma_contiguous_reserve_ntb_area(NTB_CMA_SIZE_MBYTES * 1024 * 1024ULL, 0, 0,
+			&dma_contiguous_syno_ntb_area, 0);
+#endif /* MY_DEF_HERE */
 
 	if (size_cmdline != -1) {
 		selected_size = size_cmdline;
@@ -175,6 +221,25 @@ int __init dma_contiguous_reserve_area(phys_addr_t size, phys_addr_t base,
 
 	return 0;
 }
+
+#ifdef MY_DEF_HERE
+int __init dma_contiguous_reserve_ntb_area(phys_addr_t size, phys_addr_t base,
+				       phys_addr_t limit, struct cma **res_cma,
+				       bool fixed)
+{
+	int ret;
+
+	ret = cma_declare_contiguous(base, size, limit, size, 0, fixed, res_cma);
+	if (ret)
+		return ret;
+
+	/* Architecture specific contiguous memory fixup. */
+	dma_contiguous_early_fixup(cma_get_base(*res_cma),
+				cma_get_size(*res_cma));
+
+	return 0;
+}
+#endif /* MY_DEF_HERE */
 
 /**
  * dma_alloc_from_contiguous() - allocate pages from contiguous area

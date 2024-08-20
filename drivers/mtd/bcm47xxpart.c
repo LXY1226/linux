@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * BCM47XX MTD partitioning
  *
@@ -84,7 +87,11 @@ out_default:
 }
 
 static int bcm47xxpart_parse(struct mtd_info *master,
+#if defined(MY_DEF_HERE)
+			     const struct mtd_partition **pparts,
+#else /* MY_DEF_HERE */
 			     struct mtd_partition **pparts,
+#endif /* MY_DEF_HERE */
 			     struct mtd_part_parser_data *data)
 {
 	struct mtd_partition *parts;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * linux/include/linux/relay.h
  *
@@ -48,6 +51,10 @@ struct rchan_buf
 	size_t bytes_consumed;		/* bytes consumed in cur read subbuf */
 	size_t early_bytes;		/* bytes consumed before VFS inited */
 	unsigned int cpu;		/* this buf's cpu */
+
+#ifdef MY_ABC_HERE
+	spinlock_t lock;		/* protect buffer write and read */
+#endif /* MY_ABC_HERE */
 } ____cacheline_aligned;
 
 /*
@@ -286,4 +293,3 @@ static inline void subbuf_start_reserve(struct rchan_buf *buf,
 extern const struct file_operations relay_file_operations;
 
 #endif /* _LINUX_RELAY_H */
-

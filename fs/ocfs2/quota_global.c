@@ -308,7 +308,7 @@ int ocfs2_lock_global_qf(struct ocfs2_mem_dqinfo *oinfo, int ex)
 		WARN_ON(bh != oinfo->dqi_gqi_bh);
 	spin_unlock(&dq_data_lock);
 	if (ex) {
-		mutex_lock(&oinfo->dqi_gqinode->i_mutex);
+		inode_lock(oinfo->dqi_gqinode);
 		down_write(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem);
 	} else {
 		down_read(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem);
@@ -320,7 +320,7 @@ void ocfs2_unlock_global_qf(struct ocfs2_mem_dqinfo *oinfo, int ex)
 {
 	if (ex) {
 		up_write(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem);
-		mutex_unlock(&oinfo->dqi_gqinode->i_mutex);
+		inode_unlock(oinfo->dqi_gqinode);
 	} else {
 		up_read(&OCFS2_I(oinfo->dqi_gqinode)->ip_alloc_sem);
 	}
@@ -483,7 +483,7 @@ int __ocfs2_sync_dquot(struct dquot *dquot, int freeing)
 	struct ocfs2_mem_dqinfo *info = sb_dqinfo(sb, type)->dqi_priv;
 	struct ocfs2_global_disk_dqblk dqblk;
 	s64 spacechange, inodechange;
-	time_t olditime, oldbtime;
+	time64_t olditime, oldbtime;
 
 	err = sb->s_op->quota_read(sb, type, (char *)&dqblk,
 				   sizeof(struct ocfs2_global_disk_dqblk),

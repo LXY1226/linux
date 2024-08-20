@@ -8,6 +8,7 @@
 #include <linux/rbtree.h>
 
 struct vm_area_struct;		/* vma defining user mapping in mm_types.h */
+struct notifier_block;		/* in notifier.h */
 
 /* bits in flags of vmalloc's vm_struct below */
 #define VM_IOREMAP		0x00000001	/* ioremap() and friends */
@@ -79,6 +80,17 @@ extern void *__vmalloc_node_range(unsigned long size, unsigned long align,
 			unsigned long start, unsigned long end, gfp_t gfp_mask,
 			pgprot_t prot, unsigned long vm_flags, int node,
 			const void *caller);
+#ifndef CONFIG_MMU
+extern void *__vmalloc_node_flags(unsigned long size, int node, gfp_t flags);
+static inline void *__vmalloc_node_flags_caller(unsigned long size, int node,
+						gfp_t flags, void *caller)
+{
+	return __vmalloc_node_flags(size, node, flags);
+}
+#else
+extern void *__vmalloc_node_flags_caller(unsigned long size,
+					 int node, gfp_t flags, void *caller);
+#endif
 
 extern void vfree(const void *addr);
 
@@ -188,5 +200,8 @@ pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms)
 #else
 #define VMALLOC_TOTAL 0UL
 #endif
+
+int register_vmap_purge_notifier(struct notifier_block *nb);
+int unregister_vmap_purge_notifier(struct notifier_block *nb);
 
 #endif /* _LINUX_VMALLOC_H */

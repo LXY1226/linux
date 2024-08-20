@@ -18,6 +18,26 @@ config AB8500_USB
 	  This transceiver supports high and full speed devices plus,
 	  in host mode, low speed.
 
+config USB_A3700_OTG
+	bool "Armada3700 USB OTG Transceiver Driver"
+ 	depends on USB_XHCI_MVEBU && USB_MVEBU_U3D && SYNO_LSP_ARMADA_16_12 && !SYNO_LSP_ARMADA_17_06_01
+ 	select USB_PHY
+ 	help
+	  Enable this to support the USB OTG transceiver on Marvell
+	  Armada3700 board.
+	  This transceiver supports both HOST & Device modes and
+	  can work on USB3.0 and USB2.0 protocol.
+
+config USB_A3700_PHY
+	bool "Armada 3700 USB Transceiver Driver"
+	depends on USB_XHCI_MVEBU && USB_MVEBU_U3D && SYNO_LSP_ARMADA_16_12 && SYNO_LSP_ARMADA_17_06_01
+	select USB_PHY
+	help
+	  Enable this to support the Armada 3700 USB PHY.
+	  This transceiver supports both USB HOST mode and
+	  USB Device mode, and can work on USB3.0 and
+	  USB2.0 protocol.
+
 config FSL_USB2_OTG
 	bool "Freescale USB OTG Transceiver Driver"
 	depends on USB_EHCI_FSL && USB_FSL_USB2 && USB_OTG_FSM && PM
@@ -213,5 +233,41 @@ config USB_ULPI_VIEWPORT
 	help
 	  Provides read/write operations to the ULPI phy register set for
 	  controllers with a viewport register (e.g. Chipidea/ARC controllers).
+
+if SYNO_LSP_RTD129X || SYNO_LSP_RTD1619
+config RTK_USB_RLE0599_PHY
+	tristate "Realtek USB RLE0599 PHY Controller Driver"
+	depends on ((USB_EHCI_RTK || USB_OHCI_RTK) && (ARCH_RTK119X || ARCH_RTD129X) && SYNO_LSP_RTD129X) || SYNO_LSP_RTD1619
+	select USB_PHY
+	help
+	  Enable this to support Realtek RLE0599 phy controller SoC.
+
+config RTK_USB2PHY
+	tristate "Realtek USB2 PHY Controller Driver"
+	depends on ((ARCH_RTK119X || ARCH_RTD129X) && SYNO_LSP_RTD129X) || SYNO_LSP_RTD1619
+	select RTK_USB_RLE0599_PHY if SYNO_LSP_RTD129X
+	select USB_PHY if SYNO_LSP_RTD1619
+	help
+	  Enable this to support Realtek USB2 phy controller SoC.
+
+config RTK_USB3PHY
+	tristate "Realtek USB3 PHY Controller Driver"
+	depends on ((ARCH_RTK119X || ARCH_RTD129X) && SYNO_LSP_RTD129X) || SYNO_LSP_RTD1619
+	select RTK_USB_RLE0599_PHY if SYNO_LSP_RTD129X
+	select USB_PHY if SYNO_LSP_RTD1619
+	help
+	  Enable this to support Realtek USB3 phy controller SoC.
+endif # SYNO_LSP_RTD129X || SYNO_LSP_RTD1619
+
+if SYNO_LSP_RTD1619
+config DUAL_ROLE_USB_INTF
+	bool "Generic DUAL ROLE sysfs interface"
+	depends on SYSFS && USB_PHY
+	help
+	  A generic sysfs interface to track and change the state of
+	  dual role usb phys. The usb phy drivers can register to
+	  this interface to expose it capabilities to the userspace
+	  and thereby allowing userspace to change the port mode.
+endif # SYNO_LSP_RTD1619
 
 endmenu

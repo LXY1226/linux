@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Based on arch/arm/include/asm/assembler.h
  *
@@ -49,7 +52,19 @@
 	.macro	enable_irq
 	msr	daifclr, #2
 	.endm
+#if defined(MY_DEF_HERE) || defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+/*
+ * Save/disable and restore interrupts.
+ */
+	.macro  save_and_disable_irqs, olddaif
+	mrs     \olddaif, daif
+	disable_irq
+	.endm
 
+	.macro  restore_irqs, olddaif
+	msr     daif, \olddaif
+	.endm
+#endif /* MY_DEF_HERE || CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 /*
  * Enable and disable debug exceptions.
  */

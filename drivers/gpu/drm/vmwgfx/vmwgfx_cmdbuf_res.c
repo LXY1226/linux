@@ -205,15 +205,13 @@ int vmw_cmdbuf_res_add(struct vmw_cmdbuf_res_manager *man,
 	int ret;
 
 	cres = kzalloc(sizeof(*cres), GFP_KERNEL);
-	if (unlikely(cres == NULL))
+	if (unlikely(!cres))
 		return -ENOMEM;
 
 	cres->hash.key = user_key | (res_type << 24);
 	ret = drm_ht_insert_item(&man->resources, &cres->hash);
-	if (unlikely(ret != 0)) {
-		kfree(cres);
+	if (unlikely(ret != 0))
 		goto out_invalid_key;
-	}
 
 	cres->state = VMW_CMDBUF_RES_ADD;
 	cres->res = vmw_resource_reference(res);
@@ -293,7 +291,7 @@ vmw_cmdbuf_res_man_create(struct vmw_private *dev_priv)
 	int ret;
 
 	man = kzalloc(sizeof(*man), GFP_KERNEL);
-	if (man == NULL)
+	if (!man)
 		return ERR_PTR(-ENOMEM);
 
 	man->dev_priv = dev_priv;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * fs/inotify_user.c - inotify support for userspace
  *
@@ -77,6 +80,11 @@ int inotify_handle_event(struct fsnotify_group *group,
 	int alloc_len = sizeof(struct inotify_event_info);
 
 	BUG_ON(vfsmount_mark);
+
+#ifdef MY_ABC_HERE
+	if (data_type == FSNOTIFY_EVENT_SYNO)
+		return 0;
+#endif /* MY_ABC_HERE */
 
 	if ((inode_mark->mask & FS_EXCL_UNLINK) &&
 	    (data_type == FSNOTIFY_EVENT_PATH)) {

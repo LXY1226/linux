@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * linux/include/linux/sunrpc/sched.h
  *
@@ -86,6 +89,10 @@ struct rpc_task {
 				tk_garb_retry : 2,
 				tk_cred_retry : 2,
 				tk_rebind_retry : 2;
+
+#ifdef MY_ABC_HERE
+	const char 		*syno_stage_name;
+#endif /* MY_ABC_HERE */
 };
 
 typedef void			(*rpc_action)(struct rpc_task *);

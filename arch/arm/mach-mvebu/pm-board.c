@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Board-level suspend/resume support.
  *
@@ -82,7 +85,12 @@ static int __init mvebu_armada_pm_init(void)
 	struct device_node *gpio_ctrl_np;
 	int ret = 0, i;
 
+#if defined(MY_ABC_HERE)
+	if (!of_machine_is_compatible("marvell,axp-gp") &&
+	    !of_machine_is_compatible("marvell,a388-gp"))
+#else /* MY_ABC_HERE */
 	if (!of_machine_is_compatible("marvell,axp-gp"))
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 
 	np = of_find_node_by_name(NULL, "pm_pic");

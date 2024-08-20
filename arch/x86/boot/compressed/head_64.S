@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/boot/head.S
  *
@@ -399,6 +402,20 @@ relocated:
 	shrq	$3, %rcx
 	rep	stosq
 
+#ifdef MY_DEF_HERE
+/*
+ * Insert setup_data for testing whether decompression is skipped
+ */
+	leaq	decompression_setup_data(%rip), %r8
+	movw	0x206(%rsi), %r9w
+	cmpw	$0x0209, %r9w
+	jl		3f
+	movq	0x250(%rsi), %r9
+	movq	%r9, 0x0(%r8)
+	movq	%r8, 0x250(%rsi)
+3:
+#endif /* MY_DEF_HERE */
+
 /*
  * Adjust our own GOT
  */
@@ -472,6 +489,18 @@ efi64_config:
 	.quad	efi_call
 	.byte	1
 #endif /* CONFIG_EFI_STUB */
+
+#ifdef MY_DEF_HERE
+/*
+ * setup_data for testing whether decompression is skipped
+ */
+	.data
+	.balign	4
+decompression_setup_data:
+	.quad	0x0000000000000000		/* next */
+	.long	__DECOMPRESSION_TYPE__	/* type */
+	.long	0x00000000				/* len, no data */
+#endif /* MY_DEF_HERE */
 
 /*
  * Stack and heap for uncompression

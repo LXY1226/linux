@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #include <linux/capability.h>
 #include <linux/blkdev.h>
 #include <linux/export.h>
@@ -221,6 +224,37 @@ static int blk_ioctl_discard(struct block_device *bdev, fmode_t mode,
 	return blkdev_issue_discard(bdev, start, len, GFP_KERNEL, flags);
 }
 
+#ifdef MY_ABC_HERE
+static int blk_ioctl_hint_unused(struct block_device *bdev, fmode_t mode,
+		unsigned long arg)
+{
+	uint64_t range[2];			/* [0]: start [1]: len in unit of byte */
+	uint64_t start, len, total;	/* unit: sector */
+
+	if (!(mode & FMODE_WRITE))
+		return -EBADF;
+
+	if (copy_from_user(range, (void __user *)arg, sizeof(range)))
+		return -EFAULT;
+
+	/*
+	 * start should be aligned to sector (512 bytes)
+	 * len doesn't need this because it'll be trimmed while doing bitwise shift
+	 */
+	if (range[0] & 511)
+		return -EINVAL;
+
+	start = range[0] >> 9;
+	len = range[1] >> 9;
+	total = i_size_read(bdev->bd_inode) >> 9;
+
+	if (start + len > total)
+		len = total - start;
+
+	return blkdev_hint_unused(bdev, start, len, GFP_KERNEL);
+}
+#endif /* MY_ABC_HERE */
+
 static int blk_ioctl_zeroout(struct block_device *bdev, fmode_t mode,
 		unsigned long arg)
 {
@@ -406,6 +440,62 @@ static inline int is_unrecognized_ioctl(int ret)
 		ret == -ENOIOCTLCMD;
 }
 
+#ifdef CONFIG_FS_DAX
+bool blkdev_dax_capable(struct block_device *bdev)
+{
+	struct gendisk *disk = bdev->bd_disk;
+
+	if (!disk->fops->direct_access)
+		return false;
+
+	/*
+	 * If the partition is not aligned on a page boundary, we can't
+	 * do dax I/O to it.
+	 */
+	if ((bdev->bd_part->start_sect % (PAGE_SIZE / 512))
+			|| (bdev->bd_part->nr_sects % (PAGE_SIZE / 512)))
+		return false;
+
+	return true;
+}
+
+static int blkdev_daxset(struct block_device *bdev, unsigned long argp)
+{
+	unsigned long arg;
+	int rc = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	if (get_user(arg, (int __user *)(argp)))
+		return -EFAULT;
+	arg = !!arg;
+	if (arg == !!(bdev->bd_inode->i_flags & S_DAX))
+		return 0;
+
+	if (arg)
+		arg = S_DAX;
+
+	if (arg && !blkdev_dax_capable(bdev))
+		return -ENOTTY;
+
+	inode_lock(bdev->bd_inode);
+	if (bdev->bd_map_count == 0)
+		inode_set_flags(bdev->bd_inode, arg, S_DAX);
+	else
+		rc = -EBUSY;
+	inode_unlock(bdev->bd_inode);
+	return rc;
+}
+#else
+static int blkdev_daxset(struct block_device *bdev, int arg)
+{
+	if (arg)
+		return -ENOTTY;
+	return 0;
+}
+#endif
+
 static int blkdev_flushbuf(struct block_device *bdev, fmode_t mode,
 		unsigned cmd, unsigned long arg)
 {
@@ -496,7 +586,6 @@ static int blkdev_bszset(struct block_device *bdev, fmode_t mode,
 int blkdev_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 			unsigned long arg)
 {
-	struct backing_dev_info *bdi;
 	void __user *argp = (void __user *)arg;
 	loff_t size;
 	unsigned int max_sectors;
@@ -511,6 +600,10 @@ int blkdev_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	case BLKSECDISCARD:
 		return blk_ioctl_discard(bdev, mode, arg,
 				BLKDEV_DISCARD_SECURE);
+#ifdef MY_ABC_HERE
+	case BLKHINTUNUSED:
+		return blk_ioctl_hint_unused(bdev, mode, arg);
+#endif /* MY_ABC_HERE */
 	case BLKZEROOUT:
 		return blk_ioctl_zeroout(bdev, mode, arg);
 	case HDIO_GETGEO:
@@ -519,8 +612,7 @@ int blkdev_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	case BLKFRAGET:
 		if (!arg)
 			return -EINVAL;
-		bdi = blk_get_backing_dev_info(bdev);
-		return put_long(arg, (bdi->ra_pages * PAGE_CACHE_SIZE) / 512);
+		return put_long(arg, (bdev->bd_bdi->ra_pages*PAGE_CACHE_SIZE) / 512);
 	case BLKROGET:
 		return put_int(arg, bdev_read_only(bdev) != 0);
 	case BLKBSZGET: /* get block device soft block size (cf. BLKSSZGET) */
@@ -547,15 +639,34 @@ int blkdev_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	case BLKFRASET:
 		if(!capable(CAP_SYS_ADMIN))
 			return -EACCES;
-		bdi = blk_get_backing_dev_info(bdev);
-		bdi->ra_pages = (arg * 512) / PAGE_CACHE_SIZE;
+		bdev->bd_bdi->ra_pages = (arg * 512) / PAGE_CACHE_SIZE;
 		return 0;
 	case BLKBSZSET:
 		return blkdev_bszset(bdev, mode, argp);
 	case BLKPG:
+#ifdef MY_DEF_HERE
+		{
+			int ret = blkpg_ioctl(bdev, argp);
+			if ((0 == ret) && bdev->bd_disk->syno_ops && bdev->bd_disk->syno_ops->multipath_dm_target_blkdev_ioctl) {
+				bdev->bd_disk->syno_ops->multipath_dm_target_blkdev_ioctl(bdev, mode, cmd, arg);
+			}
+			return ret;
+		}
+#else
 		return blkpg_ioctl(bdev, argp);
+#endif
 	case BLKRRPART:
+#ifdef MY_DEF_HERE
+		{
+			int ret = blkdev_reread_part(bdev);
+			if ((0 == ret) && bdev->bd_disk->syno_ops && bdev->bd_disk->syno_ops->multipath_dm_target_blkdev_ioctl) {
+				bdev->bd_disk->syno_ops->multipath_dm_target_blkdev_ioctl(bdev, mode, cmd, arg);
+			}
+			return ret;
+		}
+#else
 		return blkdev_reread_part(bdev);
+#endif
 	case BLKGETSIZE:
 		size = i_size_read(bdev->bd_inode);
 		if ((size >> 9) > ~0UL)
@@ -568,6 +679,11 @@ int blkdev_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	case BLKTRACESETUP:
 	case BLKTRACETEARDOWN:
 		return blk_trace_ioctl(bdev, cmd, argp);
+	case BLKDAXSET:
+		return blkdev_daxset(bdev, arg);
+	case BLKDAXGET:
+		return put_int(arg, !!(bdev->bd_inode->i_flags & S_DAX));
+		break;
 	case IOC_PR_REGISTER:
 		return blkdev_pr_register(bdev, argp);
 	case IOC_PR_RESERVE:

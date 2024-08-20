@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2013 Freescale Semiconductor, Inc.
  *
@@ -15,7 +18,11 @@
 #include <linux/slab.h>
 #include "clk.h"
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 #define to_clk_div(_hw) container_of(_hw, struct clk_divider, hw)
+#endif /* MY_ABC_HERE */
 #define div_mask(d)	((1 << (d->width)) - 1)
 
 /**
@@ -35,7 +42,11 @@ struct clk_fixup_div {
 
 static inline struct clk_fixup_div *to_clk_fixup_div(struct clk_hw *hw)
 {
+#if defined(MY_ABC_HERE)
+	struct clk_divider *divider = to_clk_divider(hw);
+#else /* MY_ABC_HERE */
 	struct clk_divider *divider = to_clk_div(hw);
+#endif /* MY_ABC_HERE */
 
 	return container_of(divider, struct clk_fixup_div, divider);
 }
@@ -60,7 +71,11 @@ static int clk_fixup_div_set_rate(struct clk_hw *hw, unsigned long rate,
 			    unsigned long parent_rate)
 {
 	struct clk_fixup_div *fixup_div = to_clk_fixup_div(hw);
+#if defined(MY_ABC_HERE)
+	struct clk_divider *div = to_clk_divider(hw);
+#else /* MY_ABC_HERE */
 	struct clk_divider *div = to_clk_div(hw);
+#endif /* MY_ABC_HERE */
 	unsigned int divider, value;
 	unsigned long flags = 0;
 	u32 val;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Allwinner EMAC MDIO interface driver
  *
@@ -96,7 +99,11 @@ static int sun4i_mdio_probe(struct platform_device *pdev)
 	struct mii_bus *bus;
 	struct sun4i_mdio_data *data;
 	struct resource *res;
+#if defined(MY_ABC_HERE)
+	int ret;
+#else /* MY_ABC_HERE */
 	int ret, i;
+#endif /* MY_ABC_HERE */
 
 	bus = mdiobus_alloc_size(sizeof(*data));
 	if (!bus)
@@ -108,6 +115,9 @@ static int sun4i_mdio_probe(struct platform_device *pdev)
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-mii", dev_name(&pdev->dev));
 	bus->parent = &pdev->dev;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->irq = devm_kzalloc(&pdev->dev, sizeof(int) * PHY_MAX_ADDR,
 			GFP_KERNEL);
 	if (!bus->irq) {
@@ -117,6 +127,7 @@ static int sun4i_mdio_probe(struct platform_device *pdev)
 
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		bus->irq[i] = PHY_POLL;
+#endif /* MY_ABC_HERE */
 
 	data = bus->priv;
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);

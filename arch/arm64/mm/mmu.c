@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Based on arch/arm/mm/mmu.c
  *
@@ -467,6 +470,23 @@ void __init paging_init(void)
 	local_flush_tlb_all();
 	cpu_set_default_tcr_t0sz();
 }
+
+#if defined(MY_DEF_HERE) || defined(CONFIG_RTK_PLATFORM) && defined(CONFIG_SYNO_LSP_RTD1619)
+/*
+ * Enable the identity mapping to allow the MMU disabling.
+ */
+void setup_mm_for_reboot(void)
+{
+	cpu_set_reserved_ttbr0();
+	flush_tlb_all();
+	cpu_set_idmap_tcr_t0sz();
+#ifdef MY_ABC_HERE
+	cpu_switch_mm(&idmap_pg_dir[0], &init_mm);
+#else
+	cpu_switch_mm(idmap_pg_dir, &init_mm);
+#endif //MY_ABC_HERE
+}
+#endif /* MY_DEF_HERE || CONFIG_RTK_PLATFORM && CONFIG_SYNO_LSP_RTD1619 */
 
 /*
  * Check whether a kernel address is valid (derived from arch/x86/).

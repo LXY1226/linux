@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * linux/drivers/scsi/scsi_proc.c
  *
@@ -195,7 +198,11 @@ static int proc_print_scsidevice(struct device *dev, void *data)
 	}
 
 	seq_puts(s, " Model: ");
+#ifdef MY_ABC_HERE
+	for (i = 0; i < CONFIG_SYNO_DISK_MODEL_NUM; i++) {
+#else /* MY_ABC_HERE */
 	for (i = 0; i < 16; i++) {
+#endif /* MY_ABC_HERE */
 		if (sdev->model[i] >= 0x20)
 			seq_putc(s, sdev->model[i]);
 		else
@@ -462,9 +469,7 @@ int __init scsi_init_procfs(void)
 	pde = proc_create("scsi/scsi", 0, NULL, &proc_scsi_operations);
 	if (!pde)
 		goto err2;
-
 	return 0;
-
 err2:
 	remove_proc_entry("scsi", NULL);
 err1:

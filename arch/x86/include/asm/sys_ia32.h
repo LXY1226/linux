@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * sys_ia32.h - Linux ia32 syscall interfaces
  *
@@ -49,6 +52,23 @@ asmlinkage long sys32_fallocate(int, int, unsigned,
 /* ia32/ia32_signal.c */
 asmlinkage long sys32_sigreturn(void);
 asmlinkage long sys32_rt_sigreturn(void);
+
+#ifdef MY_ABC_HERE
+#ifdef MY_ABC_HERE
+asmlinkage long sys32_SYNOStat64(char __user *, unsigned int, struct SYNOSTAT64 __user *);
+asmlinkage long sys32_SYNOFStat64(unsigned int fd, unsigned int flags, struct SYNOSTAT64 __user *);
+asmlinkage long sys32_SYNOLStat64(char __user *, unsigned int flags, struct SYNOSTAT64 __user *);
+asmlinkage long sys32_syno_stat64(char __user *, unsigned int, struct SYNOSTAT64 __user *);
+asmlinkage long sys32_syno_fstat64(unsigned int fd, unsigned int flags, struct SYNOSTAT64 __user *);
+asmlinkage long sys32_syno_lstat64(char __user *, unsigned int flags, struct SYNOSTAT64 __user *);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+asmlinkage long sys32_SYNOCaselessStat64(char __user *, struct stat64 __user *);
+asmlinkage long sys32_SYNOCaselessLStat64(char __user *, struct stat64 __user *);
+asmlinkage long sys32_syno_caseless_stat64(char __user *, struct stat64 __user *);
+asmlinkage long sys32_syno_caseless_lstat64(char __user *, struct stat64 __user *);
+#endif /* MY_ABC_HERE */
+#endif /* MY_ABC_HERE */
 
 #endif /* CONFIG_COMPAT */
 

@@ -10,10 +10,23 @@ int __must_check add_mtd_device(struct mtd_info *mtd);
 int del_mtd_device(struct mtd_info *mtd);
 int add_mtd_partitions(struct mtd_info *, const struct mtd_partition *, int);
 int del_mtd_partitions(struct mtd_info *);
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+
+struct mtd_partitions;
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 int parse_mtd_partitions(struct mtd_info *master, const char * const *types,
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+			 struct mtd_partitions *pparts,
+#else /* CONFIG_SYNO_LSP_RTD1619 */
 			 struct mtd_partition **pparts,
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 			 struct mtd_part_parser_data *data);
 
+#if defined(CONFIG_SYNO_LSP_RTD1619)
+void mtd_part_parser_cleanup(struct mtd_partitions *parts);
+
+#endif /* CONFIG_SYNO_LSP_RTD1619 */
 int __init init_mtdchar(void);
 void __exit cleanup_mtdchar(void);
 

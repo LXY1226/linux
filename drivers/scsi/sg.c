@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  History:
  *  Started: Aug 9 by Lawrence Foard (entropy@world.std.com),
@@ -2630,7 +2633,11 @@ static int sg_proc_seq_show_devstrs(struct seq_file *s, void *v)
 	sdp = it ? sg_lookup_dev(it->index) : NULL;
 	scsidp = sdp ? sdp->device : NULL;
 	if (sdp && scsidp && (!atomic_read(&sdp->detaching)))
+#ifdef MY_ABC_HERE
+		seq_printf(s, "%8.8s\t%"CONFIG_SYNO_DISK_MODEL_LEN"."CONFIG_SYNO_DISK_MODEL_LEN"s\t%4.4s\n",
+#else /* MY_ABC_HERE */
 		seq_printf(s, "%8.8s\t%16.16s\t%4.4s\n",
+#endif /* MY_ABC_HERE */
 			   scsidp->vendor, scsidp->model, scsidp->rev);
 	else
 		seq_puts(s, "<no active device>\n");

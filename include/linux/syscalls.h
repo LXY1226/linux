@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * syscalls.h - Linux syscall interfaces (non-arch-specific)
  *
@@ -66,6 +69,11 @@ struct perf_event_attr;
 struct file_handle;
 struct sigaltstack;
 union bpf_attr;
+
+#ifdef MY_ABC_HERE
+struct SYNOSTAT;
+struct SYNOSTAT64;
+#endif /* MY_ABC_HERE */
 
 #include <linux/types.h>
 #include <linux/aio_abi.h>
@@ -886,7 +894,54 @@ asmlinkage long sys_execveat(int dfd, const char __user *filename,
 			const char __user *const __user *envp, int flags);
 
 asmlinkage long sys_membarrier(int cmd, int flags);
+asmlinkage long sys_copy_file_range(int fd_in, loff_t __user *off_in,
+				    int fd_out, loff_t __user *off_out,
+				    size_t len, unsigned int flags);
 
 asmlinkage long sys_mlock2(unsigned long start, size_t len, int flags);
 
+#ifdef MY_ABC_HERE
+#ifdef MY_ABC_HERE
+/* 802 */ asmlinkage long sys_syno_utime(const char __user *filename, struct timespec __user *ctime);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+/* 803 */ asmlinkage long sys_syno_archive_bit(const char __user *filename, int cmd);
+#endif /* MY_ABC_HERE */
+/* 804 */ asmlinkage long sys_syno_recv_file(int fd, int s, loff_t *offset, size_t nbytes, size_t *rwbytes);
+#ifdef MY_ABC_HERE
+/* 805 */ asmlinkage long sys_syno_mtd_alloc(bool alloc);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+/* 808 */ asmlinkage long sys_syno_caseless_stat64(char __user *filename, struct stat64 __user *statbuf);
+/* 809 */ asmlinkage long sys_syno_caseless_lstat64(char __user *filename, struct stat64 __user *statbuf);
+#endif /* __ARCH_WANT_STAT64 || __ARCH_WANT_COMPAT_STAT64 */
+/* 806 */ asmlinkage long sys_syno_caseless_stat(char __user *filename, struct stat __user *statbuf);
+/* 807 */ asmlinkage long sys_syno_caseless_lstat(char __user *filename, struct stat __user *statbuf);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+/* 810 */ asmlinkage long sys_syno_ecrypt_name(const char __user *src, char __user *dst);
+/* 811 */ asmlinkage long sys_syno_decrypt_name(const char __user *root, const char __user *src, char __user *dst);
+#endif /* MY_ABC_HERE */
+/* 812 */ asmlinkage long sys_syno_acl_check_perm(const char __user *szPath, int mask);
+/* 813 */ asmlinkage long sys_syno_acl_is_support(const char __user *szPath, int fd, int tag);
+/* 814 */ asmlinkage long sys_syno_acl_get_perm(const char __user *szPath, int __user *pOutPerm);
+/* 815 */ asmlinkage long sys_syno_flush_aggregate(int fd);
+#ifdef MY_ABC_HERE
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+/* 816 */ asmlinkage long sys_syno_stat64(char __user *filename, unsigned int flags, struct SYNOSTAT64 __user *statbuf);
+/* 817 */ asmlinkage long sys_syno_fstat64(unsigned int fd, unsigned int flags, struct SYNOSTAT64 __user *statbuf);
+/* 818 */ asmlinkage long sys_syno_lstat64(char __user *filename, unsigned int flags, struct SYNOSTAT64 __user *statbuf);
+#endif /* __ARCH_WANT_STAT64 || __ARCH_WANT_COMPAT_STAT64 */
+/* 819 */ asmlinkage long sys_syno_stat(char __user *filename, unsigned int flags, struct SYNOSTAT __user *statbuf);
+/* 820 */ asmlinkage long sys_syno_fstat(unsigned int fd, unsigned int flags, struct SYNOSTAT __user *statbuf);
+/* 821 */ asmlinkage long sys_syno_lstat(char __user *filename, unsigned int flags, struct SYNOSTAT __user *statbuf);
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+/* 822 */ asmlinkage long sys_syno_notify_init(unsigned int event_f_flags);
+/* 823 */ asmlinkage long sys_syno_notify_add_watch(int synotify_fd, const char  __user *pathname, u64 mask);
+/* 824 */ asmlinkage long sys_syno_notify_remove_watch(int synotify_fd, const char  __user *pathname, u64 mask);
+#endif /* MY_ABC_HERE */
+/* 827 */ asmlinkage long sys_syno_archive_overwrite(unsigned int fd, unsigned int flags);
+#endif /* MY_ABC_HERE */
 #endif

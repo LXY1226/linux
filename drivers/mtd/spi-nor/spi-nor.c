@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Based on m25p80.c, by Mike Lavender (mike@steroidmicros.com), with
  * influence from lart.c (Abraham Van Der Merwe) and mtd_dataflash.c
@@ -1225,6 +1228,9 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
 		mtd->flags |= MTD_NO_ERASE;
 
 	mtd->dev.parent = dev;
+#if defined(MY_ABC_HERE)
+	mtd_set_of_node(mtd, np);
+#endif /* MY_ABC_HERE */
 	nor->page_size = info->page_size;
 	mtd->writebufsize = nor->page_size;
 
@@ -1301,6 +1307,12 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
 			/* No small sector erase for 4-byte command set */
 			nor->erase_opcode = SPINOR_OP_SE_4B;
 			mtd->erasesize = info->sector_size;
+#if defined(MY_ABC_HERE)
+		} else if (of_property_read_bool(np, "spi-3byte-addressing")) {
+			nor->addr_width = 3;
+			mtd->size = 0x1000000;
+			dev_info(dev, "Force 3B addressing mode\n");
+#endif /* MY_ABC_HERE */
 		} else
 			set_4byte(nor, info, 1);
 	} else {

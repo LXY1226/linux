@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * AppArmor security module
  *
@@ -603,6 +606,7 @@ void aa_free_profile(struct aa_profile *profile)
 
 	aa_free_file_rules(&profile->file);
 	aa_free_cap_rules(&profile->caps);
+	aa_free_net_rules(&profile->net);
 	aa_free_rlimit_rules(&profile->rlimits);
 
 	kzfree(profile->dirname);
@@ -1179,7 +1183,12 @@ ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
 		list_del_init(&ent->list);
 		op = (!ent->old && !ent->rename) ? OP_PROF_LOAD : OP_PROF_REPL;
 
+#ifdef MY_ABC_HERE
+		if (error)
+			audit_policy(op, GFP_ATOMIC, ent->new->base.name, NULL, error);
+#else
 		audit_policy(op, GFP_ATOMIC, ent->new->base.name, NULL, error);
+#endif
 
 		if (ent->old) {
 			__replace_profile(ent->old, ent->new, 1);
@@ -1231,7 +1240,12 @@ out:
 fail_lock:
 	mutex_unlock(&ns->lock);
 fail:
+#ifdef MY_ABC_HERE
+	if (error)
+		error = audit_policy(op, GFP_KERNEL, name, info, error);
+#else
 	error = audit_policy(op, GFP_KERNEL, name, info, error);
+#endif
 
 	list_for_each_entry_safe(ent, tmp, &lh, list) {
 		list_del_init(&ent->list);
@@ -1302,7 +1316,10 @@ ssize_t aa_remove_profiles(char *fqname, size_t size)
 	}
 
 	/* don't fail removal if audit fails */
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 	(void) audit_policy(OP_PROF_RM, GFP_KERNEL, name, info, error);
+#endif
 	aa_put_namespace(ns);
 	aa_put_profile(profile);
 	return size;

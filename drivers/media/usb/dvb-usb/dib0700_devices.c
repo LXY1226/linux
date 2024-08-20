@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* Linux driver for devices based on the DiBcom DiB0700 USB bridge
  *
  *	This program is free software; you can redistribute it and/or modify it
@@ -292,7 +295,10 @@ static int stk7700P2_frontend_attach(struct dvb_usb_adapter *adap)
 					     stk7700d_dib7000p_mt2266_config)
 		    != 0) {
 			err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n", __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 			dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 			return -ENODEV;
 		}
 	}
@@ -326,7 +332,10 @@ static int stk7700d_frontend_attach(struct dvb_usb_adapter *adap)
 					     stk7700d_dib7000p_mt2266_config)
 		    != 0) {
 			err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n", __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 			dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 			return -ENODEV;
 		}
 	}
@@ -480,7 +489,10 @@ static int stk7700ph_frontend_attach(struct dvb_usb_adapter *adap)
 				     &stk7700ph_dib7700_xc3028_config) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n",
 		    __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 
@@ -1011,7 +1023,10 @@ static int stk7070p_frontend_attach(struct dvb_usb_adapter *adap)
 				     &dib7070p_dib7000p_config) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n",
 		    __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 
@@ -1069,7 +1084,10 @@ static int stk7770p_frontend_attach(struct dvb_usb_adapter *adap)
 				     &dib7770p_dib7000p_config) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n",
 		    __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 
@@ -3045,7 +3063,10 @@ static int nim7090_frontend_attach(struct dvb_usb_adapter *adap)
 
 	if (state->dib7000p_ops.i2c_enumeration(&adap->dev->i2c_adap, 1, 0x10, &nim7090_dib7000p_config) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n", __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 	adap->fe_adap[0].fe = state->dib7000p_ops.init(&adap->dev->i2c_adap, 0x80, &nim7090_dib7000p_config);
@@ -3098,7 +3119,10 @@ static int tfe7090pvr_frontend0_attach(struct dvb_usb_adapter *adap)
 	/* initialize IC 0 */
 	if (state->dib7000p_ops.i2c_enumeration(&adap->dev->i2c_adap, 1, 0x20, &tfe7090pvr_dib7000p_config[0]) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n", __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 
@@ -3128,7 +3152,10 @@ static int tfe7090pvr_frontend1_attach(struct dvb_usb_adapter *adap)
 	i2c = state->dib7000p_ops.get_i2c_master(adap->dev->adapter[0].fe_adap[0].fe, DIBX000_I2C_INTERFACE_GPIO_6_7, 1);
 	if (state->dib7000p_ops.i2c_enumeration(i2c, 1, 0x10, &tfe7090pvr_dib7000p_config[1]) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n", __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 
@@ -3203,7 +3230,10 @@ static int tfe7790p_frontend_attach(struct dvb_usb_adapter *adap)
 				1, 0x10, &tfe7790p_dib7000p_config) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n",
 				__func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 	adap->fe_adap[0].fe = state->dib7000p_ops.init(&adap->dev->i2c_adap,
@@ -3298,7 +3328,10 @@ static int stk7070pd_frontend_attach0(struct dvb_usb_adapter *adap)
 				     stk7070pd_dib7000p_config) != 0) {
 		err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n",
 		    __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 
@@ -3373,7 +3406,10 @@ static int novatd_frontend_attach(struct dvb_usb_adapter *adap)
 					     stk7070pd_dib7000p_config) != 0) {
 			err("%s: state->dib7000p_ops.i2c_enumeration failed.  Cannot continue\n",
 			    __func__);
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 			dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 			return -ENODEV;
 		}
 	}
@@ -3609,7 +3645,10 @@ static int pctv340e_frontend_attach(struct dvb_usb_adapter *adap)
 
 	if (state->dib7000p_ops.dib7000pc_detection(&adap->dev->i2c_adap) == 0) {
 		/* Demodulator not found for some reason? */
+#ifdef MY_ABC_HERE
+#else /* MY_ABC_HERE */
 		dvb_detach(state->dib7000p_ops.set_wbd_ref);
+#endif /* MY_ABC_HERE */
 		return -ENODEV;
 	}
 

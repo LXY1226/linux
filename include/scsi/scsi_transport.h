@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* 
  *  Transport specific attributes.
  *
@@ -56,6 +59,13 @@ struct scsi_transport_template {
 	 * Allows a transport to override the default error handler.
 	 */
 	void (* eh_strategy_handler)(struct Scsi_Host *);
+
+#ifdef MY_ABC_HERE
+	/*
+	 * Check if Synology Eunit is in deep sleep.
+	 */
+	struct Scsi_Host* (* is_eunit_deepsleep)(struct Scsi_Host *);
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * This is an optional routine that allows the transport to become

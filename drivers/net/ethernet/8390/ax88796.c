@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /* drivers/net/ethernet/8390/ax88796.c
  *
  * Copyright 2005,2007 Simtec Electronics
@@ -372,7 +375,11 @@ static int ax_mii_probe(struct net_device *dev)
 	ax->phy_dev = phy_dev;
 
 	netdev_info(dev, "PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d)\n",
+#if defined(MY_ABC_HERE)
+		    phy_dev->drv->name, phydev_name(phy_dev), phy_dev->irq);
+#else /* MY_ABC_HERE */
 		    phy_dev->drv->name, dev_name(&phy_dev->dev), phy_dev->irq);
+#endif /* MY_ABC_HERE */
 
 	return 0;
 }
@@ -627,7 +634,11 @@ static int ax_mii_init(struct net_device *dev)
 	struct platform_device *pdev = to_platform_device(dev->dev.parent);
 	struct ei_device *ei_local = netdev_priv(dev);
 	struct ax_device *ax = to_ax_dev(dev);
+#if defined(MY_ABC_HERE)
+	int err;
+#else /* MY_ABC_HERE */
 	int err, i;
+#endif /* MY_ABC_HERE */
 
 	ax->bb_ctrl.ops = &bb_ops;
 	ax->addr_memr = ei_local->mem + AX_MEMR;
@@ -642,6 +653,9 @@ static int ax_mii_init(struct net_device *dev)
 	snprintf(ax->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		pdev->name, pdev->id);
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	ax->mii_bus->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
 	if (!ax->mii_bus->irq) {
 		err = -ENOMEM;
@@ -651,14 +665,23 @@ static int ax_mii_init(struct net_device *dev)
 	for (i = 0; i < PHY_MAX_ADDR; i++)
 		ax->mii_bus->irq[i] = PHY_POLL;
 
+#endif /* MY_ABC_HERE */
 	err = mdiobus_register(ax->mii_bus);
 	if (err)
+#if defined(MY_ABC_HERE)
+		goto out_free_mdio_bitbang;
+#else /* MY_ABC_HERE */
 		goto out_free_irq;
+#endif /* MY_ABC_HERE */
 
 	return 0;
 
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
  out_free_irq:
 	kfree(ax->mii_bus->irq);
+#endif /* MY_ABC_HERE */
  out_free_mdio_bitbang:
 	free_mdio_bitbang(ax->mii_bus);
  out:

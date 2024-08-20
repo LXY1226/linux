@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * MC33880 high-side/low-side switch GPIO driver
  * Copyright (c) 2009 Intel Corporation
@@ -116,7 +119,11 @@ static int mc33880_probe(struct spi_device *spi)
 	mc->chip.base = pdata->base;
 	mc->chip.ngpio = PIN_NUMBER;
 	mc->chip.can_sleep = true;
+#if defined(MY_ABC_HERE)
+	mc->chip.parent = &spi->dev;
+#else /* MY_ABC_HERE */
 	mc->chip.dev = &spi->dev;
+#endif /* MY_ABC_HERE */
 	mc->chip.owner = THIS_MODULE;
 
 	mc->port_config = 0x00;

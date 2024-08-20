@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Generic NAND driver
  *
@@ -30,7 +33,11 @@ struct plat_nand_data {
 static int plat_nand_probe(struct platform_device *pdev)
 {
 	struct platform_nand_data *pdata = dev_get_platdata(&pdev->dev);
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	struct mtd_part_parser_data ppdata;
+#endif /* MY_ABC_HERE */
 	struct plat_nand_data *data;
 	struct resource *res;
 	const char **part_types;
@@ -58,6 +65,9 @@ static int plat_nand_probe(struct platform_device *pdev)
 		return PTR_ERR(data->io_base);
 
 	data->chip.priv = &data;
+#if defined(MY_ABC_HERE)
+	nand_set_flash_node(&data->chip, pdev->dev.of_node);
+#endif /* MY_ABC_HERE */
 	data->mtd.priv = &data->chip;
 	data->mtd.dev.parent = &pdev->dev;
 
@@ -94,8 +104,12 @@ static int plat_nand_probe(struct platform_device *pdev)
 
 	part_types = pdata->chip.part_probe_types;
 
+#if defined(MY_ABC_HERE)
+	err = mtd_device_parse_register(&data->mtd, part_types, NULL,
+#else /* MY_ABC_HERE */
 	ppdata.of_node = pdev->dev.of_node;
 	err = mtd_device_parse_register(&data->mtd, part_types, &ppdata,
+#endif /* MY_ABC_HERE */
 					pdata->chip.partitions,
 					pdata->chip.nr_partitions);
 

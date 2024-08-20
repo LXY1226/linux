@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef _LINUX_MAJOR_H
 #define _LINUX_MAJOR_H
 
@@ -176,4 +179,7 @@
 #define BLOCK_EXT_MAJOR		259
 #define SCSI_OSD_MAJOR		260	/* open-osd's OSD scsi device */
 
+#ifdef MY_DEF_HERE
+#define NTB_RAMDISK_MAJOR	263
+#endif /* MY_DEF_HERE */
 #endif

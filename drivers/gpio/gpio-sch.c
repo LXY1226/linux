@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * GPIO interface for Intel Poulsbo SCH
  *
@@ -171,7 +174,11 @@ static int sch_gpio_probe(struct platform_device *pdev)
 	sch->iobase = res->start;
 	sch->chip = sch_gpio_chip;
 	sch->chip.label = dev_name(&pdev->dev);
+#if defined(MY_ABC_HERE)
+	sch->chip.parent = &pdev->dev;
+#else /* MY_ABC_HERE */
 	sch->chip.dev = &pdev->dev;
+#endif /* MY_ABC_HERE */
 
 	switch (pdev->id) {
 	case PCI_DEVICE_ID_INTEL_SCH_LPC:

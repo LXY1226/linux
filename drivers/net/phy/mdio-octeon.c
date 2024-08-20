@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -113,7 +116,11 @@ struct octeon_mdiobus {
 	resource_size_t mdio_phys;
 	resource_size_t regsize;
 	enum octeon_mdiobus_mode mode;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int phy_irq[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE */
 };
 
 #ifdef CONFIG_CAVIUM_OCTEON_SOC
@@ -307,7 +314,11 @@ static int octeon_mdiobus_probe(struct platform_device *pdev)
 	oct_mdio_writeq(smi_en.u64, bus->register_base + SMI_EN);
 
 	bus->mii_bus->priv = bus;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	bus->mii_bus->irq = bus->phy_irq;
+#endif /* MY_ABC_HERE */
 	bus->mii_bus->name = "mdio-octeon";
 	snprintf(bus->mii_bus->id, MII_BUS_ID_SIZE, "%llx", bus->register_base);
 	bus->mii_bus->parent = &pdev->dev;

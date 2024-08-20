@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  linux/drivers/mfd/ucb1x00-core.c
  *
@@ -570,7 +573,11 @@ static int ucb1x00_probe(struct mcp *mcp)
 
 	if (pdata && pdata->gpio_base) {
 		ucb->gpio.label = dev_name(&ucb->dev);
+#if defined(MY_ABC_HERE)
+		ucb->gpio.parent = &ucb->dev;
+#else /* MY_ABC_HERE */
 		ucb->gpio.dev = &ucb->dev;
+#endif /* MY_ABC_HERE */
 		ucb->gpio.owner = THIS_MODULE;
 		ucb->gpio.base = pdata->gpio_base;
 		ucb->gpio.ngpio = 10;

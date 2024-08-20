@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Driver for Vitesse PHYs
  *
@@ -236,7 +239,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status    = &genphy_read_status,
 	.ack_interrupt  = &vsc824x_ack_interrupt,
 	.config_intr    = &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver         = { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id		= PHY_ID_VSC8244,
 	.name		= "Vitesse VSC8244",
@@ -248,7 +255,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status	= &genphy_read_status,
 	.ack_interrupt	= &vsc824x_ack_interrupt,
 	.config_intr	= &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id		= PHY_ID_VSC8514,
 	.name		= "Vitesse VSC8514",
@@ -260,7 +271,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status	= &genphy_read_status,
 	.ack_interrupt	= &vsc824x_ack_interrupt,
 	.config_intr	= &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id         = PHY_ID_VSC8574,
 	.name           = "Vitesse VSC8574",
@@ -272,7 +287,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status    = &genphy_read_status,
 	.ack_interrupt  = &vsc824x_ack_interrupt,
 	.config_intr    = &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver         = { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id         = PHY_ID_VSC8601,
 	.name           = "Vitesse VSC8601",
@@ -284,7 +303,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status    = &genphy_read_status,
 	.ack_interrupt  = &vsc824x_ack_interrupt,
 	.config_intr    = &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver         = { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	.phy_id         = PHY_ID_VSC8662,
 	.name           = "Vitesse VSC8662",
@@ -296,7 +319,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status    = &genphy_read_status,
 	.ack_interrupt  = &vsc824x_ack_interrupt,
 	.config_intr    = &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver         = { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	/* Vitesse 8221 */
 	.phy_id		= PHY_ID_VSC8221,
@@ -309,7 +336,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status	= &genphy_read_status,
 	.ack_interrupt	= &vsc824x_ack_interrupt,
 	.config_intr	= &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 }, {
 	/* Vitesse 8211 */
 	.phy_id		= PHY_ID_VSC8211,
@@ -322,7 +353,11 @@ static struct phy_driver vsc82xx_driver[] = {
 	.read_status	= &genphy_read_status,
 	.ack_interrupt	= &vsc824x_ack_interrupt,
 	.config_intr	= &vsc82xx_config_intr,
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	.driver		= { .owner = THIS_MODULE,},
+#endif /* MY_ABC_HERE */
 } };
 
 module_phy_driver(vsc82xx_driver);

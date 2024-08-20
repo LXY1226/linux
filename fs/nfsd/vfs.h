@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
@@ -5,6 +8,9 @@
 #ifndef LINUX_NFSD_VFS_H
 #define LINUX_NFSD_VFS_H
 
+#ifdef MY_ABC_HERE
+#include <linux/sched.h>
+#endif /* MY_ABC_HERE */
 #include "nfsfh.h"
 #include "nfsd.h"
 
@@ -30,8 +36,18 @@
 
 #define NFSD_MAY_64BIT_COOKIE		0x1000 /* 64 bit readdir cookies for >= NFSv3 */
 
+#ifdef MY_ABC_HERE
+#define NFSD_MAY_SYNO_NOP		0x2000
+#define NFSD_MAY_APPEND			0x4000
+#endif /* MY_ABC_HERE */
+
 #define NFSD_MAY_CREATE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE)
 #define NFSD_MAY_REMOVE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE|NFSD_MAY_TRUNC)
+
+#ifdef MY_ABC_HERE
+#define NFSD_COPYBUFFERSIZE                     (1<<17)
+#define NFSD_PAGESIZE                           (1<<12)
+#endif
 
 /*
  * Callback function for readdir
@@ -56,6 +72,8 @@ __be32          nfsd4_set_nfs4_label(struct svc_rqst *, struct svc_fh *,
 		    struct xdr_netobj *);
 __be32		nfsd4_vfs_fallocate(struct svc_rqst *, struct svc_fh *,
 				    struct file *, loff_t, loff_t, int);
+__be32		nfsd4_clone_file_range(struct file *, u64, struct file *,
+			u64, u64);
 #endif /* CONFIG_NFSD_V4 */
 __be32		nfsd_create(struct svc_rqst *, struct svc_fh *,
 				char *name, int len, struct iattr *attrs,
@@ -73,13 +91,32 @@ __be32		nfsd_open(struct svc_rqst *, struct svc_fh *, umode_t,
 				int, struct file **);
 struct raparms;
 __be32		nfsd_splice_read(struct svc_rqst *,
-				struct file *, loff_t, unsigned long *);
+				struct file *, loff_t, unsigned long *
+#ifdef MY_ABC_HERE
+				, ktime_t
+#endif /* MY_ABC_HERE */
+				);
+
 __be32		nfsd_readv(struct file *, loff_t, struct kvec *, int,
-				unsigned long *);
+				unsigned long *
+#ifdef MY_ABC_HERE
+				, struct svc_rqst *, ktime_t
+#endif /* MY_ABC_HERE */
+				);
+
 __be32 		nfsd_read(struct svc_rqst *, struct svc_fh *,
 				loff_t, struct kvec *, int, unsigned long *);
 __be32 		nfsd_write(struct svc_rqst *, struct svc_fh *,struct file *,
 				loff_t, struct kvec *,int, unsigned long *, int *);
+#ifdef MY_ABC_HERE
+__be32		nfsd_writezero(struct svc_rqst *, struct svc_fh *,
+                                loff_t, unsigned long *);
+__be32		nfsd_synocopy(const char *, struct svc_rqst *, struct svc_fh *,
+                                loff_t, unsigned long *, bool);
+#ifdef MY_DEF_HERE
+__be32		nfsd_synoclone(const char *, struct svc_rqst *, struct svc_fh *);
+#endif /* MY_DEF_HERE */
+#endif
 __be32		nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				struct file *file, loff_t offset,
 				struct kvec *vec, int vlen, unsigned long *cnt,
@@ -131,7 +168,16 @@ static inline __be32 fh_getattr(struct svc_fh *fh, struct kstat *stat)
 {
 	struct path p = {.mnt = fh->fh_export->ex_path.mnt,
 			 .dentry = fh->fh_dentry};
+#ifdef MY_ABC_HERE
+	int err = 0;
+
+	err = vfs_getattr(&p, stat);
+	if (!err && IS_SYNOACL(fh->fh_dentry) && uid_eq(current_fsuid(), GLOBAL_ROOT_UID))
+		stat->mode |= (S_IRWXU|S_IRWXG|S_IRWXO);
+	return nfserrno(err);
+#else
 	return nfserrno(vfs_getattr(&p, stat));
+#endif
 }
 
 static inline int nfsd_create_is_exclusive(int createmode)

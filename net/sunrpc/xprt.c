@@ -1290,7 +1290,7 @@ void xprt_release(struct rpc_task *task)
 	if (xprt->ops->release_request)
 		xprt->ops->release_request(task);
 	if (!list_empty(&req->rq_list))
-		list_del(&req->rq_list);
+		list_del_init(&req->rq_list);
 	xprt->last_used = jiffies;
 	if (list_empty(&xprt->recv) && xprt_has_timer(xprt))
 		mod_timer(&xprt->timer,

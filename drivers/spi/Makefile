@@ -11,6 +11,13 @@ obj-$(CONFIG_SPI_SPIDEV)		+= spidev.o
 
 # SPI master controller drivers (bus)
 obj-$(CONFIG_SPI_ALTERA)		+= spi-altera.o
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_16_12), y)
+ifeq ($(CONFIG_SYNO_LSP_ARMADA_17_10), y)
+obj-$(CONFIG_SPI_ARMADA_3700)		+= spi-armada-3700.o
+else # CONFIG_SYNO_LSP_ARMADA_17_10
+obj-$(CONFIG_SPI_ARMADA_3700)		+= spi-armada-3700_1706.o
+endif # CONFIG_SYNO_LSP_ARMADA_17_10
+endif # CONFIG_SYNO_LSP_ARMADA_16_12
 obj-$(CONFIG_SPI_ATMEL)			+= spi-atmel.o
 obj-$(CONFIG_SPI_ATH79)			+= spi-ath79.o
 obj-$(CONFIG_SPI_AU1550)		+= spi-au1550.o
@@ -33,6 +40,9 @@ obj-$(CONFIG_SPI_DESIGNWARE)		+= spi-dw.o
 obj-$(CONFIG_SPI_DW_MMIO)		+= spi-dw-mmio.o
 obj-$(CONFIG_SPI_DW_PCI)		+= spi-dw-midpci.o
 spi-dw-midpci-objs			:= spi-dw-pci.o spi-dw-mid.o
+ifeq ($(CONFIG_SYNO_LSP_RTD1619), y)
+obj-$(CONFIG_SPI_RTD139x)		+= spi-dw-rtd139x.o
+endif # CONFIG_SYNO_LSP_RTD1619
 obj-$(CONFIG_SPI_EFM32)			+= spi-efm32.o
 obj-$(CONFIG_SPI_EP93XX)		+= spi-ep93xx.o
 obj-$(CONFIG_SPI_FALCON)		+= spi-falcon.o

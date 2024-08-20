@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef __LINUX_CMA_H
 #define __LINUX_CMA_H
 
@@ -61,6 +64,9 @@ struct page;
 #ifdef CONFIG_DMA_CMA
 
 extern struct cma *dma_contiguous_default_area;
+#ifdef MY_DEF_HERE
+extern struct cma *dma_contiguous_syno_ntb_area;
+#endif /* MY_DEF_HERE */
 
 static inline struct cma *dev_get_cma_area(struct device *dev)
 {
@@ -85,6 +91,11 @@ void dma_contiguous_reserve(phys_addr_t addr_limit);
 int __init dma_contiguous_reserve_area(phys_addr_t size, phys_addr_t base,
 				       phys_addr_t limit, struct cma **res_cma,
 				       bool fixed);
+#ifdef MY_DEF_HERE
+int __init dma_contiguous_reserve_ntb_area(phys_addr_t size, phys_addr_t base,
+				       phys_addr_t limit, struct cma **res_cma,
+				       bool fixed);
+#endif /* MY_DEF_HERE */
 
 /**
  * dma_declare_contiguous() - reserve area for contiguous memory handling

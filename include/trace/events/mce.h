@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM mce
 
@@ -20,6 +23,10 @@ TRACE_EVENT(mce_record,
 		__field(	u64,		status		)
 		__field(	u64,		addr		)
 		__field(	u64,		misc		)
+#ifdef MY_DEF_HERE
+		__field(	u64,		synd		)
+		__field(	u64,		ipid		)
+#endif /* MY_DEF_HERE */
 		__field(	u64,		ip		)
 		__field(	u64,		tsc		)
 		__field(	u64,		walltime	)
@@ -38,6 +45,10 @@ TRACE_EVENT(mce_record,
 		__entry->status		= m->status;
 		__entry->addr		= m->addr;
 		__entry->misc		= m->misc;
+#ifdef MY_DEF_HERE
+		__entry->synd		= m->synd;
+		__entry->ipid		= m->ipid;
+#endif /* MY_DEF_HERE */
 		__entry->ip		= m->ip;
 		__entry->tsc		= m->tsc;
 		__entry->walltime	= m->time;
@@ -50,11 +61,20 @@ TRACE_EVENT(mce_record,
 		__entry->cpuvendor	= m->cpuvendor;
 	),
 
+#ifdef MY_DEF_HERE
+	TP_printk("CPU: %d, MCGc/s: %llx/%llx, MC%d: %016Lx, IPID: %016Lx, ADDR/MISC/SYND: %016Lx/%016Lx/%016Lx, RIP: %02x:<%016Lx>, TSC: %llx, PROCESSOR: %u:%x, TIME: %llu, SOCKET: %u, APIC: %x",
+#else /* MY_DEF_HERE */
 	TP_printk("CPU: %d, MCGc/s: %llx/%llx, MC%d: %016Lx, ADDR/MISC: %016Lx/%016Lx, RIP: %02x:<%016Lx>, TSC: %llx, PROCESSOR: %u:%x, TIME: %llu, SOCKET: %u, APIC: %x",
+#endif /* MY_DEF_HERE */
 		__entry->cpu,
 		__entry->mcgcap, __entry->mcgstatus,
 		__entry->bank, __entry->status,
+#ifdef MY_DEF_HERE
+		__entry->ipid,
+		__entry->addr, __entry->misc, __entry->synd,
+#else /* MY_DEF_HERE */
 		__entry->addr, __entry->misc,
+#endif /* MY_DEF_HERE */
 		__entry->cs, __entry->ip,
 		__entry->tsc,
 		__entry->cpuvendor, __entry->cpuid,

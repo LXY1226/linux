@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright © 2010-2015 Broadcom Corporation
  *
@@ -907,7 +910,11 @@ static struct nand_ecclayout *brcmstb_choose_ecc_layout(
 
 static void brcmnand_wp(struct mtd_info *mtd, int wp)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct brcmnand_host *host = chip->priv;
 	struct brcmnand_controller *ctrl = host->ctrl;
 
@@ -1073,7 +1080,11 @@ static void brcmnand_cmd_ctrl(struct mtd_info *mtd, int dat,
 
 static int brcmnand_waitfunc(struct mtd_info *mtd, struct nand_chip *this)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct brcmnand_host *host = chip->priv;
 	struct brcmnand_controller *ctrl = host->ctrl;
 	unsigned long timeo = msecs_to_jiffies(100);
@@ -1147,7 +1158,11 @@ static int brcmnand_low_level_op(struct brcmnand_host *host,
 static void brcmnand_cmdfunc(struct mtd_info *mtd, unsigned command,
 			     int column, int page_addr)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct brcmnand_host *host = chip->priv;
 	struct brcmnand_controller *ctrl = host->ctrl;
 	u64 addr = (u64)page_addr << chip->page_shift;
@@ -1247,7 +1262,11 @@ static void brcmnand_cmdfunc(struct mtd_info *mtd, unsigned command,
 
 static uint8_t brcmnand_read_byte(struct mtd_info *mtd)
 {
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct brcmnand_host *host = chip->priv;
 	struct brcmnand_controller *ctrl = host->ctrl;
 	uint8_t ret = 0;
@@ -1315,7 +1334,11 @@ static void brcmnand_write_buf(struct mtd_info *mtd, const uint8_t *buf,
 				   int len)
 {
 	int i;
+#if defined(MY_ABC_HERE)
+	struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 	struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 	struct brcmnand_host *host = chip->priv;
 
 	switch (host->last_cmd) {
@@ -1940,7 +1963,11 @@ static int brcmnand_init_cs(struct brcmnand_host *host)
 	struct nand_chip *chip;
 	int ret;
 	u16 cfg_offs;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	struct mtd_part_parser_data ppdata = { .of_node = dn };
+#endif /* MY_ABC_HERE */
 
 	ret = of_property_read_u32(dn, "reg", &host->cs);
 	if (ret) {
@@ -2019,7 +2046,11 @@ static int brcmnand_init_cs(struct brcmnand_host *host)
 	if (nand_scan_tail(mtd))
 		return -ENXIO;
 
+#if defined(MY_ABC_HERE)
+	return mtd_device_register(mtd, NULL, 0);
+#else /* MY_ABC_HERE */
 	return mtd_device_parse_register(mtd, NULL, &ppdata, NULL, 0);
+#endif /* MY_ABC_HERE */
 }
 
 static void brcmnand_save_restore_cs_config(struct brcmnand_host *host,
@@ -2094,7 +2125,11 @@ static int brcmnand_resume(struct device *dev)
 
 	list_for_each_entry(host, &ctrl->host_list, node) {
 		struct mtd_info *mtd = &host->mtd;
+#if defined(MY_ABC_HERE)
+		struct nand_chip *chip = mtd_to_nand(mtd);
+#else /* MY_ABC_HERE */
 		struct nand_chip *chip = mtd->priv;
+#endif /* MY_ABC_HERE */
 
 		brcmnand_save_restore_cs_config(host, 1);
 

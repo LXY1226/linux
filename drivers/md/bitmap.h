@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * bitmap.h: Copyright (C) Peter T. Breuer (ptb@ot.uc3m.es) 2003
  *
@@ -15,6 +18,9 @@
 #define BITMAP_MAJOR_CLUSTERED 5
 #define	BITMAP_MAJOR_HOSTENDIAN 3
 
+#ifdef MY_DEF_HERE
+#define BITMAP_ERR_OFFSET -9999
+#endif /* MY_DEF_HERE */
 /*
  * in-memory bitmap:
  *
@@ -252,8 +258,13 @@ void bitmap_dirty_bits(struct bitmap *bitmap, unsigned long s, unsigned long e);
 /* these are exported */
 int bitmap_startwrite(struct bitmap *bitmap, sector_t offset,
 			unsigned long sectors, int behind);
+#ifdef MY_DEF_HERE
+void bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
+			unsigned long sectors, int success, int behind, int cnt);
+#else /* MY_DEF_HERE */
 void bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
 			unsigned long sectors, int success, int behind);
+#endif /* MY_DEF_HERE */
 int bitmap_start_sync(struct bitmap *bitmap, sector_t offset, sector_t *blocks, int degraded);
 void bitmap_end_sync(struct bitmap *bitmap, sector_t offset, sector_t *blocks, int aborted);
 void bitmap_close_sync(struct bitmap *bitmap);

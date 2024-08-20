@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * usb hub driver head file
  *
@@ -23,6 +26,11 @@
 #include <linux/usb/ch11.h>
 #include <linux/usb/hcd.h>
 #include "usb.h"
+
+#ifdef MY_ABC_HERE
+/* SYNO USB Error Code */
+#define SYNO_CONNECT_BOUNCE 0x400
+#endif /* MY_ABC_HERE */
 
 struct usb_hub {
 	struct device		*intfdev;	/* the "interface" device */
@@ -53,6 +61,10 @@ struct usb_hub {
 							children */
 	unsigned long		warm_reset_bits[1]; /* ports requesting warm
 							reset recovery */
+#if defined(CONFIG_USB_ETRON_HUB)
+	unsigned long		bot_mode_bits[1];
+#endif /* CONFIG_USB_ETRON_HUB */
+
 #if USB_MAXCHILDREN > 31 /* 8*sizeof(unsigned long) - 1 */
 #error event_bits[] is too short!
 #endif
@@ -78,6 +90,16 @@ struct usb_hub {
 	struct delayed_work	init_work;
 	struct work_struct      events;
 	struct usb_port		**ports;
+
+#ifdef MY_ABC_HERE
+	struct timer_list	ups_discon_flt_timer;
+	int			ups_discon_flt_port;
+	unsigned long		ups_discon_flt_last; /* last filtered time */
+#define SYNO_UPS_DISCON_FLT_STATUS_NONE			0
+#define SYNO_UPS_DISCON_FLT_STATUS_DEFERRED		1
+#define SYNO_UPS_DISCON_FLT_STATUS_TIMEOUT		2
+	unsigned int		ups_discon_flt_status;
+#endif /* MY_ABC_HERE */
 };
 
 /**
@@ -104,7 +126,33 @@ struct usb_port {
 	struct mutex status_lock;
 	u8 portnum;
 	unsigned int is_superspeed:1;
+#if defined (MY_ABC_HERE)
+	unsigned int power_cycle_counter;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+#define SYNO_USB_PORT_CASTRATED_XHC 0x01
+	unsigned int flag;
+#endif /* MY_ABC_HERE */
+#ifdef MY_ABC_HERE
+	int syno_vbus_gpp;
+	int syno_vbus_gpp_pol;
+#endif /* MY_ABC_HERE */
+#ifdef MY_DEF_HERE
+	unsigned int get_desc_fail_counter;
+	struct timer_list timer;
+#endif	/* MY_DEF_HERE */
 };
+#if defined (MY_ABC_HERE)
+#define SYNO_POWER_CYCLE_TRIES	(3)
+#endif /* MY_ABC_HERE */
+
+#ifdef MY_DEF_HERE
+#define SYNO_GET_DESC_FAIL_COUNT 3
+struct usb_port_delay_work {
+	struct usb_hub *hub;
+	int port;
+};
+#endif	/* MY_DEF_HERE */
 
 #define to_usb_port(_dev) \
 	container_of(_dev, struct usb_port, dev)

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Freescale PowerQUICC Ethernet Driver -- MIIM bus implementation
  * Provides Bus interface for MIIM regs
@@ -69,7 +72,11 @@ struct fsl_pq_mdio {
 struct fsl_pq_mdio_priv {
 	void __iomem *map;
 	struct fsl_pq_mii __iomem *regs;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	int irqs[PHY_MAX_ADDR];
+#endif /* MY_ABC_HERE */
 };
 
 /*
@@ -408,7 +415,11 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	new_bus->read = &fsl_pq_mdio_read;
 	new_bus->write = &fsl_pq_mdio_write;
 	new_bus->reset = &fsl_pq_mdio_reset;
+#if defined(MY_ABC_HERE)
+//do nothing
+#else /* MY_ABC_HERE */
 	new_bus->irq = priv->irqs;
+#endif /* MY_ABC_HERE */
 
 	err = of_address_to_resource(np, 0, &res);
 	if (err < 0) {

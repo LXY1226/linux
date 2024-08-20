@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  SYSCON GPIO driver
  *
@@ -159,7 +162,11 @@ static void keystone_gpio_set(struct gpio_chip *chip, unsigned offset, int val)
 			BIT(offs % SYSCON_REG_BITS) | KEYSTONE_LOCK_BIT,
 			BIT(offs % SYSCON_REG_BITS) | KEYSTONE_LOCK_BIT);
 	if (ret < 0)
+#if defined(MY_ABC_HERE)
+		dev_err(chip->parent, "gpio write failed ret(%d)\n", ret);
+#else /* MY_ABC_HERE */
 		dev_err(chip->dev, "gpio write failed ret(%d)\n", ret);
+#endif /* MY_ABC_HERE */
 }
 
 static const struct syscon_gpio_data keystone_dsp_gpio = {
@@ -228,7 +235,11 @@ static int syscon_gpio_probe(struct platform_device *pdev)
 		priv->dir_reg_offset <<= 3;
 	}
 
+#if defined(MY_ABC_HERE)
+	priv->chip.parent = dev;
+#else /* MY_ABC_HERE */
 	priv->chip.dev = dev;
+#endif /* MY_ABC_HERE */
 	priv->chip.owner = THIS_MODULE;
 	priv->chip.label = dev_name(dev);
 	priv->chip.base = -1;

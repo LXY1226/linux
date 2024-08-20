@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 #ifndef __USB_UAS_H__
 #define __USB_UAS_H__
 
@@ -106,4 +109,26 @@ enum {
 	UAS_ORDERED_TAG		= 2,
 	UAS_ACA			= 4,
 };
+
+#ifdef MY_DEF_HERE
+#define MAX_CMNDS 256
+
+struct uas_dev_info {
+	struct usb_interface *intf;
+	struct usb_device *udev;
+	struct usb_anchor cmd_urbs;
+	struct usb_anchor sense_urbs;
+	struct usb_anchor data_urbs;
+	unsigned long flags;
+	int qdepth, resetting;
+	unsigned cmd_pipe, status_pipe, data_in_pipe, data_out_pipe;
+	unsigned use_streams:1;
+	unsigned shutdown:1;
+	struct scsi_cmnd *cmnd[MAX_CMNDS];
+	spinlock_t lock;
+	struct work_struct work;
+	struct work_struct scan_work;      /* for async scanning */
+};
+#else /* MY_DEF_HERE */
+#endif /* MY_DEF_HERE */
 #endif

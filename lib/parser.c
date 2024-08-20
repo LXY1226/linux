@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * lib/parser.c - simple parser for mount, etc. options.
  *
@@ -165,6 +168,23 @@ int match_int(substring_t *s, int *result)
 	return match_number(s, result, 0);
 }
 EXPORT_SYMBOL(match_int);
+
+#if defined(MY_ABC_HERE) || defined(MY_ABC_HERE)
+int SYNO_get_option_ul(substring_t *args, unsigned long *option)
+{
+	int rc;
+	char *string;
+
+	string = match_strdup(args);
+	if (string == NULL)
+		return -ENOMEM;
+	rc = kstrtoul(string, 0, option);
+	kfree(string);
+
+	return rc;
+}
+EXPORT_SYMBOL(SYNO_get_option_ul);
+#endif /* defined(MY_ABC_HERE) || defined(MY_ABC_HERE) */
 
 /**
  * match_octal: - scan an octal representation of an integer from a substring_t

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  button.c - ACPI Button Driver
  *
@@ -278,6 +281,18 @@ static int acpi_lid_send_state(struct acpi_device *device)
 	return ret;
 }
 
+#ifdef MY_DEF_HERE
+int (*funcSYNOSendPowerButtonEvent)(void) = NULL;
+static void syno_acpi_power_button_notifier(void)
+{
+	if (NULL == funcSYNOSendPowerButtonEvent) {
+		printk(KERN_ERR "%s: Can't reference to function 'funcSYNOSendPowerButtonEvent'\n", __func__);
+		return;
+	}
+	funcSYNOSendPowerButtonEvent();
+}
+EXPORT_SYMBOL(funcSYNOSendPowerButtonEvent);
+#endif /* MY_DEF_HERE */
 static void acpi_button_notify(struct acpi_device *device, u32 event)
 {
 	struct acpi_button *button = acpi_driver_data(device);
@@ -298,6 +313,11 @@ static void acpi_button_notify(struct acpi_device *device, u32 event)
 			if (button->suspended)
 				break;
 
+#ifdef MY_DEF_HERE
+			if(test_bit(KEY_POWER, input->keybit)) {
+				syno_acpi_power_button_notifier();
+			}
+#endif /* MY_DEF_HERE */
 			keycode = test_bit(KEY_SLEEP, input->keybit) ?
 						KEY_SLEEP : KEY_POWER;
 			input_report_key(input, keycode, 1);

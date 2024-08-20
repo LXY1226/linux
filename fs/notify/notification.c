@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *  Copyright (C) 2008 Red Hat, Inc., Eric Paris <eparis@redhat.com>
  *
@@ -46,6 +49,10 @@
 #include <linux/atomic.h>
 
 #include <linux/fsnotify_backend.h>
+#ifdef MY_ABC_HERE
+#include <linux/ratelimit.h>
+#endif /* MY_ABC_HERE */
+
 #include "fsnotify.h"
 
 static atomic_t fsnotify_sync_cookie = ATOMIC_INIT(0);
@@ -110,6 +117,9 @@ int fsnotify_add_event(struct fsnotify_group *group,
 			return ret;
 		}
 		event = group->overflow_event;
+#ifdef MY_ABC_HERE
+		printk_ratelimited(KERN_WARNING "fsnotify get overflow, max queue size is %d\n", group->max_events);
+#endif /* MY_ABC_HERE */
 		goto queue;
 	}
 
@@ -120,6 +130,16 @@ int fsnotify_add_event(struct fsnotify_group *group,
 			return ret;
 		}
 	}
+
+#ifdef MY_ABC_HERE
+	if (group->ops->fetch_name) {
+		ret = group->ops->fetch_name(event, group);
+		if (ret < 0) {
+			mutex_unlock(&group->notification_mutex);
+			return ret;
+		}
+	}
+#endif /* MY_ABC_HERE */
 
 queue:
 	group->q_len++;

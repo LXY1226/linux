@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  *   fs/cifs/smb2pdu.c
  *
@@ -78,7 +81,11 @@ static const int smb2_req_struct_sizes[NUMBER_OF_SMB2_COMMANDS] = {
 };
 
 
+#ifdef MY_ABC_HERE
+void
+#else
 static void
+#endif /* MY_ABC_HERE */
 smb2_hdr_assemble(struct smb2_hdr *hdr, __le16 smb2_cmd /* command */ ,
 		  const struct cifs_tcon *tcon)
 {
@@ -162,6 +169,9 @@ smb2_reconnect(__le16 smb2_command, struct cifs_tcon *tcon)
 	struct nls_table *nls_codepage;
 	struct cifs_ses *ses;
 	struct TCP_Server_Info *server;
+#ifdef MY_ABC_HERE
+	u16 origin_dialect; /* dialect index that server chose */
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * SMB2s NegProt, SessSetup, Logoff do not have tcon yet so
@@ -239,16 +249,34 @@ smb2_reconnect(__le16 smb2_command, struct cifs_tcon *tcon)
 		}
 	}
 
+#ifdef MY_ABC_HERE
+	if (SMB20_PROT_ID > server->dialect) {
+		cifs_dbg(FYI, "(%s) origin_dialect=0x%x, server->dialect=0x%x\n", __func__, origin_dialect, server->dialect);
+		return -EAGAIN;
+	}
+	origin_dialect = server->dialect;
+#endif /* MY_ABC_HERE */
 	if (!tcon->ses->need_reconnect && !tcon->need_reconnect)
 		return 0;
 
+#ifdef MY_ABC_HERE
+	nls_codepage = load_nls("utf8");
+#else
 	nls_codepage = load_nls_default();
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * need to prevent multiple threads trying to simultaneously reconnect
 	 * the same SMB session
 	 */
+#ifdef MY_ABC_HERE
+	if (!mutex_trylock(&tcon->ses->session_mutex)) {
+		rc = -EINPROGRESS;
+		goto out;
+	}
+#else
 	mutex_lock(&tcon->ses->session_mutex);
+#endif /* MY_ABC_HERE */
 
 	/*
 	 * Recheck after acquire mutex. If another thread is negotiating
@@ -276,12 +304,23 @@ smb2_reconnect(__le16 smb2_command, struct cifs_tcon *tcon)
 	}
 
 	cifs_mark_open_files_invalid(tcon);
+#ifdef MY_ABC_HERE
+	rc = ses->server->ops->tree_connect(0, tcon->ses, tcon->treeName, tcon, nls_codepage);
+#else
 	rc = SMB2_tcon(0, tcon->ses, tcon->treeName, tcon, nls_codepage);
+#endif /* MY_ABC_HERE */
 	mutex_unlock(&tcon->ses->session_mutex);
 	cifs_dbg(FYI, "reconnect tcon rc = %d\n", rc);
 	if (rc)
 		goto out;
 	atomic_inc(&tconInfoReconnectCount);
+#ifdef MY_ABC_HERE
+	if (server->dialect != origin_dialect ||
+	    SMB20_PROT_ID > server->dialect) {
+		cifs_dbg(FYI, "(%s) SMB2 reconnect dialect not match! origin=0x%x, current=0x%x\n", __func__, origin_dialect, server->dialect);
+		rc = -EAGAIN;
+	}
+#endif /* MY_ABC_HERE */
 out:
 	/*
 	 * Check if handle based operation so we know whether we can continue
@@ -863,6 +902,11 @@ ssetup_exit:
 		mutex_lock(&server->srv_mutex);
 		if (server->ops->generate_signingkey) {
 			rc = server->ops->generate_signingkey(ses);
+#ifdef MY_ABC_HERE
+			if (rc == -EOPNOTSUPP)
+				rc = 0;
+			else
+#endif /* MY_ABC_HERE */
 			if (rc) {
 				cifs_dbg(FYI,
 					"SMB3 session key generation failed\n");
@@ -1169,7 +1213,13 @@ parse_lease_state(struct TCP_Server_Info *server, struct smb2_create_rsp *rsp,
 		name = le16_to_cpu(cc->NameOffset) + (char *)cc;
 		if (le16_to_cpu(cc->NameLength) == 4 &&
 		    strncmp(name, "RqLs", 4) == 0)
+#ifdef MY_ABC_HERE
+		{
+			return server->ops->parse_lease_buf(server, cc, epoch);
+		}
+#else
 			return server->ops->parse_lease_buf(cc, epoch);
+#endif /* MY_ABC_HERE */
 
 		next = le32_to_cpu(cc->Next);
 		if (!next)
@@ -1188,7 +1238,11 @@ add_lease_context(struct TCP_Server_Info *server, struct kvec *iov,
 	struct smb2_create_req *req = iov[0].iov_base;
 	unsigned int num = *num_iovec;
 
+#ifdef MY_ABC_HERE
+	iov[num].iov_base = server->ops->create_lease_buf(server, oplock+1, *oplock);
+#else
 	iov[num].iov_base = server->ops->create_lease_buf(oplock+1, *oplock);
+#endif /* MY_ABC_HERE */
 	if (iov[num].iov_base == NULL)
 		return -ENOMEM;
 	iov[num].iov_len = server->vals->create_lease_size;
@@ -1924,6 +1978,13 @@ SMB2_echo(struct TCP_Server_Info *server)
 
 	cifs_dbg(FYI, "In echo request\n");
 
+#ifdef MY_ABC_HERE
+	if (server && CifsGood != server->tcpStatus) {
+		cifs_dbg(FYI, "tcpStatus not Good (%d); Don't send echo\n",
+				server->tcpStatus);
+		return rc;
+	}
+#endif /* MY_ABC_HERE */
 	if (server->tcpStatus == CifsNeedNegotiate) {
 		/* No need to send echo on newly established connections */
 		queue_delayed_work(cifsiod_wq, &server->reconnect, 0);
@@ -1955,7 +2016,12 @@ SMB2_flush(const unsigned int xid, struct cifs_tcon *tcon, u64 persistent_fid,
 {
 	struct smb2_flush_req *req;
 	struct TCP_Server_Info *server;
+#ifdef MY_ABC_HERE
+	// CID 413508: Dereference before NULL check
+	struct cifs_ses *ses = tcon ? tcon->ses : NULL;
+#else
 	struct cifs_ses *ses = tcon->ses;
+#endif /* MY_ABC_HERE */
 	struct kvec iov[1];
 	int resp_buftype;
 	int rc = 0;

@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright 2012 Freescale Semiconductor, Inc.
  *
@@ -33,7 +36,11 @@ struct clk_div {
 
 static inline struct clk_div *to_clk_div(struct clk_hw *hw)
 {
+#if defined(MY_ABC_HERE)
+	struct clk_divider *divider = to_clk_divider(hw);
+#else /* MY_ABC_HERE */
 	struct clk_divider *divider = container_of(hw, struct clk_divider, hw);
+#endif /* MY_ABC_HERE */
 
 	return container_of(divider, struct clk_div, divider);
 }

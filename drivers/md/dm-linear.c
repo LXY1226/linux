@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2001-2003 Sistina Software (UK) Limited.
  *
@@ -13,6 +16,10 @@
 #include <linux/device-mapper.h>
 
 #define DM_MSG_PREFIX "linear"
+
+#ifdef MY_ABC_HERE
+extern int gSynoDebugFlag;
+#endif /* MY_ABC_HERE */
 
 /*
  * Linear: maps a linear range of a device.
@@ -55,6 +62,20 @@ static int linear_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		ti->error = "Device lookup failed";
 		goto bad;
 	}
+
+#ifdef MY_ABC_HERE
+	if (lc->dev->bdev) {
+		struct request_queue *q = bdev_get_queue(lc->dev->bdev);
+		if (blk_queue_unused_hint(q))
+			ti->num_unused_hint_bios = 1;
+		else {
+#ifdef MY_ABC_HERE
+			if (gSynoDebugFlag)
+				DMWARN("dm-linear: %s doesn't support unused hint", lc->dev->name);
+#endif /* MY_ABC_HERE */
+		}
+	}
+#endif /* MY_ABC_HERE */
 
 	ti->num_flush_bios = 1;
 	ti->num_discard_bios = 1;
@@ -141,6 +162,13 @@ static int linear_iterate_devices(struct dm_target *ti,
 	return fn(ti, lc->dev, lc->start, ti->len, data);
 }
 
+#ifdef MY_ABC_HERE
+static int linear_support_noclone(struct dm_target *ti)
+{
+	return 1;
+}
+#endif /* MY_ABC_HERE */
+
 static struct target_type linear_target = {
 	.name   = "linear",
 	.version = {1, 2, 1},
@@ -151,6 +179,10 @@ static struct target_type linear_target = {
 	.status = linear_status,
 	.prepare_ioctl = linear_prepare_ioctl,
 	.iterate_devices = linear_iterate_devices,
+#ifdef MY_ABC_HERE
+	.noclone_map = linear_map,
+	.support_noclone = linear_support_noclone,
+#endif /* MY_ABC_HERE */
 };
 
 int __init dm_linear_init(void)

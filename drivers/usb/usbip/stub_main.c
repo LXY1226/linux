@@ -1,3 +1,6 @@
+#ifndef MY_ABC_HERE
+#define MY_ABC_HERE
+#endif
 /*
  * Copyright (C) 2003-2008 Takahiro Hirofuchi
  *
@@ -146,12 +149,20 @@ int del_match_busid(char *busid)
 	ret = 0;
 
 	spin_lock(&busid_table[idx].busid_lock);
+#ifdef MY_ABC_HERE
+	if (busid_table[idx].status == STUB_BUSID_ADDED)
+		busid_table[idx].status = STUB_BUSID_OTHER;
+#endif /* MY_ABC_HERE */
 
 	if (busid_table[idx].status == STUB_BUSID_OTHER)
 		memset(busid_table[idx].name, 0, BUSID_SIZE);
 
+#ifdef MY_ABC_HERE
+	if (busid_table[idx].status != STUB_BUSID_OTHER)
+#else /* MY_ABC_HERE */
 	if ((busid_table[idx].status != STUB_BUSID_OTHER) &&
 	    (busid_table[idx].status != STUB_BUSID_ADDED))
+#endif /* MY_ABC_HERE */
 		busid_table[idx].status = STUB_BUSID_REMOV;
 
 	spin_unlock(&busid_table[idx].busid_lock);
